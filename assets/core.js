@@ -66,12 +66,24 @@ export const LNA_MSG = 'Chrome bloqueó la conexión con el servidor de la Bitá
 export async function lnaBlocked() {
 try { return ['denied', 'prompt'].includes((await navigator.permissions.query({ name: 'local-network-access' })).state); } catch { return false; }
 }
-export const serverList = (r = region()) => (SERVERS.regions[r] || []).map(([id, name]) => ({ id, name, faccion: String(id)[0] === '1' ? 'elyos' : 'asmodian' }));
+export const serverFaccion = id => id ? (String(id)[0] === '1' ? 'elyos' : 'asmodian') : null;
+export const serverList = (r = region()) => (SERVERS.regions[r] || []).map(([id, name]) => ({ id, name, faccion: serverFaccion(id) }));
 export function serverName(id) {
 for (const r in SERVERS.regions) for (const [sid, n] of SERVERS.regions[r]) if (sid === +id) return n;
 return null;
 }
 export const FACCION = { elyos: 'Elyos', asmodian: 'Asmodian' };
+export const viewFaccion = () => store.get('hub-faccion', null) === 'asmodian' ? 'asmodian' : 'elyos';
+export function facNote(p = profile()) {
+const sf = serverFaccion(p.server), f = p.faccion === 'asmodian' ? 'asmodian' : 'elyos';
+return sf && sf !== f ? `Viendo ${FACCION[f]} · tu server es ${serverName(p.server)} (${FACCION[sf]})` : null;
+}
+export function setFaccion(f) {
+if (!FACCION[f] || f === viewFaccion()) return;
+setProfile({ faccion: f });
+const n = facNote();
+toast(n ? esc(n) + '.' : `Viendo ${FACCION[f]}${store.get('hub-server', null) ? ', la de tu server' : ''}.`);
+}
 /* ---------- preferencias ---------- */
 const PREFS = versioned('hub-prefs', 1, { clock: 'local', h12: false, vis: {} });
 let P = PREFS.get();
@@ -310,6 +322,20 @@ tT = setTimeout(hideToast, ms);
 }
 export function hideToast() { clearTimeout(tT); $('#hub-toast')?.classList.remove('on'); }
 export function announce(text) { const l = $('#hub-live'); if (l) { l.textContent = ''; setTimeout(() => { l.textContent = text; }, 30); } }
+export const CREDITS = [
+['Horarios y eventos', 'Notas y avisos oficiales de PLAYNC (NCSOFT). Lo que no tiene aviso oficial lo midieron jugadores y se cruzó con questlog.gg y shugo.gg; va rotulado.'],
+['Jefes en vivo', 'Telemetría de jugadores: la app de escritorio de questlog.gg ve los jefes en las partidas de sus usuarios. Llega a través del servidor de la Bitácora. Si activás los reportes de la comunidad, también lo que avisan otros jugadores de tu server ("Estimado").'],
+['Jefes: nombres, teleports y retratos', 'Base de datos de Aion 2 de questlog.gg. Los ciclos "medidos" los midió la comunidad (Inven); los oficiales, del parche Global.'],
+['Personaje', 'Ficha pública de PLAYNC (equipo, skills, Daevanion, nivel de objeto) e íconos del CDN oficial de PLAYNC, re-guardados chicos. Nombres de skills en inglés, tablas de amplificación y builds de la comunidad: questlog.gg. Lo que usan los top: el armory público de PLAYNC sobre la lista de mayor CP de questlog.gg. Guías de builds: aion2data.com (https://aion2data.com). Puertas de contenido: notas oficiales de parche de PLAYNC; las de Expedición y Trascendencia, de guías de la comunidad.'],
+['Pets', 'El Bestiario Esquivo, con datos de questlog.gg.'],
+['Aion 2', 'Nombres, imágenes y marcas de Aion 2 son de NCSOFT. Bitácora Daeva es un sitio de fans, sin relación con NCSOFT: sin anuncios, sin cookies, sin rastreo.'],
+];
+export function openCredits() {
+const box = document.createElement('dl');
+box.className = 'credits';
+box.innerHTML = CREDITS.map(([t, d]) => `<dt>${esc(t)}</dt><dd>${esc(d)}</dd>`).join('');
+return modal({ title: 'Fuentes y créditos', node: box, cls: 'credits-m', actions: [{ label: 'Listo', value: 'ok', primary: true }] });
+}
 export function modal({ title, html = '', node = null, actions = [{ label: 'Cerrar', value: null }], cls = '' }) {
 const d = document.createElement('dialog');
 d.className = 'modal ' + cls;
@@ -561,7 +587,7 @@ $('[data-lead]', m)?.focus();
 /* ---------- confianza: un solo vocabulario en todo el sitio (revisión UX P1) ---------- */
 export const CONF_TXT = {
 oficial: ['Oficial', 'Sale de notas o avisos oficiales de PLAYNC.'],
-comunidad: ['Medido por la comunidad', 'No hay aviso oficial: lo midieron jugadores y coinciden varias fuentes (questlog.gg, shugo.gg).'],
+comunidad: ['Medido por la comunidad', 'No hay aviso oficial: lo midieron jugadores y coinciden varias fuentes (detalle en Fuentes y créditos, en el pie).'],
 sin: ['Sin confirmar', 'Una sola fuente, o un dato que todavía no pudimos cruzar. Tomalo como aproximado.'],
 };
 export const confOf = x => x.confidence === 'baja' ? 'sin' : (x.basis ? x.basis === 'oficial' : x.confidence === 'alta') ? 'oficial' : 'comunidad';
@@ -816,6 +842,7 @@ ${welcome ? '' : `<fieldset><legend>Horas</legend>
 <div class="f2 q"><label>Desde <input type="time" id="s-qf" value="${A.quiet.from}"></label><label>Hasta <input type="time" id="s-qt" value="${A.quiet.to}"></label></div>
 <p class="hint">${'Notification' in window ? (Notification.permission === 'granted' ? 'Notificaciones del sistema: permitidas.' : Notification.permission === 'denied' ? 'Notificaciones del sistema: bloqueadas en este navegador (igual te aviso en la página).' : 'El permiso de notificaciones se pide la primera vez que tocás una campana.') : 'Este navegador no tiene notificaciones: te aviso en la página.'}</p>
 <button type="button" class="btn" id="s-test">${ico('i-bell-on')} Probar aviso</button></fieldset>
+<p class="hint">De dónde salen los datos: <button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button></p>
 <fieldset><legend>Eventos que ves</legend><div class="evs">${evRows}</div></fieldset>`}`;
 const box = document.createElement('div');
 box.innerHTML = html;
@@ -838,7 +865,7 @@ paintSrv(); paintFac(); paintTz(); paintSeg();
 reg.onchange = () => { setProfile({ region: reg.value, server: null }); paintSrv(); paintTz(); paintFac(); };
 srv.onchange = () => {
 const id = +srv.value || null;
-setProfile({ server: id, ...(id ? { faccion: String(id)[0] === '1' ? 'elyos' : 'asmodian' } : {}) });
+setProfile({ server: id, ...(id ? { faccion: serverFaccion(id) } : {}) });
 paintFac();
 };
 box.addEventListener('click', e => {
@@ -868,6 +895,22 @@ return `El server de ${r.name} usa hora de ${r.tzName}, ${Math.abs(d)} h ${d > 0
 /* ---------- tareas: estado compartido (Tareas, Ahora y la paleta) ---------- */
 export const PJ = versioned('hub-personajes', 1, { list: [], activo: null });
 export const TK = versioned('hub-tareas', 1, { custom: [], hidden: [], done: {} });
+export function myChars() {
+const old = store.get('hub-pj-mio', null), p = PJ.get();
+if (old?.k) {
+let c = p.list.find(x => x.name.toLowerCase() === String(old.n).toLowerCase() && (x.server ?? null) === old.s);
+if (!c) {
+p.list.push(c = { id: 'c' + Math.random().toString(36).slice(2, 9), name: old.n, server: old.s, clase: old.c || null });
+const t = TK.get();
+if (p.list.length === 1 && t.done.main) { t.done = { ...t.done, [c.id]: t.done.main }; delete t.done.main; TK.set(t); }
+}
+c.pj = old;
+p.principal ||= c.id;
+p.activo ||= c.id;
+if (PJ.set(p)) store.set('hub-pj-mio', null);
+}
+return p.list.filter(c => c.pj?.k).map(c => ({ ...c, main: c.id === p.principal }));
+}
 export function characters() {
 const p = PJ.get();
 const list = p.list.length ? p.list : [{ id: 'main', name: 'Mi personaje' }];
@@ -944,6 +987,7 @@ group: 'Acción', items: () => [
 { id: 'cmd-ajustes', title: 'Ajustes', sub: 'Región, server, facción, horas y avisos', icon: 'i-gear', run: () => openSettings(), pin: true, kw: 'configuracion server region faccion' },
 { id: 'cmd-mute', title: isMuted() ? 'Activar avisos' : 'Silenciar avisos 1 hora', sub: 'Tecla M', icon: 'i-bell-off', run: () => toggleMute(), pin: true, kw: 'mute silencio' },
 { id: 'cmd-pip', title: 'Sacar ventana', sub: 'Próximos en una ventana chica, siempre encima', icon: 'i-pip', run: () => popOut(), pin: true, kw: 'mini flotante picture overlay' },
+{ id: 'cmd-creditos', title: 'Fuentes y créditos', sub: 'De dónde salen los horarios, los jefes y las imágenes', icon: 'i-ext', run: () => openCredits(), kw: 'fuentes creditos datos questlog plaync shugo' },
 { id: 'cmd-test', title: 'Probar aviso', sub: 'Toast, sonido y notificación', icon: 'i-bell-on', run: () => { audio(); testAlert(); }, kw: 'alerta sonido notificacion' },
 { id: 'cmd-help', title: 'Teclado', sub: 'Tecla ?', icon: 'i-help', run: () => openHelp(), kw: 'ayuda atajos teclas' },
 ],
@@ -969,11 +1013,20 @@ return DATA.pets.filter(p => p[3].includes(f)).map(([id, name, en, , sub]) => ({
 });
 registerPalette('personajes', {
 group: 'Personaje', items: () => {
-const mio = store.get('hub-pj-mio', null), seen = new Set();
-return [mio, ...store.get('hub-pj-favoritos', []), ...store.get('hub-pj-recientes', [])].filter(c => c?.k && !seen.has(c.k.toLowerCase()) && seen.add(c.k.toLowerCase()))
-.map((c, i) => ({ id: 'pj-' + c.k, title: c.n, sub: [c === mio && 'Mi personaje', c.l && 'Nv ' + c.l, c.c, serverName(c.s)].filter(Boolean).join(' · '), icon: 'i-personaje', href: ROOT + 'personaje/#' + c.k.split('/').map(encodeURIComponent).join('/'), pin: i < 6, kw: 'personaje pj ficha' }));
+const mine = myChars().map(c => c.pj), seen = new Set();
+return [...mine, ...store.get('hub-pj-favoritos', []), ...store.get('hub-pj-recientes', [])].filter(c => c?.k && !seen.has(c.k.toLowerCase()) && seen.add(c.k.toLowerCase()))
+.map((c, i) => ({ id: 'pj-' + c.k, title: c.n, sub: [mine.includes(c) && 'Mi personaje', c.l && 'Nv ' + c.l, c.c, serverName(c.s)].filter(Boolean).join(' · '), icon: 'i-personaje', href: ROOT + 'personaje/#' + c.k.split('/').map(encodeURIComponent).join('/'), pin: i < 6, kw: 'personaje pj ficha' }));
 },
 });
+}
+function paintFac() {
+const box = $('.rail .fac'), p = profile(), f = viewFaccion(), n = facNote(p);
+html.dataset.pf = f;
+if (!box) return;
+for (const b of $$('[data-gfac]', box)) b.setAttribute('aria-pressed', String(b.dataset.gfac === f));
+box.classList.toggle('off', !!n);
+box.title = n || '';
+$('.fac-n', box).innerHTML = !p.server ? 'Sin server elegido' : n ? `Tu server es <b>${esc(serverName(p.server))}</b> (${FACCION[serverFaccion(p.server)]})` : `Tu server: <b>${esc(serverName(p.server))}</b>`;
 }
 function boot() {
 setMini();
@@ -987,7 +1040,15 @@ onStore('hub-prefs', () => { P = PREFS.get(); emit('prefs', P); });
 syncTimers();
 onStore('hub-timers', syncTimers);
 for (const k of ['hub-region', 'hub-server', 'hub-faccion']) onStore(k, () => { CACHE = null; emit('profile', profile()); });
+paintFac();
+on('profile', paintFac);
 document.addEventListener('click', e => {
+const gf = e.target.closest('[data-gfac]');
+if (gf) {   // en la barra de abajo se ve un solo botón (la facción actual): tocarlo alterna
+const o = gf.parentNode.querySelector(`[data-gfac]:not([data-gfac="${gf.dataset.gfac}"])`);
+setFaccion(gf.dataset.gfac === viewFaccion() && !o.checkVisibility() ? o.dataset.gfac : gf.dataset.gfac);
+return;
+}
 const b = e.target.closest('.bell[data-bell]');
 if (b) { e.preventDefault(); openBellMenu(b); return; }
 const cf = e.target.closest('[data-conf]');
@@ -995,6 +1056,7 @@ if (cf) { e.preventDefault(); openConf(cf); return; }
 if (e.target.closest('[data-hub=settings]')) openSettings();
 else if (e.target.closest('[data-hub=search]')) openPalette();
 else if (e.target.closest('[data-hub=help]')) openHelp();
+else if (e.target.closest('[data-hub=credits]')) openCredits();
 else if (e.target.closest('[data-hub=pip]')) popOut();
 else if (e.target.closest('#hub-warn [data-x]')) $('#hub-warn').hidden = true;
 });

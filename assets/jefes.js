@@ -1,18 +1,21 @@
 import {
 $, esc, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, toast, announce, store, versioned, norm, profile, serverName,
-FACCION, ROOT, SCHEDULE, maintWindows, bellButton, getBell, setTimers, registerPalette, registerKey, partsIn, wallToUtc, displayTz,
+FACCION, serverFaccion, setFaccion, ROOT, SCHEDULE, maintWindows, bellButton, getBell, setTimers, registerPalette, registerKey, partsIn, wallToUtc, displayTz,
 HUB_API, LNA_MSG, lnaBlocked, MIN, HOUR, DAY,
-} from './core.js?v=2185373a11';
+} from './core.js?v=6bb26aea23';
 const D = JSON.parse($('#page-data').textContent), WIN = D.windowMin * MIN, KEEP = 30 * MIN, TOL = 3 * MIN;
 const BOSSES = D.bosses.map(b => ({ ...b, fac: b.faction === 'Elyos' ? 'elyos' : 'asmodian', cyc: b.respawnMin * MIN, world: b.respawnSource === 'oficial', hay: norm(`${b.name} ${b.nameEn} ${b.teleport || ''}`) }));
 const BY = new Map(BOSSES.map(b => [b.id, b]));
 const KILLS = versioned('hub-kills', 1, { k: {} });          // {"<server>|<jefe>": epoch ms del kill}
-const CFG = versioned('hub-jefes', 1, { com: 'off' });       // comunidad: off | ver | compartir
+const CFG = versioned('hub-jefes', 1, { com: 'off' });       // com: off | ver | compartir · orden: spawn | nombre | nivel · fav: ids fijados arriba
+const OCU = versioned('hub-jefes-ocultos', 1, { ids: [] });
+const ord = () => ['nombre', 'nivel'].includes(CFG.get().orden) ? CFG.get().orden : 'spawn';
+const favs = () => new Set(CFG.get().fav || []), ocultos = () => new Set(OCU.get().ids || []);
 const MAINT = SCHEDULE.maintenance?.fieldBossesAfterMaintenance !== 'keep';
 const POLL = 30e3, RETRY = 60e3, LIVE_POLL = 60e3, LIVE_VALID = 15 * MIN;
 const pad = n => String(n).padStart(2, '0');
 const srv = () => profile().server || 0;
-const myFac = () => profile().faccion || 'elyos';
+const myFac = () => profile().faccion === 'asmodian' ? 'asmodian' : 'elyos';   // la facción que ves (selector global del riel)
 const kkey = b => `${srv()}|${b.id}`;
 const bellId = b => `jefe:${srv()}:${b.id}`;
 const span = (a, b, now) => `${fmtClock(a, { now })}–${fmtClock(b, { now, day: false })}`;
@@ -20,7 +23,7 @@ const cycTxt = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ' '
 const CONF = { alta: 'Alta', media: 'Media', baja: 'Baja' };
 const tpTxt = t => { const m = /^(\d+)\.\s*(.*)$/.exec(t || ''); return !t ? '' : m ? `Teleport ${m[1]} · ${m[2]}` : `Teleport · ${t}`; };
 const jLeft = (ms, n) => [fmtLeft(ms), n + leftNext(ms)];
-const SRC_TXT = { ql: 'Questlog', vos: 'Vos', com: 'Comunidad' };
+const SRC_TXT = { ql: 'En vivo', vos: 'Vos', com: 'Estimado' };
 const ago = ts => n => { const m = Math.max(0, Math.floor((n - ts) / MIN)); return [m < 1 ? 'recién' : `hace ${m < 60 ? m + ' min' : `${Math.floor(m / 60)}h ${pad(m % 60)}m`}`, ts + (m + 1) * MIN]; };
 let mwAt = -Infinity, mwL = [];
 const mws = now => { if (Math.abs(now - mwAt) > MIN) { mwAt = now; mwL = maintWindows(now - 3 * DAY, now + DAY); } return mwL; };
@@ -121,62 +124,97 @@ return tm;
 const state = (tm, now) => tm.stale ? 'stale' : tm.alive ? 'alive' : now < tm.start ? 'spawns' : tm.src !== 'ql' && now < tm.end ? 'window' : 'due';
 const RANK = { alive: 0, window: 1, due: 1, spawns: 2, stale: 3, none: 4 };
 /* ---------- pintar ---------- */
-let fac = new URLSearchParams(location.search).get('f');
-const viewFac = () => FACCION[fac] ? fac : myFac();
-let nextChange = Infinity, roveId = 0;
+const viewFac = myFac;
+let nextChange = Infinity, roveId = 0, noneOpen = false, hidOpen = false;
 let held = false;
-function row(b, tm, now) {
+const SOON = 15 * MIN;                                   // "sale pronto": la cuenta regresiva se enciende
+const GROUPS = [['now', 'Para ir ahora'], ['soon', 'Próximos'], ['stale', 'Sin confirmar', 'hubo mantenimiento'], ['none', 'Sin datos']];
+const grpOf = s => s === 'alive' || s === 'window' || s === 'due' ? 'now' : s === 'spawns' ? 'soon' : s;
+const pic = (b, sz, px) => `<img class="jf-p" src="${ROOT}assets/jefes/${b.retrato}-${sz}.webp" width="${px}" height="${px}" alt="" loading="lazy">`;
+const cyc = (tm, b, now) => !tm || tm.stale ? 0 : tm.alive || now >= tm.start ? 1 : Math.max(0, Math.min(1, 1 - (tm.start - now) / b.cyc));
+function row(b, tm, now, { lv = false } = {}) {
 const s = tm ? state(tm, now) : 'none', ap = tm?.src === 'com' ? '≈ ' : '';
 const at = tm && ap + fmtClock(tm.start, { now }), win = tm && ap + span(tm.start, tm.end, now);   // Questlog da la hora; tu kill, la ventana
-const src = tm?.src === 'vos' ? '<em class="src vos" title="Tu “Lo maté” es más nuevo que el dato de Questlog">Vos</em> · '
-: tm?.src === 'com' ? `<em class="src com" title="Lo reportan otros jugadores de ${esc(serverName(srv()))}. No es un horario oficial.">≈ Comunidad · ${CONF[tm.c.confidence] || tm.c.confidence}</em> · ` : '';
-const w = {
-alive: `<b class="jf-big">Vivo</b> <span class="jf-at">desde ${at} · <span data-ago="${tm?.start}"></span></span>`,
-due: `<b class="jf-big">Debería estar</b> <span class="jf-at">desde ${at} · <span data-ago="${tm?.start}"></span></span>`,
-window: `<b class="jf-big">Puede estar</b> <span class="jf-at">${win} · cierra en <span class="cd" data-left="${tm?.end}"></span></span>`,
-spawns: `<span class="jf-l">Sale en</span> <b class="jf-big cd" data-left="${tm?.start}"></b> <span class="jf-at"><i class="jf-sep">· </i>${tm?.src === 'ql' ? at : win}</span>`,
-stale: `<s class="jf-big">${at}</s> <span class="jf-at">Sin confirmar (hubo mantenimiento)</span>`,
-none: '<b class="jf-big">Sin datos</b>',
+const src = tm?.src === 'vos' ? ' <em class="src vos" title="Tu “Lo maté” es más nuevo que el dato en vivo">Vos</em>'
+: tm?.src === 'com' ? ` <em class="src com" title="Lo reportan otros jugadores de ${esc(serverName(srv()))} (confianza ${(CONF[tm.c.confidence] || tm.c.confidence).toLowerCase()}). No es un horario oficial.">≈ Estimado</em>` : '';
+const [st, when, tip] = {
+alive: ['<b class="jf-big">Vivo</b>', `<span data-ago="${tm?.start}"></span>`, `Vivo desde ${at}`],
+due: ['<b class="jf-big">Debería estar</b>', `<span data-ago="${tm?.start}"></span>`, `Debería estar desde ${at} (nadie lo confirmó)`],
+window: ['<b class="jf-big">Puede estar</b>', `cierra en <span class="cd" data-left="${tm?.end}"></span>`, `Puede salir entre ${win}`],
+spawns: [`<span class="jf-l">Sale en</span> <b class="jf-big cd" data-left="${tm?.start}"></b>`, `<i class="jf-sep">· </i>${at}`, tm?.src === 'ql' ? `Sale ${at}` : `Sale entre ${win}`],
+stale: [`<s class="jf-big">${at}</s>`, 'Sin confirmar', 'Hubo mantenimiento después de este dato: puede no valer'],
+none: ['<b class="jf-big">Sin datos</b>', '', 'Sin dato en vivo de este jefe en tu server'],
 }[s];
 const denyBtn = tm?.src === 'com' && s !== 'stale' && com() === 'compartir'
 ? '<button type="button" class="btn ghost jf-deny" data-deny title="Fuiste y no estaba muerto, o el reporte no cierra: le resta confianza">No estaba</button>' : '';
 const fix = tm?.src === 'vos';                         // con tu timer, el botón corrige (nunca lo pisa sin preguntar)
-return `<li class="jf-r s-${s}${tm ? ' src-' + tm.src : ''}${b.world ? ' jf-wc' : ''}" id="b-${b.id}" data-boss="${b.id}" tabindex="-1">
-<span class="jf-n"><b>${esc(b.name)}</b><small>${src}ciclo ${cycTxt(b.respawnMin)} <i title="${b.respawnSource === 'oficial' ? 'Ciclo del parche Global oficial' : 'Ciclo medido por la comunidad en Global (no hay aviso oficial)'}">${b.respawnSource === 'oficial' ? 'oficial' : 'medido'}</i>${b.teleport ? ` · ${esc(tpTxt(b.teleport))}` : ''}</small></span>
-<span class="jf-w">${w}</span>
-<span class="jf-a">${denyBtn}<button type="button" class="btn ghost jf-kill" data-kill="${fix ? 'fix' : 'new'}" title="${fix ? 'Corregir la hora de tu kill, anotar uno nuevo o quitar tu timer' : 'Lo mataste y Questlog no se enteró: anotá tu kill'}">${fix ? 'Corregir' : 'Lo maté'}</button></span><span class="jf-b"></span></li>`;
+const soon = s === 'spawns' && tm.start - now <= SOON ? ' is-soon' : '';
+const meta = [lv && `Nv ${b.level}`, b.teleport && tpTxt(b.teleport), b.world && `cada ${cycTxt(b.respawnMin)}`].filter(Boolean).map(esc).join(' · ');
+const info = `Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)} (${b.respawnSource === 'oficial' ? 'oficial, parche Global' : 'medido por la comunidad'})`;
+return `<li class="jf-r s-${s}${tm ? ' src-' + tm.src : ''}${soon}${b.world ? ' jf-wc' : ''}" id="b-${b.id}" data-boss="${b.id}" data-lv="${b.level}" tabindex="-1">
+${b.world ? pic(b, 192, 96) : pic(b, 80, 40)}
+<span class="jf-n" title="${info}"><b>${esc(b.name)}</b><small>${meta}</small></span>
+<span class="jf-w" title="${esc(tip)}"><span class="jf-s">${st}</span><span class="jf-t">${when}${src}</span></span>
+<span class="jf-a">${denyBtn}<button type="button" class="btn ghost jf-kill" data-kill="${fix ? 'fix' : 'new'}" title="${fix ? 'Corregir la hora de tu kill, anotar uno nuevo o quitar tu timer' : 'Lo mataste y no figura: anotá tu kill'}">${fix ? 'Corregir' : 'Lo maté'}</button></span><span class="jf-b"></span>${b.world ? `
+<span class="jf-cy"><i style="--p:${cyc(tm, b, now).toFixed(4)}"></i></span>` : `<button type="button" class="jf-mb" data-menu aria-haspopup="dialog" aria-label="Más: fijar u ocultar ${esc(b.name)}" title="Fijar arriba u ocultar"><svg aria-hidden="true"><use href="#i-more"/></svg></button>`}</li>`;
 }
 function paint() {
 if (held) return;
 const now = Date.now(), f = viewFac(), q = norm($('#jf-q').value).trim(), hit = b => !q || b.hay.includes(q), K = KILLS.get().k;
-const fe = document.activeElement, fb = fe?.closest?.('[data-boss]')?.dataset.boss;
-const fsel = !fb ? null : fe.matches('[data-kill]') ? '[data-kill]' : fe.matches('.bell') ? '.bell' : fe.matches('[data-deny]') ? '[data-deny]' : null;
+const fe = document.activeElement, fb = fe?.closest?.('[data-boss]')?.dataset.boss, fgt = fe?.matches?.('[data-gt]') ? '[data-gt]' : fe?.matches?.('[data-hid]') ? '[data-hid]' : null;
+const fsel = !fb ? null : fe.matches('[data-kill]') ? '[data-kill]' : fe.matches('.bell') ? '.bell' : fe.matches('[data-deny]') ? '[data-deny]' : fe.matches('[data-menu]') ? '[data-menu]' : null;
 const world = [], rest = [];
 nextChange = Infinity;
 for (const b of BOSSES) {
 const tm = timer(b, now, K);
-if (tm) for (const x of [tm.start, tm.end, tm.end + KEEP, tm.maint]) if (x > now && x < nextChange) nextChange = x;
+if (tm) for (const x of [tm.start - SOON, tm.start, tm.end, tm.end + KEEP, tm.maint]) if (x > now && x < nextChange) nextChange = x;
 if (b.fac === f) (b.world ? world : rest).push([b, tm]);
 }
 const rk = ([, tm]) => tm ? RANK[state(tm, now)] : RANK.none;
 rest.sort((a, c) => rk(a) - rk(c) || ((a[1]?.start || 0) - (c[1]?.start || 0)) * (rk(a) === RANK.alive ? -1 : 1));
 publish(now, K);
-const shown = rest.filter(([b]) => hit(b));
+const o = ord(), fv = favs(), oc = ocultos(), all = rest.filter(([b]) => hit(b));
+const hid = all.filter(([b]) => oc.has(b.id)), shown = all.filter(([b]) => !oc.has(b.id));
+if (o !== 'spawn') shown.sort(([a], [c]) => (o === 'nivel' && a.level - c.level) || a.name.localeCompare(c.name, 'es'));
+const pins = shown.filter(([b]) => fv.has(b.id)), loose = shown.filter(([b]) => !fv.has(b.id)), by = { now: [], soon: [], stale: [], none: [] };
+if (o === 'spawn') for (const x of loose) by[grpOf(x[1] ? state(x[1], now) : 'none')].push(x);
+const fold = by.none.length < loose.length, open = noneOpen || !!q, lv = o === 'nivel';
+const grp = (g, label, L, { tog = false, sub = '' } = {}) => {
+const h = tog ? `<button type="button" class="jf-gt" data-gt aria-expanded="${open}" aria-controls="jf-g-${g}">${label} <small>${L.length}</small><svg aria-hidden="true"><use href="#i-r"/></svg></button>`
+: `${label} <small>${L.length}</small>${sub ? ` <span class="jf-gs">· ${sub}</span>` : ''}`;
+return `<section class="jf-grp g-${g}" aria-label="${label}"><h3 class="jf-gh">${h}</h3><ul class="jf-list" id="jf-g-${g}"${tog && !open ? ' hidden' : ''}>${L.map(([b, tm]) => row(b, tm, now, { lv })).join('')}</ul></section>`;
+};
+const html = [pins.length && grp('fav', 'Fijados', pins),
+...(o === 'spawn' ? GROUPS.filter(([g]) => by[g].length).map(([g, label, sub]) => grp(g, label, by[g], { tog: g === 'none' && fold, sub }))
+: [loose.length && grp('all', o === 'nivel' ? 'Por nivel' : 'Por nombre', loose)]),
+hidOpen && hid.length && grp('hid', 'Ocultos', hid)].filter(Boolean).join('');
 $('#jf-world').hidden = $('#jf-all').hidden = false;   // ocultas hasta el primer pintado: así nada visible se corre (CLS 0)
-$('#jf-world-h').innerHTML = `Jefes de mundo · ${FACCION[f]}`;
 $('#jf-world-l').innerHTML = world.map(([b, tm]) => row(b, tm, now)).join('');
-$('#jf-all-h').innerHTML = `Jefes de campo · ${FACCION[f]} <small>${shown.length}</small>${f !== myFac() ? ' <em class="tag">zona enemiga (por la Grieta)</em>' : ''}`;
-$('#jf-all-l').innerHTML = shown.map(([b, tm]) => row(b, tm, now)).join('')
-|| `<li class="jf-empty">Ningún jefe ${FACCION[f]} con “${esc($('#jf-q').value)}”.</li>`;
+$('#jf-all-h').innerHTML = `De campo <small>${shown.length}</small>`;
+$('#jf-ord').value = o;
+$('#jf-all-l').innerHTML = (html || (q ? `<p class="jf-empty">Ningún jefe ${FACCION[f]} con “${esc($('#jf-q').value)}”.</p>` : ''))
++ (hid.length ? `<p class="jf-hidf"><button type="button" class="linkbtn" data-hid aria-expanded="${hidOpen}">${hid.length} ${hid.length > 1 ? 'ocultos' : 'oculto'} · ${hidOpen ? 'Esconder' : 'Mostrar'}</button></p>` : '');
 for (const li of $('#jf-main').querySelectorAll('[data-boss]')) {
 const b = BY.get(+li.dataset.boss), l = $('[data-left]', li), a = $('[data-ago]', li);
 if (l) { const t = +l.dataset.left; bind(l, n => jLeft(t - n, n)); }
 if (a) bind(a, ago(+a.dataset.ago));
 $('.jf-b', li).append(bellButton(bellId(b), b.name, /s-(none|stale)/.test(li.className) ? { hint: 'Suena cuando haya timer.' } : {}));
 }
-($(`#b-${roveId}`) || $('#jf-main [data-boss]'))?.setAttribute('tabindex', '0');   // una fila alcanzable con Tab; ↑↓ recorre
+nextCyc = now + MIN;
+const rv = $(`#b-${roveId}`);
+(rv?.checkVisibility() ? rv : visRows()[0])?.setAttribute('tabindex', '0');   // una fila alcanzable con Tab; ↑↓ recorre
 if (fb) ($(`#b-${fb} ${fsel || ''}`.trim()) || null)?.focus();
+else if (fgt) $(fgt)?.focus();
 if (km && KM.matches(':popover-open')) placeKm();
+}
+const visRows = () => [...$('#jf-main').querySelectorAll('[data-boss]')].filter(li => li.checkVisibility());
+let nextCyc = 0;
+function paintCyc(now) {
+nextCyc = now + MIN;
+for (const li of $('#jf-world-l').querySelectorAll('[data-boss]')) {
+const b = BY.get(+li.dataset.boss), i = $('.jf-cy i', li);
+if (i) i.style.setProperty('--p', cyc(timer(b, now), b, now).toFixed(4));
+}
 }
 let lastPub = null;
 function publish(now, K) {
@@ -203,9 +241,10 @@ function paintSt() {
 const el = $('#jf-st'), s = srv();
 if (!s) { el.innerHTML = 'Para ver los timers en vivo, elegí tu server en <button type="button" class="linkbtn" data-hub="settings">Ajustes</button>. Mientras, anotá tus kills con <b>Lo maté</b>.'; return; }
 const warn = liveErr === 'lna' ? LNA_MSG : liveErr === 'down' ? 'Sin conexión con el servidor de la Bitácora: sigo con lo último que tenía y con tus kills. Reintento en 1 min.'
-: liveErr === 'stale' ? 'Questlog no responde: es lo último que tuvo.' : '';
-el.innerHTML = (live ? '<span title="Lo arma Questlog con lo que ve su app de escritorio en las partidas de sus usuarios. Puede fallar o no saber de algún jefe.">Según <b>Questlog</b> (telemetría de jugadores), actualizado <span id="jf-age"></span></span>'
-: held ? `Buscando los timers de ${esc(serverName(s))}…` : 'Todavía no hay datos de Questlog para tu server.') + (warn ? ` <span class="jf-warn">${esc(warn)}</span>` : '');
+: liveErr === 'stale' ? 'La fuente en vivo no responde: es lo último que hubo.' : '';
+el.classList.toggle('on', !!live && !liveErr);          // punto encendido: dato fresco
+el.innerHTML = (live ? 'En vivo · actualizado <span id="jf-age"></span>'
+: held ? `Buscando los timers de ${esc(serverName(s))}…` : 'Todavía no hay datos en vivo para tu server.') + (warn ? ` <span class="jf-warn">${esc(warn)}</span>` : '');
 if (live) bind($('#jf-age'), ago(live.fetchedAt));
 }
 function paintCom() {
@@ -222,11 +261,10 @@ bind($('#jf-com-age'), ago(feedAt));
 }
 }
 function paintBar() {
-const f = viewFac();
-for (const b of document.querySelectorAll('#jf-fac button')) b.setAttribute('aria-pressed', String(b.dataset.fac === f));
-const pr = profile(), q = $('#jf-q').value.trim();
-$('#jf-fbtn').textContent = `Filtros · ${FACCION[f]}${q ? ` · “${q}”` : ''}`;
-$('#jf-lead').innerHTML = `${pr.server ? `<b>${esc(serverName(pr.server))}</b> · ` : ''}Cuándo sale cada jefe, en vivo. Tocá la campana y te aviso, también desde otras páginas.`;
+const f = viewFac(), pr = profile(), sf = serverFaccion(pr.server), q = $('#jf-q').value.trim();
+$('#jf-fbtn-t').textContent = q ? `“${q}”` : 'Filtrar';
+$('#jf-lead').innerHTML = `${pr.server ? `<b>${esc(serverName(pr.server))}</b> · ` : ''}${FACCION[f]}`
++ (sf && sf !== f ? ` <em class="tag jf-enemy" title="Tu server es ${FACCION[sf]}: estos jefes quedan en territorio enemigo (por la Grieta). La facción se cambia en el menú lateral.">zona enemiga · tu server es ${FACCION[sf]}</em>` : '');
 }
 /* ---------- "Lo maté": un toque guarda; el menú corrige la hora o deshace ---------- */
 let km = null;                                           // {b, base, prev}
@@ -268,14 +306,73 @@ if (input && t) { const p = partsIn(t, displayTz()); $('#jf-ex').value = `${pad(
 const h = Math.floor((now - t) / HOUR);                 // una hora "futura" se toma como de ayer: avisarlo
 $('#jf-kw').innerHTML = t ? `Lo mataste ${fmtClock(t, { now })}${h >= 1 ? ` <span class="jf-warn">(eso fue hace ${h} h)</span>` : ''} · sale <b>${span(t + b.cyc, t + b.cyc + WIN, now)}</b>` : '';
 }
-function placeKm() {
-const a = $(`#b-${km.b.id} [data-kill]`);
+const placeKm = () => placeAt(KM, $(`#b-${km.b.id} [data-kill]`));
+function placeAt(pop, a) {
 if (!a) return;
 a.scrollIntoView({ block: 'nearest' });
-const r = a.getBoundingClientRect(), w = KM.offsetWidth, h = KM.offsetHeight;
-KM.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.right - w)) + 'px';
-KM.style.top = (r.bottom + h + 8 > innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
+const r = a.getBoundingClientRect(), w = pop.offsetWidth, h = pop.offsetHeight;
+pop.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.right - w)) + 'px';
+pop.style.top = (r.bottom + h + 8 > innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
 }
+/* ---------- ⋯ de cada jefe de campo: fijar arriba u ocultar (lo que no te interesa no compite con lo que sí) ---------- */
+const MM = document.createElement('div');
+MM.id = 'jf-mm';
+MM.className = 'bellmenu jf-mm';
+MM.popover = 'auto';
+MM.setAttribute('role', 'dialog');
+document.body.append(MM);
+let mmB = null;
+function openMm(b) {
+mmB = b;
+const fav = favs().has(b.id), oc = ocultos().has(b.id);
+MM.setAttribute('aria-label', b.name);
+MM.innerHTML = `<p class="bm-t"><b>${esc(b.name)}</b></p><p class="jf-mi">Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)} (${b.respawnSource === 'oficial' ? 'oficial' : 'medido por la comunidad'})</p>
+<div class="jf-mm-b">${oc ? '' : `<button type="button" class="btn ghost" data-fav>${fav ? 'Quitar de fijados' : 'Fijar arriba'}</button>`}<button type="button" class="btn ghost" data-ocu>${oc ? 'Mostrar en la lista' : 'Ocultar'}</button></div>`;
+MM.showPopover();
+placeAt(MM, $(`#b-${b.id} [data-menu]`));
+$('button', MM).focus();
+}
+function setFav(b, on) {
+const f = favs();
+if (on) f.add(b.id); else f.delete(b.id);
+CFG.set({ ...CFG.get(), fav: [...f] });
+}
+function setOcu(b, on) {
+const o = ocultos();
+if (on) o.add(b.id); else o.delete(b.id);
+OCU.set({ ids: [...o] });
+}
+MM.addEventListener('click', e => {
+const b = mmB;
+if (!b) return;
+if (e.target.closest('[data-fav]')) {
+const on = !favs().has(b.id);
+setFav(b, on);
+MM.hidePopover();
+paint();
+toast(on ? `<b>${esc(b.name)}</b> queda fijado arriba.` : `<b>${esc(b.name)}</b> vuelve a su lugar.`);
+$(`#b-${b.id} [data-menu]`)?.focus();
+} else if (e.target.closest('[data-ocu]')) {
+const on = !ocultos().has(b.id), L = visRows(), i = L.findIndex(li => +li.dataset.boss === b.id);
+setOcu(b, on);
+if (on) setFav(b, false);
+MM.hidePopover();
+paint();
+if (on) {
+toast(`Ocultaste <b>${esc(b.name)}</b>. Vuelve desde "ocultos", al final de la lista.`, { ms: 6000, action: { label: 'Deshacer', run: () => { setOcu(b, false); paint(); } } });
+(visRows()[Math.min(i, visRows().length - 1)] || $('[data-hid]'))?.focus();
+} else {
+toast(`<b>${esc(b.name)}</b> vuelve a la lista.`);
+$(`#b-${b.id} [data-menu]`)?.focus();
+}
+}
+});
+MM.addEventListener('toggle', e => {
+if (e.newState !== 'closed' || !mmB) return;
+const back = MM.contains(document.activeElement) || document.activeElement === document.body, id = mmB.id;
+mmB = null;
+if (back) $(`#b-${id} [data-menu]`)?.focus();
+});
 function fromHHMM(v, now) {
 const [h, mi] = v.split(':').map(Number), tz = displayTz(), p = partsIn(now, tz);
 const t = wallToUtc(p.y, p.mo, p.d, h, mi, tz);
@@ -291,18 +388,20 @@ if (e.target.closest('[data-again]')) { const { b, prev } = km; openKm(b, true);
 if (e.target.closest('[data-clear]')) {
 const { b } = km;
 setKill(b, null);
+if (!timer(b, Date.now())) noneOpen = true;           // sin tu timer y sin Questlog cae en "Sin datos": que no desaparezca
 KM.hidePopover();
 paint();
-toast(`Quitaste tu timer de <b>${esc(b.name)}</b>${liveMap.has(b.id) ? ': vuelve el dato de Questlog' : ''}.`);
+toast(`Quitaste tu timer de <b>${esc(b.name)}</b>${liveMap.has(b.id) ? ': vuelve el dato en vivo' : ''}.`);
 $(`#b-${b.id} [data-kill]`)?.focus();
 return;
 }
 if (e.target.closest('[data-undo]')) {
 const { b, prev } = km;
 setKill(b, prev ?? null);
+if (!timer(b, Date.now())) noneOpen = true;
 KM.hidePopover();
 paint();
-toast(prev ? `Deshice: <b>${esc(b.name)}</b> vuelve a tu kill anterior.` : `Deshice: <b>${esc(b.name)}</b> vuelve al dato de Questlog.`);
+toast(prev ? `Deshice: <b>${esc(b.name)}</b> vuelve a tu kill anterior.` : `Deshice: <b>${esc(b.name)}</b> vuelve al dato en vivo.`);
 $(`#b-${b.id} [data-kill]`)?.focus();
 }
 });
@@ -321,27 +420,32 @@ if (back) $(`#b-${b.id} [data-kill]`)?.focus();
 });
 /* ---------- eventos ---------- */
 $('#jf-main').addEventListener('click', e => {
+if (e.target.closest('[data-gt]')) { noneOpen = !noneOpen; paint(); return; }   // "Sin datos": desplegar o plegar
+if (e.target.closest('[data-hid]')) { hidOpen = !hidOpen; paint(); return; }     // ocultos: mostrar o esconder
 const li = e.target.closest('[data-boss]'), b = li && BY.get(+li.dataset.boss);
 if (!b) return;
 if (e.target.closest('[data-kill]')) kill(b);
+else if (e.target.closest('[data-menu]')) openMm(b);
 else if (e.target.closest('[data-deny]')) deny(b);
 });
-$('#jf-fac').addEventListener('click', e => {
-const x = e.target.closest('[data-fac]')?.dataset.fac;
-if (!x) return;
-fac = x;
-history.replaceState(null, '', (x === myFac() ? location.pathname : `?f=${x}`) + location.hash);
-paintBar();
-paint();
-if (x !== myFac()) toast(`Viendo ${FACCION[x]} · tu perfil sigue ${FACCION[myFac()]}.`);   // filtro de vista: no cambia el perfil
-});
+const IP = document.createElement('div');
+IP.id = 'jf-ipop';
+IP.className = 'bellmenu jf-ipop';
+IP.popover = 'auto';
+IP.setAttribute('role', 'dialog');
+IP.setAttribute('aria-label', 'De dónde salen los horarios');
+IP.innerHTML = '<p>Datos de telemetría de jugadores y reportes; no son horarios oficiales.</p><button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button>';
+document.body.append(IP);
+$('#jf-i').addEventListener('click', () => { IP.showPopover(); placeAt(IP, $('#jf-i')); $('#jf-i').setAttribute('aria-expanded', 'true'); });
+IP.addEventListener('toggle', e => { if (e.newState === 'closed') $('#jf-i').setAttribute('aria-expanded', 'false'); });
 $('#jf-fbtn').addEventListener('click', () => {
-const o = $('#jf-flt').classList.toggle('open');
+const o = $('#jf-bar').classList.toggle('open');
 $('#jf-fbtn').setAttribute('aria-expanded', String(o));
+if (o) $('#jf-q').focus();
 });
 $('#jf-main').addEventListener('keydown', e => {
 if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || e.altKey || e.ctrlKey || e.metaKey) return;
-const L = [...$('#jf-main').querySelectorAll('[data-boss]')], i = L.indexOf(document.activeElement?.closest?.('[data-boss]'));
+const L = visRows(), i = L.indexOf(document.activeElement?.closest?.('[data-boss]'));
 if (i < 0) return;
 e.preventDefault();
 L[Math.max(0, Math.min(L.length - 1, i + (e.key === 'ArrowDown' ? 1 : -1)))].focus();
@@ -354,6 +458,7 @@ li.tabIndex = 0;
 roveId = li.dataset.boss;
 });
 $('#jf-q').addEventListener('input', () => { paintBar(); paint(); });
+$('#jf-ord').addEventListener('change', e => { CFG.set({ ...CFG.get(), orden: e.target.value }); paint(); });
 $('#jf-q').addEventListener('keydown', e => { if (e.key === 'Escape' && e.target.value) { e.target.value = ''; paintBar(); paint(); } });
 $('#jf-com').addEventListener('click', e => {
 const x = e.target.closest('[data-com]')?.dataset.com;
@@ -368,7 +473,10 @@ paint();
 paintCom();
 if (com() !== 'off') poll();
 }
+let lastSrv = srv();
 function onProfile() {
+if (srv() === lastSrv) { paintBar(); paint(); return; }
+lastSrv = srv();
 loadLive();
 held = !!srv() && !live;
 paintBar();
@@ -378,7 +486,9 @@ pullLive();
 onCom();
 }
 function focusBoss(b) {
-if (b.fac !== viewFac()) { fac = b.fac; paintBar(); }
+if (b.fac !== viewFac()) setFaccion(b.fac);           // global: emite 'profile' (repinta) y avisa si no es la de tu server
+if (!timer(b, Date.now())) noneOpen = true;           // que su fila se vea aunque esté en un grupo plegado
+if (ocultos().has(b.id)) hidOpen = true;
 if (!$(`#b-${b.id}`) || !b.hay.includes(norm($('#jf-q').value).trim())) $('#jf-q').value = '';
 paint();
 const li = $(`#b-${b.id}`);
@@ -420,6 +530,7 @@ pullLive();
 nextPoll = com() === 'off' ? Infinity : 0;
 onTick(now => {
 if (now >= nextChange) paint();
+else if (now >= nextCyc) paintCyc(now);
 if (document.hidden) return;                           // con la ventana flotante el tick corre oculto: acá no se consulta
 if (now >= nextLive) pullLive();
 if (now >= nextPoll) poll();
@@ -431,5 +542,6 @@ on('bells', () => publish(Date.now(), KILLS.get().k));
 on('profile', onProfile);
 onStore('hub-kills', paint);
 onStore('hub-jefes', onCom);
+onStore('hub-jefes-ocultos', paint);
 addEventListener('hashchange', fromHash);
 if (location.hash) setTimeout(fromHash, 60);
