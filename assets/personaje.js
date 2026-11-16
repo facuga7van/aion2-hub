@@ -1,8 +1,8 @@
 import {
 $, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, setTitle, myChars, gname, galt, gclass, gameLang, on,
-} from './core.js?v=fb3755c056';
-import { GATES, gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=fb3755c056';
+} from './core.js?v=b1b9f0665f';
+import { GATES, gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=b1b9f0665f';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -163,6 +163,7 @@ limit: e => ['Muchas consultas seguidas', `El servidor limita las búsquedas par
 server: e => ['La ficha oficial no respondió bien', e.message || 'Probá de nuevo en un rato.'],
 };
 function paintError(e, nfMsg) {
+document.documentElement.classList.remove('pj-char');
 out.setAttribute('aria-busy', 'false');
 const [t, d] = e.kind === 'notfound' ? nfMsg : (MSG[e.kind] || MSG.server)(e);
 out.innerHTML = `<div class="pj-msg${e.kind === 'notfound' ? '' : ' bad'}" role="alert" data-kind="${esc(e.kind || 'server')}"><h2>${esc(t)}</h2><p>${esc(d)}</p>
@@ -226,6 +227,7 @@ return srv && NAME.test(parts[2]) ? { r, s: srv.id, n: parts[2] } : null;
 }
 function route() {
 if (tip.matches(':popover-open')) tip.hidePopover();
+document.documentElement.classList.toggle('pj-char', !!parseHash());   // en una ficha: sin título ni buscador (vuelve con «Personajes» o F)
 setTitle();
 if (!location.hash || location.hash === '#') { req++; cur = null; paintHome(); return; }
 const sq = parseSearch();
@@ -314,7 +316,7 @@ detailCache.set(key, x);
 }
 c.x = x;
 c.err = null;
-if (cur === c) { paintBuild(); paintWhere(); paintPanel(); }
+if (cur === c) { paintBuild(); markIl(); paintPanel(); }
 }
 let CUR = new Map();
 async function loadCurated(c) {
@@ -344,7 +346,8 @@ const { ref, d } = cur, p = d.profile, fav = isFav(ref), mine = mineOf(ref), all
 out.setAttribute('aria-busy', 'false');
 setTitle(`${p.name} · Personaje · Bitácora Daeva`);
 out.innerHTML = `<article class="pj-f" aria-labelledby="pj-nm">
-${all.length ? `<nav class="pj-mine" aria-label="Mis personajes"><span>Mis personajes</span><ul>${all.map(c => `<li><a href="${esc(hashOf(c.pj.k))}"${same(c.pj, ref) ? ' aria-current="page"' : ''}>${clsIco(c.pj.c, 18)}${esc(c.pj.n)}${c.main ? `<span class="sr"> (principal)</span>${ico('i-star-on', 'pj-mst')}` : ''}</a></li>`).join('')}</ul></nav>` : ''}
+<div class="pj-top"><a class="pj-back" href="#" title="Volver al buscador (F)">${ico('i-r')}Personajes</a>
+${all.length ? `<nav class="pj-mine" aria-label="Mis personajes"><span>Mis personajes</span><ul>${all.map(c => `<li><a href="${esc(hashOf(c.pj.k))}"${same(c.pj, ref) ? ' aria-current="page"' : ''}>${clsIco(c.pj.c, 18)}${esc(c.pj.n)}${c.main ? `<span class="sr"> (principal)</span>${ico('i-star-on', 'pj-mst')}` : ''}</a></li>`).join('')}</ul></nav>` : ''}</div>
 <header class="pj-hd">
 ${img(p.image, 72, 'pj-pt pj-pt-l', '')}
 <div class="pj-hm">
@@ -359,13 +362,12 @@ ${img(p.image, 72, 'pj-pt pj-pt-l', '')}
 <p class="pj-upd"><span id="pj-ago" class="cd"></span> · <button type="button" class="linkbtn" id="pj-ref"></button>${mine && !mine.main ? ' · <button type="button" class="linkbtn" id="pj-main">Usar como principal</button>' : ''}</p>
 </header>
 <div class="pj-bld" id="pj-bld"></div>
-<section class="pj-where" id="pj-where" aria-label="Dónde estás"></section>
 <nav class="seg pj-tabs" aria-label="Vistas de la ficha">${[['pasos', 'Próximos pasos'], ['equipo', 'Equipo'], ['skills', 'Skills'], ['daevanion', 'Daevanion'], ['logros', 'Logros'], ['builds', 'Builds']].map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${k === TAB}">${l}</button>`).join('')}</nav>
 <div class="pj-x" id="pj-x"></div>
 <p class="pj-src">Datos públicos de la ficha oficial del juego, a través del servidor de la Bitácora (guarda cada ficha 30 min). Sitio de fans, no afiliado. <button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button></p>
 </article>`;
 paintBuild();
-paintWhere();
+markIl();
 paintPanel();
 bind($('#pj-ago'), now => {
 const m = Math.max(0, Math.floor((now - d.cachedAt) / 60e3));
@@ -381,21 +383,12 @@ return left > 0 ? [`Refrescar en ${fmtLeft(left)}`, now + leftNext(left)] : ['Re
 const mioBtn = ref => mineOf(ref)
 ? `<button type="button" class="btn ghost" id="pj-mio" aria-pressed="true" title="Sacarlo de Mis personajes (y de Tareas)">${ico('i-check')}Tuyo<span class="pj-quit">· Quitar</span></button>`
 : `<button type="button" class="btn gold" id="pj-mio" aria-pressed="false" title="Lo suma a Mis personajes y a Tareas">${ico('i-plus')}Es mi personaje</button>`;
-/* ---------- dónde estás: nivel de objeto → puerta de contenido ---------- */
-function paintWhere() {
-const box = $('#pj-where');
-if (!box) return;
-const il = cur.d.profile.itemLevel || 0, g = gateOf(il), next = g.next;
-const lo = g.prev, hi = next ? next.il : il, pct = next ? Math.round((il - lo) / (hi - lo) * 100) : 100;
-const head = next
-? `${g.cur ? `Tu equipo te deja entrar a <b>${esc(g.cur.short || g.cur.name)}</b>. ` : ''}Te faltan <b class="pj-need">${nf(g.need)}</b> de nivel de objeto para <b>${esc(next.short || next.name)}</b>.`
-: `Tu nivel de objeto alcanza para <b>todo el contenido de hoy</b>, incluida ${esc(g.cur.name)}.`;
-const calc = cur.x && ilvlOf(cur.d, cur.x.items, cur.x.boards);
-box.innerHTML = `<p class="pj-wt">${head}</p>
-<div class="gbar" role="img" aria-label="${next ? `${nf(il)} de ${nf(hi)}: ${pct} % del camino a ${esc(next.short || next.name)}` : 'Todo el contenido abierto'}">
-<span class="gb-l">${nf(lo)}${g.cur ? ` · ${esc(g.cur.short || g.cur.name)}` : ''}</span><span class="gb-r">${next ? `${nf(hi)} · ${esc(next.short || next.name)}${next.ok ? '' : ' <em class="tag">estimado</em>'}` : ''}</span>
-<span class="gb-t"><i style="--w:${pct}%"></i><b style="--x:${pct}%">${nf(il)}</b></span></div>
-<p class="pj-wc"${calc ? ` data-il-calc="${calc.total}"` : ''}>${!calc ? '' : calc.total === il ? `${ico('i-check')}Cuenta pieza por pieza: da ${nf(calc.total)}, igual que el oficial.` : `La cuenta pieza por pieza da ${nf(calc.total)} y el oficial ${nf(il)}: puede faltar una pieza o un tablero. Los pasos usan el oficial.`}</p>`;
+function markIl() {
+const n = $('#pj-il');
+if (!n || !cur?.x) return;
+const t = ilvlOf(cur.d, cur.x.items, cur.x.boards).total, il = cur.d.profile.itemLevel || 0;
+n.dataset.ilCalc = t;
+n.title = t === il ? '' : `La cuenta pieza por pieza da ${nf(t)}: puede faltar una pieza o un tablero. Los pasos usan el oficial.`;
 }
 /* ---------- pestañas ---------- */
 function paintPanel() {
@@ -625,6 +618,11 @@ $('.tip-b', tip).innerHTML = `<p class="tip-err">${esc(err.kind === 'notfound' ?
 }
 }
 /* ---------- teclado y arranque ---------- */
+addEventListener('keydown', e => {
+if ((e.key === 'f' || e.key === 'F') && !e.ctrlKey && !e.metaKey && !e.altKey && document.documentElement.classList.contains('pj-char') && !e.target.closest?.('input, textarea, select, [contenteditable]')) {
+e.preventDefault(); e.stopImmediatePropagation(); document.documentElement.classList.remove('pj-char'); location.hash = ''; inp.focus();
+}
+}, true);
 registerKey({ key: 'g', label: 'Favorito: la ficha abierta (en Personaje)', run: toggleFav });
 on('gamelang', () => { if (cur) { paintChar(); return; } if (last && parseSearch()) paintResults(); else if (!location.hash) paintHome(); });
 route();   // sin autofoco: las teclas globales (1-5, /, M) tienen que andar al entrar; F lleva al buscador
