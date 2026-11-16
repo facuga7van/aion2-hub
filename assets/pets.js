@@ -1,4 +1,4 @@
-import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=c002377763';
+import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=40258e9f3e';
 const VQ = new URL(import.meta.url).search;  // ?v=<hash>: los módulos lazy van con la misma versión
 const D = JSON.parse($('#pets-data').textContent);
 const ALL = D.pets, BY = new Map(ALL.map(p => [p.id, p]));
@@ -127,7 +127,7 @@ const s = u.toString();
 history.replaceState(history.state, '', location.pathname + (s ? '?' + s : '') + location.hash);
 }
 /* ---------- agrupar: mueve los nodos, nunca re-renderiza las cards ---------- */
-const SECTIONS = new Map($$('.cap', album).map(s => { s._ids = $$('.pcard', s).map(c => c.dataset.id); return [s.dataset.key, s]; }));
+const SECTIONS = new Map([...$$('.cap', album), ...$$('.cap', $('#capsFuente').content)].map(s => { s._ids = $$('.pcard', s).map(c => c.dataset.id); return [s.dataset.key, s]; }));
 const ROMAN = 'I II III IV V VI VII VIII IX X XI XII XIII XIV XV XVI XVII XVIII'.split(' ');
 function fieldReg() {
 const out = {}, n = {}, rift = D.fac[FAC].riftName;
@@ -145,12 +145,6 @@ if (p.routes.some(r => r.kind === 'shop')) out.push(SHOP);
 return [...new Set(out.length ? out : [CHESTS])];
 }
 function groups(mode) {
-if (mode === 'genus') return D.genusOrder.map(g => {
-const x = G[g], eq = x.equip.at(-1);
-return { key: 'genus:' + g, title: x.plural, icon: 'g-' + g, color: `color-mix(in srgb,${x.plate[0]} 55%,#fff)`,
-line: (eq ? 'Bonus de equipar: ' + eq.stats.map(s => s.label).join(', ') + '. ' : 'Sin bonus de equipar en los datos. ') + `<a href="#genus-${GSLUG[g]}">Ver guía</a>`,
-ids: PETS.filter(p => p.genusKey === g).map(p => p.id) };
-});
 if (mode === 'lugar') {
 const FR = fieldReg(), m = new Map(), also = new Map();
 for (const p of PETS) {
@@ -169,7 +163,8 @@ if (a) line += `<span class="also"><br>También acá: ${a.map(id => `<a href="#p
 return { key: 'lugar:' + FAC + ':' + k, title: PLACE(k), icon: k === SHOP ? 'i-shop' : k === UNID ? 'i-help' : 'c-' + kind, color: kind ? `var(--c-${kind})` : 'var(--niebla)', line, ids: m.get(k) || [] };
 });
 }
-return D.cats.map(c => ({ key: 'cat:' + c.key, ids: ALL.filter(p => p.cat === c.key).map(p => p.id) }));
+if (mode === 'fuente') return D.cats.map(c => ({ key: 'cat:' + c.key, ids: ALL.filter(p => p.cat === c.key).map(p => p.id) }));
+return D.genusOrder.map(g => ({ key: 'genus:' + g, ids: ALL.filter(p => p.genusKey === g).map(p => p.id) }));  // la de arranque: las secciones las arma el build
 }
 function regroup() {
 const frag = document.createDocumentFragment();
@@ -183,7 +178,7 @@ s.innerHTML = `<header class="cap-h"><span class="cap-n">${ROMAN[i] || ''}</span
 SECTIONS.set(g.key, s);
 }
 s._ids = g.ids;
-if (!g.key.startsWith('cat:')) $('.cap-n', s).textContent = ROMAN[i] || '';  // los capítulos traen del build su número por facción
+if (g.key.startsWith('lugar:')) $('.cap-n', s).textContent = ROMAN[i] || '';  // los capítulos traen del build su número por facción
 const grid = $('.grid', s);
 for (const id of g.ids) grid.append(CARD.get(id));
 frag.append(s);
