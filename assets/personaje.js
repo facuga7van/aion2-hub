@@ -1,7 +1,7 @@
 import {
 $, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION,
-PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, $$,
-} from './core.js?v=3417f65631';
+PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, $$, setTitle,
+} from './core.js?v=797674b03b';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -83,10 +83,20 @@ inp.focus();
 return;
 }
 inp.removeAttribute('aria-invalid');
-$('#pj-hint').innerHTML = 'De 2 a 16 letras o números.<span class="pj-k"> <kbd>B</kbd> para volver acá.</span>';
-if (location.hash) history.pushState(null, '', location.pathname + location.search);   // salir de la ficha; Atrás vuelve a ella
-search(q, selR.value, +selS.value || null);
+$('#pj-hint').innerHTML = 'De 2 a 16 letras o números.<span class="pj-k"> <kbd>F</kbd> para volver acá.</span>';
+const s = +selS.value || null, h = qHash(q, selR.value, s);
+if (location.hash === h) search(q, selR.value, s); else { again = true; location.hash = h; }
 });
+let again = false;                                       // Enter en el buscador: buscar de nuevo aunque esté en caché
+const qHash = (q, r, s) => `#buscar/${r}/${encodeURIComponent(q)}${s ? '/' + slug(serverName(s)) : ''}`;
+function parseSearch() {
+const m = location.hash.match(/^#buscar\/([a-z]+)\/([^/]+)(?:\/([^/]+))?$/);
+if (!m || !REGS.includes(m[1])) return null;
+let q;
+try { q = decodeURIComponent(m[2]); } catch { return null; }
+const s = m[3] ? serverList(m[1]).find(x => slug(x.name) === m[3])?.id : null;
+return NAME.test(q) && s !== undefined ? { q, r: m[1], s } : null;
+}
 /* ---------- estados ---------- */
 function busy(on, html = '') {
 out.setAttribute('aria-busy', String(on));
@@ -166,7 +176,16 @@ return srv && NAME.test(parts[2]) ? { r, s: srv.id, n: parts[2] } : null;
 }
 function route() {
 if (tip.matches(':popover-open')) tip.hidePopover();
-if (!location.hash || location.hash === '#') { req++; cur = null; last ? paintResults() : paintHome(); return; }
+setTitle();                                            // fuera de una ficha, el título de siempre
+if (!location.hash || location.hash === '#') { req++; cur = null; paintHome(); return; }
+const sq = parseSearch();
+if (sq) {
+req++; cur = null;
+inp.value = sq.q; selR.value = sq.r; fillServers(sq.r, sq.s || '');
+if (!again && last && last.q === sq.q && last.r === sq.r && last.s === sq.s) paintResults(); else search(sq.q, sq.r, sq.s);
+again = false;
+return;
+}
 const bl = location.hash.match(/^#builds(?:\/([a-z]+))?$/);
 if (bl) {                                              // builds de la comunidad sin personaje: #builds[/<clase de questlog>]
 req++; cur = null;
@@ -242,10 +261,10 @@ if (!l.length) return '';
 const on = l.filter(s => s.equipped).length;
 const sorted = dimmable ? [...l.filter(s => s.equipped), ...l.filter(s => !s.equipped)] : l;
 return `<h3 class="pj-h3">${t} <small>${dimmable ? `${on} ${eqt} de ${l.length}` : l.length}</small></h3><ul class="sk-g">${sorted.map(s => {
-const off = dimmable && !s.equipped, lv = c === 'Dp' && !s.level ? 'base' : `Nv ${s.level}`;
+const off = dimmable && !s.equipped, lv = c === 'Dp' && !s.level ? (s.acquired ? 'base' : '—') : `Nv ${s.level}`;
 return `<li class="sk${off ? ' off' : ''}"${off ? ' title="Sin equipar"' : ''}><span>${esc(s.name)}${s.acquired ? '' : '<em class="tag">no adquirida</em>'}${off ? '<span class="sr"> (sin equipar)</span>' : ''}</span><b>${lv}</b></li>`;
 }).join('')}</ul>`;
-}).join('') + '<p class="pj-note">Atenuadas: sin equipar. Una estigma <b>base</b> está equipada sin subir de nivel y se usa igual.</p>';
+}).join('') + '<p class="pj-note">Atenuadas: sin equipar. Una estigma <b>base</b> es una que tenés sin subir de nivel: se usa igual.</p>';
 }
 function statsHtml(st) {
 const row = s => {
@@ -260,6 +279,7 @@ const { ref, d } = cur, p = d.profile, fav = isFav(ref);
 const kisk = `https://kisk.app/c/${ref.r}/${slug(serverName(ref.s))}/${encodeURIComponent(ref.n.toLowerCase())}/gear`;
 const t = d.titles || {};
 out.setAttribute('aria-busy', 'false');
+setTitle(`${p.name} · Personaje · Bitácora Daeva`);
 out.innerHTML = `<article class="pj-f" aria-labelledby="pj-nm">
 <header class="pj-hd card">
 ${img(p.image, 96, 'pj-pt pj-pt-l')}
@@ -271,10 +291,10 @@ ${p.title ? `<p class="pj-tt ${gcls(p.title.grade)}" title="Título equipado">«
 <dl class="pj-big">
 <div><dt>CP</dt><dd>${nf(p.combatPower)}</dd></div>
 <div><dt>iLvl</dt><dd title="El iLvl de PLAYNC suma bonos pegados al equipo; puede diferir un poco del juego">${nf(p.itemLevel)}</dd></div>
-<div><dt>Títulos</dt><dd>${nf(t.owned)}<small>/${nf(t.total)}</small></dd></div>
+<div><dt>Títulos</dt><dd title="Obtenidos de ${nf(t.total)}">${nf(t.owned)}<small>/${nf(t.total)}</small></dd></div>
 </dl>
 <div class="pj-acts">
-<button type="button" class="iconbtn" id="pj-fav" aria-pressed="${fav}" aria-label="Favorito" title="Favorito (F)">${ico(fav ? 'i-star-on' : 'i-star')}</button>
+<button type="button" class="iconbtn" id="pj-fav" aria-pressed="${fav}" aria-label="Favorito" title="Favorito (G)">${ico(fav ? 'i-star-on' : 'i-star')}</button>
 ${mioBtn(ref)}
 <span id="pj-tk-slot">${tkBtn(ref)}</span>
 </div>
@@ -291,7 +311,7 @@ ${mioBtn(ref)}
 ${d.pet ? `<li>${img(d.pet.icon, 44)}<span><small>Pet</small><b>${esc(d.pet.name)}</b> <span class="pw-x">Nv ${d.pet.level}</span></span></li>` : '<li class="pj-empty">Sin pet equipada.</li>'}
 ${d.wings ? `<li>${img(d.wings.icon, 44)}<span><small>Alas</small><b class="${gcls(d.wings.grade)}">${esc(d.wings.name)}</b>${d.wings.enchant ? ` <span class="pw-x">+${d.wings.enchant}</span>` : ''}${d.wingSkin ? `<small>Apariencia: ${esc(d.wingSkin.name)}</small>` : ''}</span></li>` : '<li class="pj-empty">Sin alas.</li>'}
 </ul></section>
-<section class="card pj-sec" aria-labelledby="pj-h-ti"><h2 id="pj-h-ti">Títulos equipados <small>${nf(t.owned)} de ${nf(t.total)}</small></h2><ul class="ti">
+<section class="card pj-sec" aria-labelledby="pj-h-ti"><h2 id="pj-h-ti">Títulos equipados <small>obtenidos: ${nf(t.owned)} de ${nf(t.total)}</small></h2><ul class="ti">
 ${(t.equipped || []).map(x => `<li><b class="${gcls(x.grade)}">${esc(x.name)}</b>${x.effects?.length ? `<small>${esc(x.effects.join(' · '))}</small>` : ''}</li>`).join('') || '<li class="pj-empty">Ninguno.</li>'}
 </ul></section>
 </div>
@@ -340,10 +360,16 @@ const { ref, d } = cur;
 if (e.target.closest('#pj-fav')) toggleFav();
 else if (e.target.closest('#pj-mio')) {
 if (isMine(ref)) { store.set(MIO, null); $('#pj-mio').outerHTML = mioBtn(ref); $('#pj-mio').focus(); toast('Ya no está marcado como tu personaje. Región, server y facción quedan como están.'); return; }
+const before = profile(), mioBefore = store.get(MIO, null);
 setProfile({ region: ref.r, server: ref.s, faccion: ref.f });
 store.set(MIO, ref);
 $('#pj-mio').outerHTML = mioBtn(ref);
-toast(`Listo: la Bitácora quedó en <b>${esc(regName(ref.r))} · ${esc(serverName(ref.s))} · ${FACCION[ref.f]}</b>.`);
+toast(`Listo: la Bitácora quedó en <b>${esc(regName(ref.r))} · ${esc(serverName(ref.s))} · ${FACCION[ref.f]}</b>.`, { ms: 8000, action: { label: 'Deshacer', run: () => {
+setProfile(before);
+store.set(MIO, mioBefore);
+if ($('#pj-mio') && cur) $('#pj-mio').outerHTML = mioBtn(cur.ref);
+toast('Volví a tu región, server y facción de antes.');
+} } });
 $('#pj-mio')?.focus();
 } else if (e.target.closest('#pj-tk')) {
 addToTareas(ref);
@@ -444,6 +470,5 @@ $('.dae-t', box).innerHTML = `<p class="tip-err">${esc((MSG[err.kind] || MSG.ser
 }
 }
 /* ---------- teclado y arranque ---------- */
-registerKey({ key: 'b', label: 'Buscar personaje (en Personaje)', run: () => { inp.focus(); inp.select(); } });
-registerKey({ key: 'f', label: 'Favorito: la ficha abierta (en Personaje)', run: toggleFav });
-route();   // sin autofoco: las teclas globales (1-5, /, M) tienen que andar al entrar; B lleva al buscador
+registerKey({ key: 'g', label: 'Favorito: la ficha abierta (en Personaje)', run: toggleFav });
+route();   // sin autofoco: las teclas globales (1-5, /, M) tienen que andar al entrar; F lleva al buscador

@@ -2,7 +2,7 @@ import {
 $, esc, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, toast, announce, store, versioned, norm, profile, serverName,
 FACCION, ROOT, SCHEDULE, maintWindows, bellButton, getBell, setTimers, registerPalette, registerKey, partsIn, wallToUtc, displayTz,
 HUB_API, LNA_MSG, lnaBlocked, MIN, HOUR, DAY,
-} from './core.js?v=3417f65631';
+} from './core.js?v=797674b03b';
 const D = JSON.parse($('#page-data').textContent), WIN = D.windowMin * MIN, KEEP = 30 * MIN, TOL = 3 * MIN;
 const BOSSES = D.bosses.map(b => ({ ...b, fac: b.faction === 'Elyos' ? 'elyos' : 'asmodian', cyc: b.respawnMin * MIN, world: b.respawnSource === 'oficial', hay: norm(`${b.name} ${b.nameEn} ${b.teleport || ''}`) }));
 const BY = new Map(BOSSES.map(b => [b.id, b]));
@@ -19,11 +19,7 @@ const span = (a, b, now) => `${fmtClock(a, { now })}–${fmtClock(b, { now, day:
 const cycTxt = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ' ' + m % 60 : ''}`;
 const CONF = { alta: 'Alta', media: 'Media', baja: 'Baja' };
 const tpTxt = t => { const m = /^(\d+)\.\s*(.*)$/.exec(t || ''); return !t ? '' : m ? `Teleport ${m[1]} · ${m[2]}` : `Teleport · ${t}`; };
-function jLeft(ms, n) {
-if (ms >= HOUR) return [fmtLeft(ms), n + leftNext(ms)];
-if (ms > MIN) { const m = Math.ceil(ms / MIN); return [`${m} min`, n + ms - (m - 1) * MIN]; }
-const s = Math.max(0, Math.ceil(ms / 1000)); return [`${s} s`, n + Math.max(1, ms - (s - 1) * 1000)];
-}
+const jLeft = (ms, n) => [fmtLeft(ms), n + leftNext(ms)];
 const SRC_TXT = { ql: 'Questlog', vos: 'Vos', com: 'Comunidad' };
 const ago = ts => n => { const m = Math.max(0, Math.floor((n - ts) / MIN)); return [m < 1 ? 'recién' : `hace ${m < 60 ? m + ' min' : `${Math.floor(m / 60)}h ${pad(m % 60)}m`}`, ts + (m + 1) * MIN]; };
 let mwAt = -Infinity, mwL = [];

@@ -193,14 +193,16 @@ export function fmtLeft(ms) {
 const s = Math.max(0, Math.ceil(ms / 1000));
 if (s >= 86400) return `${Math.floor(s / 86400)}d ${Math.floor(s % 86400 / 3600)}h`;
 if (s >= 3600) return `${Math.floor(s / 3600)}h ${pad(Math.floor(s % 3600 / 60))}m`;
-return `${Math.floor(s / 60)}:${pad(s % 60)}`;
+return s > 60 ? `${Math.ceil(s / 60)} min` : `${s} s`;
 }
 export function leftNext(ms) {
 const s = Math.ceil(ms / 1000);
 if (s <= 0) return 1000;
+if (s < 3600 && s > 60) return Math.max(1, ms - Math.max(60, (Math.ceil(s / 60) - 1) * 60) * 1000);
 const U = s >= 86400 ? 3600 : s >= 3600 ? 60 : 1;
 return Math.max(1, ms - (Math.floor(s / U) * U - 1) * 1000);
 }
+export const clockLeft = (ts, o = {}) => n => [`${fmtClock(ts, { now: n, ...o })} · en ${fmtLeft(ts - n)}`, n + Math.min(leftNext(ts - n), MIN)];
 export function fmtClock(ts, { now = Date.now(), tz = displayTz(), day = true, h12 = P.h12 } = {}) {
 const p = partsIn(ts, tz);
 const s = h12 ? `${p.h % 12 || 12}:${pad(p.mi)} ${p.h < 12 ? 'a. m.' : 'p. m.'}` : `${pad(p.h)}:${pad(p.mi)}`;
@@ -209,8 +211,8 @@ const n = partsIn(now, tz), dd = Math.round((Date.UTC(p.y, p.mo - 1, p.d) - Date
 return dd === 0 ? s : dd === 1 ? 'mañana ' + s : dd === -1 ? 'ayer ' + s : dd > 1 && dd < 7 ? `${DOW[p.wd]} ${s}` : `${DOW[p.wd]} ${p.d}/${p.mo} ${s}`;
 }
 export function statusText(o, now = Date.now()) {
-if (now < o.start) return [fmtLeft(o.start - now), now + leftNext(o.start - now)];
-if (o.entry && now < o.entry) return [`${o.ev?.entryLabel || 'entrada abierta'} ${fmtLeft(o.entry - now)}`, now + leftNext(o.entry - now)];
+if (now < o.start) return ['en ' + fmtLeft(o.start - now), now + leftNext(o.start - now)];
+if (o.entry && now < o.entry) return [`${o.ev?.entryLabel || 'entrada abierta'} · ${fmtLeft(o.entry - now)}`, now + leftNext(o.entry - now)];
 if (now < o.end) return ['quedan ' + fmtLeft(o.end - now), now + leftNext(o.end - now)];
 return ['terminó', 0];
 }
@@ -254,7 +256,8 @@ nextB = now + HOUR;
 for (const o of c.list) for (const t of [o.start, o.entry, o.end]) if (t > now && t < nextB) nextB = t;
 for (const o of storedTimers(now)) for (const t of [o.start, o.end]) if (t > now && t < nextB) nextB = t;
 const d = lastReset('daily', now), w = lastReset('weekly', now);
-nextB = Math.min(nextB, nextReset('daily', now), nextReset('weekly', now));
+const rd = nextReset('daily', now);
+nextB = Math.min(nextB, rd, nextReset('weekly', now), rd - 2 * HOUR > now ? rd - 2 * HOUR : Infinity);   // a 2 h del reset la tira avisa las diarias
 emit('structure', { now });
 if (prevDaily && d !== prevDaily) emit('reset', { period: 'daily', at: d });
 if (prevWeekly && w !== prevWeekly) emit('reset', { period: 'weekly', at: w });
@@ -462,7 +465,9 @@ ITEMS.set(t.id, { ...t, stored: true, note: () => t.note, next: n => n < t.start
 rebuildQueue(now);
 nextB = 0;                                         // la tira y las listas se repintan en el próximo tick
 }
-const BASE_TITLE = document.title;
+let BASE_TITLE = document.title;
+export function setTitle(t) { BASE_TITLE = t || DEFAULT_TITLE; titleAndFavicon(Date.now()); }
+const DEFAULT_TITLE = BASE_TITLE;
 let titleNeedsSeconds = false, favDot = null;
 function titleAndFavicon(now) {
 const nb = A.title ? nextBelled(now) : null;
@@ -471,7 +476,7 @@ titleNeedsSeconds = false;
 if (nb) {
 const name = nb.item.short || nb.item.label;
 if (nb.live) t = `¡YA! ${name} · Bitácora`;
-else { const ms = nb.occ.start - now; titleNeedsSeconds = ms < HOUR; t = `${fmtLeft(ms)} ${name} · Bitácora`; }
+else { const ms = nb.occ.start - now; titleNeedsSeconds = ms < 2 * MIN; t = `${fmtLeft(ms)} · ${name} · Bitácora`; }
 }
 if (document.title !== t) document.title = t;
 const dot = !!nb && (nb.live || nb.occ.start - now <= 5 * MIN);
@@ -553,13 +558,47 @@ m.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.right - w)) + 'px';
 m.style.top = (r.bottom + h + 8 > innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
 $('[data-lead]', m)?.focus();
 }
+/* ---------- confianza: un solo vocabulario en todo el sitio (revisión UX P1) ---------- */
+export const CONF_TXT = {
+oficial: ['Oficial', 'Sale de notas o avisos oficiales de PLAYNC.'],
+comunidad: ['Medido por la comunidad', 'No hay aviso oficial: lo midieron jugadores y coinciden varias fuentes (questlog.gg, shugo.gg).'],
+sin: ['Sin confirmar', 'Una sola fuente, o un dato que todavía no pudimos cruzar. Tomalo como aproximado.'],
+};
+export const confOf = x => x.confidence === 'baja' ? 'sin' : (x.basis ? x.basis === 'oficial' : x.confidence === 'alta') ? 'oficial' : 'comunidad';
+export const cleanSrc = s => String(s || '').replace(/\s*\((?:ver )?(?:docs\/)?data-sources[^)]*\)/g, '')
+.replace(/[,;]?\s*(?:citada en |ver )?(?:docs\/)?data-sources(?:\.md)?\s*§?\s*[\d.]*\d/g, '').replace(/el dueño[^.;]*/g, 'confirmado en el juego').trim();
+export function confTag(x, { lv = confOf(x), note = '', label = '' } = {}) {
+return `<button type="button" class="tag conf c-${lv}" data-conf="${lv}" data-src="${esc(cleanSrc(x.source))}"${note ? ` data-note="${esc(note)}"` : ''} aria-haspopup="dialog">${esc(label || CONF_TXT[lv][0])}</button>`;
+}
+let cfAnchor = null;
+function openConf(b) {
+let m = $('#hub-conf');
+if (!m) {
+m = Object.assign(document.createElement('div'), { id: 'hub-conf', className: 'bellmenu confpop' });
+m.popover = 'auto';
+m.setAttribute('role', 'dialog');
+m.setAttribute('aria-label', 'Qué tan seguro es este dato');
+m.addEventListener('toggle', e => { if (e.newState === 'closed') cfAnchor = null; });
+}
+if (cfAnchor === b && m.matches(':popover-open')) { m.hidePopover(); return; }
+const host = [...document.querySelectorAll('dialog[open]')].pop() || document.body;   // dentro del modal abierto (si no, queda inerte)
+if (m.parentNode !== host) { if (m.matches(':popover-open')) m.hidePopover(); host.append(m); }
+const [t, why] = CONF_TXT[b.dataset.conf] || CONF_TXT.sin;
+m.innerHTML = `<p class="bm-t"><b>${esc(t)}</b></p><p class="bm-n">${esc(why)}</p>${b.dataset.note ? `<p class="bm-n"><b>Falta confirmar:</b> ${esc(b.dataset.note)}</p>` : ''}${b.dataset.src ? `<p class="bm-n cf-src">Fuente: ${esc(b.dataset.src)}</p>` : ''}`;
+cfAnchor = b;
+if (!m.matches(':popover-open')) m.showPopover();
+const r = b.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
+m.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left)) + 'px';
+m.style.top = (r.bottom + h + 8 > innerHeight ? Math.max(8, r.top - h - 6) : r.bottom + 6) + 'px';
+}
 /* ---------- lista "Próximos" (Ahora, modo mini y ventana flotante) ---------- */
 const CAT_ICO = { pvp: 'i-pvp', boss: 'i-boss', evento: 'i-evento', reset: 'i-reset' };
 export const catIcon = ev => CAT_ICO[ev.category] || 'i-evento';
 export function renderUpcoming(box, { count = 8, bells = true, minor = true } = {}) {
 const doc = box.ownerDocument;
 const draw = () => {
-const now = Date.now(), L = upcoming(now, { count, minor });
+const now = Date.now(), seen = new Set();
+const L = upcoming(now, { count: count * 3, minor }).filter(o => o.ev.kind !== 'hourly' || (!seen.has(o.id) && seen.add(o.id))).slice(0, count);
 const ol = doc.createElement('ol');
 ol.className = 'up';
 const k = (live, start) => live ? 0 : start;
@@ -579,10 +618,11 @@ const li = doc.createElement('li'), live = isLive(o, now), portal = live && o.en
 li.className = 'up-r' + (live ? ' live' : '') + (o.maint === 'quizas' ? ' quizas' : '');
 li.dataset.ev = o.id;
 const tags = [o.maint === 'quizas' && '<em class="tag warn" title="Puede caer dentro del mantenimiento del miércoles">¿mantenimiento?</em>',
-o.ev.confidence === 'baja' && '<em class="tag">sin verificar</em>'].filter(Boolean).join('');
+confOf(o.ev) === 'sin' && confTag(o.ev)].filter(Boolean).join('');
 const edge = portal ? o.entry : live ? o.end : o.start;
 const when = portal ? `cierra ${fmtClock(o.entry, { now, day: false })}` : live ? `hasta ${fmtClock(o.end, { now, day: false })}` : fmtClock(o.start, { now });
-li.innerHTML = `${ico(catIcon(o.ev), 'up-i')}<span class="up-n"><span class="up-nt">${esc(o.ev.short || o.ev.name)}</span>${tags}${live ? `<small class="up-st">${portal ? esc(o.ev.entryLabel) : 'en curso'}</small>` : ''}</span><time class="up-t" datetime="${new Date(edge).toISOString()}">${when}</time><span class="up-c cd"></span>`;
+const st = live ? (portal ? esc(o.ev.entryLabel) : 'en curso') : o.ev.kind === 'hourly' ? 'cada hora' : '';
+li.innerHTML = `${ico(catIcon(o.ev), 'up-i')}<span class="up-n"><span class="up-nt">${esc(o.ev.short || o.ev.name)}</span>${tags}${st ? `<small class="up-st${live ? '' : ' up-ev'}">${st}</small>` : ''}</span><time class="up-t" datetime="${new Date(edge).toISOString()}">${when}</time><span class="up-c cd"></span>`;
 if (bells) li.append(bellButton(o.id, o.ev.name));
 countdown($('.up-c', li), edge);
 ol.append(li);
@@ -600,13 +640,22 @@ const a = document.createElement('a');
 a.className = 'st-i ' + cls;
 a.href = ROOT + '#ev-' + o.id;
 const live = isLive(o, now);
-a.innerHTML = `${live ? '<i class="st-dot" aria-hidden="true"></i>' : ''}<b>${esc(o.ev.short || o.ev.name)}</b><span class="cd"></span>${live ? '' : `<small>${fmtClock(o.start, { now })}</small>`}`;
+a.innerHTML = `${live ? '<i class="st-dot" aria-hidden="true"></i>' : ''}<b>${esc(o.ev.short || o.ev.name)}</b>${live ? '' : `<small>${fmtClock(o.start, { now })}</small>`}<span class="cd"></span>`;
 bindStatus($('.cd', a), o);
 return a;
 }
+const dailyLeft = now => { const c = characters().activo, p = taskProgress(c, now).daily; return p.total - p.done; };
 function renderStrip() {
 const el = $('#hub-strip');
-if (!el || document.documentElement.classList.contains('mini')) return;
+if (!el) return;
+if (document.documentElement.classList.contains('mini')) {   // mini: solo una línea con la sección y el reloj
+const box = document.createElement('div');
+box.className = 'strip-in';
+box.innerHTML = `<span class="st-lab">${esc(NAV.find(n => n.id === PAGE)?.label || 'Bitácora')}</span><span class="st-r"><span class="st-clock"></span></span>`;
+bind($('.st-clock', box), n => [fmtClock(n, { now: n, day: false }), n + MIN - n % MIN]);
+el.replaceChildren(box);
+return;
+}
 const now = Date.now(), belled = new Set(Object.keys(A.bells));
 const L = upcoming(now, { count: 30 }).filter(o => !o.ev.minor || belled.has(o.id));
 const live = L.find(o => isLive(o, now)), next = L.filter(o => o.start > now).slice(0, 2);
@@ -623,15 +672,15 @@ if (tm) {
 const a = document.createElement('a');
 a.className = 'st-i st-timer';
 a.href = tm.href || ROOT;
-a.innerHTML = `<b>${tm.approx ? '≈ ' : ''}${esc(tm.short || tm.label)}</b><span class="cd"></span><small>${fmtClock(tm.start, { now })}</small>`;
-bind($('.cd', a), timerText(tm));
+a.innerHTML = `<b>${tm.approx ? '≈ ' : ''}${esc(tm.short || tm.label)}</b><small>${fmtClock(tm.start, { now })}</small><span class="cd"></span>`;
+bind($('.cd', a), n => { const [t, d] = timerText(tm)(n); return [n < tm.start ? 'en ' + t : t, d]; });
 box.append(a);
 }
-const rd =nextReset('daily', now), rs = document.createElement('a');
-rs.className = 'st-i st-reset';
-rs.href = ROOT + '#resets';
-rs.innerHTML = `<b>Reset</b><span class="cd"></span><small>${fmtClock(rd, { now })}</small>`;
-countdown($('.cd', rs), rd);
+const rd = nextReset('daily', now), rs = document.createElement('a'), left = rd - now < 2 * HOUR ? dailyLeft(now) : 0;
+rs.className = 'st-i st-reset' + (left ? ' st-due' : '');
+rs.href = left ? ROOT + 'tareas/' : ROOT + '#resets';
+rs.innerHTML = left ? `<b>Te faltan ${left} diaria${left > 1 ? 's' : ''}</b><span class="cd"></span>` : `<b>Reset</b><small>${fmtClock(rd, { now })}</small><span class="cd"></span>`;
+bind($('.cd', rs), n => [(left ? 'reset en ' : 'en ') + fmtLeft(rd - n), n + leftNext(rd - n)]);
 const right = document.createElement('span');
 right.className = 'st-r';
 right.innerHTML = `<button type="button" class="st-mute" ${isMuted(now) ? '' : 'hidden'} title="Avisos silenciados · M para activar">${ico('i-bell-off')}<span>Silencio</span></button><span class="st-clock" title="Hora ${P.clock === 'server' ? 'del server' : 'tuya'}"></span>`;
@@ -735,24 +784,26 @@ if (/^[1-9]$/.test(e.key) && NAV[+e.key - 1]) { e.preventDefault(); go(ROOT + NA
 if (e.key === '/') { e.preventDefault(); openPalette(); return; }
 if (e.key === 'm' || e.key === 'M') { toggleMute(); return; }
 if (e.key === '?') { openHelp(); return; }
+const fi = (e.key === 'f' || e.key === 'F') && $('[data-find]');
+if (fi) { e.preventDefault(); fi.focus(); fi.select?.(); return; }
 const k = KEYS.find(x => x.key === e.key.toLowerCase());
 if (k) { e.preventDefault(); k.run(e); }
 });
 export function openHelp() {
-const rows = [['1 – 5', 'Ir a ' + NAV.map(n => n.label).join(', ')], ['/  o  Ctrl+K', 'Buscar (secciones, eventos, tareas)'], ['M', 'Silenciar avisos 1 hora (otra vez: activar)'], ['?', 'Esta ayuda'], ['Esc', 'Cerrar'],
-...KEYS.map(k => [k.key.toUpperCase(), k.label])];
+const rows = [['1 – 5', 'Ir a ' + NAV.map(n => n.label).join(', ')], ['/  o  Ctrl+K', 'Buscar en toda la Bitácora (secciones, eventos, tareas)'], ['F', 'Buscar en esta página (Jefes, Personaje, Pets)'],
+['M', 'Silenciar avisos 1 hora (otra vez: activar)'], ['?', 'Esta ayuda'], ['Esc', 'Cerrar'], ...KEYS.filter(k => k.key !== 'f').map(k => [k.key.toUpperCase(), k.label])];
 modal({ title: 'Teclado', cls: 'help', html: `<dl class="keys">${rows.map(([k, v]) => `<dt>${k.split('  ').map(x => `<kbd>${esc(x)}</kbd>`).join(' ')}</dt><dd>${esc(v)}</dd>`).join('')}</dl>` });
 }
 /* ---------- ajustes y onboarding de un paso ---------- */
 export function openSettings({ welcome = false } = {}) {
 const pr = profile(), now = Date.now();
 const regOpts = Object.entries(REG).map(([k, r]) => `<option value="${k}"${k === pr.region ? ' selected' : ''}>${esc(r.name)}</option>`).join('');
-const evRows = EVS.filter(e => e.category !== 'reset').map(e => `<label class="chk"><input type="checkbox" data-vis="${e.id}"${isVisible(e) ? ' checked' : ''}> ${esc(e.name)}${e.confidence === 'baja' ? ' <em class="tag">sin verificar</em>' : ''}</label>`).join('');
+const evRows = EVS.filter(e => e.category !== 'reset').map(e => `<label class="chk"><input type="checkbox" data-vis="${e.id}"${isVisible(e) ? ' checked' : ''}> ${esc(e.name)}${confOf(e) === 'sin' ? ' ' + confTag(e) : ''}</label>`).join('');
 const html = `${welcome ? '<p class="lead">Elegí dónde jugás y la Bitácora te muestra los horarios de tu server. Después lo cambiás en Ajustes (o lo fija tu personaje).</p>' : ''}
 <fieldset><legend>Dónde jugás</legend>
 <div class="f2"><label>Región<span class="sel"><select id="s-reg">${regOpts}</select></span></label>
 <label>Servidor<span class="sel"><select id="s-srv"></select></span></label></div>
-<div class="f2"><span class="flab" id="s-fac-l">Facción</span><div class="seg" role="group" aria-labelledby="s-fac-l"><button type="button" data-fac="elyos">Elyos</button><button type="button" data-fac="asmodian">Asmodian</button></div></div>
+<div class="f2" id="s-fac"><span class="flab" id="s-fac-l">Facción</span><div class="seg" role="group" aria-labelledby="s-fac-l"><button type="button" data-fac="elyos">Elyos</button><button type="button" data-fac="asmodian">Asmodian</button></div></div>
 <p class="hint" id="s-tz"></p></fieldset>
 ${welcome ? '' : `<fieldset><legend>Horas</legend>
 <div class="f2"><div class="seg" role="group" aria-label="Qué reloj"><button type="button" data-clock="local">Tu reloj</button><button type="button" data-clock="server">Hora del server</button></div>
@@ -771,17 +822,20 @@ box.innerHTML = html;
 const srv = $('#s-srv', box), reg = $('#s-reg', box);
 const paintSrv = () => {
 const r = reg.value, cur = store.get('hub-server', null), L = serverList(r);
-const grp = f => `<optgroup label="${FACCION[f]}">${L.filter(s => s.faccion === f).map(s => `<option value="${s.id}"${s.id === cur ? ' selected' : ''}>${s.id} · ${esc(s.name)}</option>`).join('')}</optgroup>`;
+const grp = f => `<optgroup label="${FACCION[f]}">${L.filter(s => s.faccion === f).map(s => `<option value="${s.id}"${s.id === cur ? ' selected' : ''}>${esc(s.name)}</option>`).join('')}</optgroup>`;
 srv.innerHTML = `<option value="">Elegí tu server</option>${grp('elyos')}${grp('asmodian')}`;
 };
-const paintFac = () => $$('[data-fac]', box).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fac === store.get('hub-faccion', null))));
+const paintFac = () => {
+$$('[data-fac]', box).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.fac === store.get('hub-faccion', null))));
+$('#s-fac', box).hidden = !!store.get('hub-server', null);
+};
 const paintTz = () => { $('#s-tz', box).textContent = tzSentence(Date.now()); };
 const paintSeg = () => {
 $$('[data-clock]', box).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.clock === P.clock)));
 $$('[data-h12]', box).forEach(b => b.setAttribute('aria-pressed', String(!!+b.dataset.h12 === P.h12)));
 };
 paintSrv(); paintFac(); paintTz(); paintSeg();
-reg.onchange = () => { setProfile({ region: reg.value, server: null }); paintSrv(); paintTz(); };
+reg.onchange = () => { setProfile({ region: reg.value, server: null }); paintSrv(); paintTz(); paintFac(); };
 srv.onchange = () => {
 const id = +srv.value || null;
 setProfile({ server: id, ...(id ? { faccion: String(id)[0] === '1' ? 'elyos' : 'asmodian' } : {}) });
@@ -808,8 +862,8 @@ return modal({ title: welcome ? '¿Dónde jugás?' : 'Ajustes', node: box, cls: 
 }
 export function tzSentence(now = Date.now()) {
 const r = REG[region()], d = (tzOffset(now, r.tz) - tzOffset(now, LOCAL_TZ)) / HOUR;
-const rel = d === 0 ? 'igual a la tuya' : `${Math.abs(d)} h ${d > 0 ? 'adelante' : 'atrás'} de la tuya`;
-return `El server de ${r.name} usa hora de ${r.tzName}, ${rel}.${P.clock === 'server' ? ' Ves las horas del server.' : ' Ves las horas en tu reloj.'}`;
+if (d === 0) return 'Horas en tu reloj.';          // misma hora que el server: la frase larga no aporta nada
+return `El server de ${r.name} usa hora de ${r.tzName}, ${Math.abs(d)} h ${d > 0 ? 'adelante' : 'atrás'} de la tuya.${P.clock === 'server' ? ' Ves las horas del server.' : ' Ves las horas en tu reloj.'}`;
 }
 /* ---------- tareas: estado compartido (Tareas, Ahora y la paleta) ---------- */
 export const PJ = versioned('hub-personajes', 1, { list: [], activo: null });
@@ -831,7 +885,9 @@ export function setTaskDone(charId, period, id, val, now = Date.now()) {
 const t = TK.get(), items = { ...taskDone(charId, period, now) };
 if (val) items[id] = val; else delete items[id];
 t.done = { ...t.done, [charId]: { ...t.done[charId], [period]: { stamp: lastReset(period, now), items } } };
-return TK.set(t);
+const ok = TK.set(t);
+emit('tasks');
+return ok;
 }
 export function taskProgress(charId, now = Date.now()) {
 const out = {};
@@ -923,7 +979,8 @@ function boot() {
 setMini();
 registerBuiltins();
 renderStrip();
-on('structure', renderStrip); on('prefs', renderStrip); on('profile', renderStrip); on('bells', renderStrip); on('mute', renderStrip);
+on('structure', renderStrip); on('prefs', renderStrip); on('profile', renderStrip); on('bells', renderStrip); on('mute', renderStrip); on('tasks', renderStrip);
+onStore('hub-tareas', renderStrip); onStore('hub-personajes', renderStrip);
 onTick(now => { checkAlerts(now); titleAndFavicon(now); }, { hidden: true });
 onStore('hub-alertas', () => { A = AKEY.get(); rebuildQueue(Date.now()); emit('bells', A); for (const b of $$('.bell')) paintBell(b); });
 onStore('hub-prefs', () => { P = PREFS.get(); emit('prefs', P); });
@@ -933,6 +990,8 @@ for (const k of ['hub-region', 'hub-server', 'hub-faccion']) onStore(k, () => { 
 document.addEventListener('click', e => {
 const b = e.target.closest('.bell[data-bell]');
 if (b) { e.preventDefault(); openBellMenu(b); return; }
+const cf = e.target.closest('[data-conf]');
+if (cf) { e.preventDefault(); openConf(cf); return; }
 if (e.target.closest('[data-hub=settings]')) openSettings();
 else if (e.target.closest('[data-hub=search]')) openPalette();
 else if (e.target.closest('[data-hub=help]')) openHelp();

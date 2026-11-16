@@ -1,7 +1,7 @@
 import {
 $, esc, ico, on, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal,
-characters, taskList, taskDone, setTaskDone, PJ, TK, profile, serverName, registerKey, prefs,
-} from './core.js?v=3417f65631';
+characters, taskList, taskDone, setTaskDone, PJ, TK, profile, serverName, registerKey, prefs, confOf, confTag, clockLeft,
+} from './core.js?v=797674b03b';
 const PER = { daily: { t: 'Diarias', when: 'reset diario' }, weekly: { t: 'Semanales', when: 'reset del miércoles' } };
 let editing = false;
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -25,17 +25,19 @@ g.innerHTML = `<div class="tk-h"><h2 id="h-${per}">${PER[per].t}</h2><span class
 bind($('#rs-' + per), n2 => [fmtLeft(rs - n2), n2 + leftNext(rs - n2)]);
 for (const t of items) if (t.event) {
 const el = $(`#ev-${per}-${CSS.escape(t.id)}`), o = currentOcc(t.event, now) || nextOcc(t.event, now);
-if (el && o) bind(el, n2 => isLive(o, n2) ? statusText(o, n2) : [`${fmtClock(o.start, { now: n2 })} · ${fmtLeft(o.start - n2)}`, n2 + leftNext(o.start - n2)]);
+if (el && o) { const cl = clockLeft(o.start); bind(el, n2 => isLive(o, n2) ? statusText(o, n2) : cl(n2)); }
 }
 }
 function row(t, per, done) {
 const v = done[t.id] || 0, max = t.count || 1, ok = v >= max, id = `t-${t.id}`;
-const tags = [t.optional && '<em class="tag">opcional</em>', t.unverified?.length && `<em class="tag" title="Sin verificar: ${esc(t.unverified.join(' · '))}">sin verificar</em>`, t.custom && '<em class="tag gold">tuya</em>'].filter(Boolean).join('');
+const tags = [t.optional && '<em class="tag">opcional</em>', t.custom && '<em class="tag gold">tuya</em>'].filter(Boolean).join('');
+const lv = t.custom ? 'oficial' : t.unverified?.length ? 'sin' : confOf(t);
+const conf = lv === 'oficial' ? '' : ' ' + confTag(t, { lv, note: (t.unverified || []).join(' · ') });
 const ctrl = max > 1
 ? `<span class="tk-step" role="group" aria-label="${esc(t.name)}: ${v} de ${max}"><button type="button" class="iconbtn" data-dec="${esc(t.id)}" aria-label="Una menos"${v ? '' : ' disabled'}>${ico('i-minus')}</button><output id="${id}" tabindex="-1">${v}/${max}</output><button type="button" class="iconbtn" data-inc="${esc(t.id)}" aria-label="Una más"${ok ? ' disabled' : ''}>${ico('i-plus')}</button></span>`
 : `<input type="checkbox" id="${id}" data-chk="${esc(t.id)}"${ok ? ' checked' : ''}>`;
 return `<li class="tk-row${ok ? ' ok' : ''}${t.optional ? ' opt' : ''}" data-t="${esc(t.id)}" data-per="${per}">
-${max > 1 ? '' : ctrl}<label class="tk-txt" ${max > 1 ? '' : `for="${id}"`}><span class="tk-name">${esc(t.name)}${tags}</span>${t.detail ? `<small>${esc(t.detail)}</small>` : ''}</label>
+${max > 1 ? '' : ctrl}<label class="tk-txt" ${max > 1 ? '' : `for="${id}"`}><span class="tk-name">${esc(t.name)}${tags}</span>${t.detail || conf ? `<small>${esc(t.detail || '')}${conf}</small>` : ''}</label>
 ${t.event ? `<span class="tk-ev cd" id="ev-${per}-${esc(t.id)}"></span>` : ''}${max > 1 ? ctrl : ''}
 <button type="button" class="iconbtn tk-del" data-del="${esc(t.id)}" aria-label="Quitar ${esc(t.name)}" title="${t.custom ? 'Borrar' : 'Ocultar'}">${ico('i-trash')}</button></li>`;
 }
@@ -133,13 +135,36 @@ paint();
 }
 const QL_DIR = '%APPDATA%\\Questlog\\aion-2';
 const CLASE = { gladiator: 'Gladiador', templar: 'Templario', assassin: 'Asesino', ranger: 'Arquero', sorcerer: 'Hechicero', elementalist: 'Espiritualista', cleric: 'Clérigo', chanter: 'Cantor' };
-$('#pj-ql').onclick = () => {
-if (/Win/.test(navigator.platform)) navigator.clipboard?.writeText(QL_DIR).then(() => toast(`Copié la carpeta: pegala con Ctrl+V en la barra de arriba del diálogo y elegí <b>characters.json</b>.`, { ms: 12000 }), () => {});
-$('#ql-file').click();
-};
-$('#ql-file').addEventListener('change', async e => {
-const f = e.target.files[0];
-e.target.value = '';
+const QL_FIGS = [
+['Explorador con la carpeta de Questlog pegada en la barra de arriba', '<rect x="4" y="6" width="152" height="84" rx="7" class="w"/><path d="M4 22h152" class="l"/><circle cx="13" cy="14" r="2.2" class="d"/><circle cx="21" cy="14" r="2.2" class="d"/><circle cx="29" cy="14" r="2.2" class="d"/><rect x="12" y="28" width="136" height="15" rx="4" class="hl"/><text x="18" y="38.5">%APPDATA%\\Questlog\\aion-2</text><path d="M14 54h16l3 3h15v12H14z" class="f"/><path d="M58 54h16l3 3h15v12H58z" class="f"/><path d="M102 54h16l3 3h15v12h-34z" class="f"/>',
+'Tocá <b>Elegir archivo</b> y pegá la carpeta en la barra de arriba (<kbd>Ctrl</kbd>+<kbd>V</kbd>, Enter)'],
+['Lista de archivos con characters.json resaltado', '<rect x="4" y="6" width="152" height="84" rx="7" class="w"/><path d="M16 17h8l3 3v9H16z" class="fi"/><text x="34" y="27">checklist.json</text><rect x="10" y="36" width="140" height="20" rx="4" class="hl"/><path d="M16 39h8l3 3v9H16z" class="fi on"/><text x="34" y="49.5" class="on">characters.json</text><path d="M16 63h8l3 3v9H16z" class="fi"/><text x="34" y="73">combat-state.json</text>',
+'Doble clic en <b>characters.json</b>'],
+['Tus personajes como pestañas en Tareas', '<rect x="4" y="6" width="152" height="84" rx="7" class="w"/><rect x="14" y="34" width="56" height="20" rx="10" class="hl"/><text x="24" y="47.5" class="on">Aeris</text><rect x="76" y="34" width="66" height="20" rx="10" class="fi"/><text x="86" y="47.5">Brontes</text>',
+'Cada personaje queda con sus tareas'],
+];
+function qlModal() {
+const box = document.createElement('div'), win = /win/i.test(navigator.userAgentData?.platform || navigator.platform || '');
+box.className = 'ql';
+box.innerHTML = `<p class="lead">Si usás la <a href="https://questlog.gg/aion-2/en/app" target="_blank" rel="noopener">app de Questlog</a> en esta PC, tus personajes ya están en un archivo, <b>characters.json</b>. Se lee en tu navegador, no se sube nada.</p>
+${win ? `<ol class="pasos">${QL_FIGS.map(([a, svg, cap], i) => `<li><figure><svg viewBox="0 0 160 96" role="img" aria-label="${a}">${svg}</svg><figcaption><b>${i + 1}</b><span>${cap}</span></figcaption></figure></li>`).join('')}</ol>
+<div class="ql-path"><code id="ql-dir">${esc(QL_DIR)}</code><button type="button" class="btn ghost" data-qlcopy>Copiar carpeta</button></div>`
+: '<p class="hint">La app de Questlog es solo para Windows. Si tenés el archivo igual, elegilo.</p>'}
+<p class="ql-st" role="status"></p>
+<div class="ql-act"><button type="button" class="btn gold" data-qlpick>${ico('i-upload')}Elegir archivo</button></div>
+<input type="file" id="ql-file" accept=".json,application/json" hidden>`;
+const st = $('.ql-st', box), fi = $('#ql-file', box);
+box.addEventListener('click', e => {
+if (e.target.closest('[data-qlpick]')) fi.click();
+else if (e.target.closest('[data-qlcopy]')) {
+(navigator.clipboard ? navigator.clipboard.writeText(QL_DIR) : Promise.reject()).then(
+() => { st.textContent = 'Carpeta copiada. Ahora tocá Elegir archivo y pegala en la barra de arriba.'; },
+() => { getSelection().selectAllChildren($('#ql-dir', box)); st.textContent = 'No pude copiar: la ruta quedó seleccionada, copiala con Ctrl+C.'; });
+}
+});
+fi.addEventListener('change', async () => {
+const f = fi.files[0];
+fi.value = '';
 if (!f) return;
 let chars = [];
 try {
@@ -147,11 +172,15 @@ const j = JSON.parse(await f.text());
 chars = Object.values(j.characters || {}).filter(c => c && c.self && c.name && !c.name.startsWith('$') && c.class)
 .map(c => ({ name: c.name, server: +c.server || null, clase: CLASE[c.class] || null }));
 } catch { /* abajo */ }
-if (!chars.length) { toast(`Ese archivo no tiene personajes de Questlog. Es <b>characters.json</b>, en ${esc(QL_DIR)}.`, { ms: 9000 }); return; }
+if (!chars.length) { st.innerHTML = `Ese archivo no tiene personajes de Questlog. Es <b>characters.json</b>, en la carpeta de arriba.`; return; }
 const added = addChars(chars);
+box.closest('dialog')?.close();
 paint();
 toast(added.length ? `Sumé ${added.length} personaje${added.length > 1 ? 's' : ''} de Questlog: <b>${added.map(c => esc(c.name)).join(', ')}</b>.` : 'Esos personajes ya estaban.');
 });
+modal({ title: 'Tus personajes desde Questlog', node: box, cls: 'ql-modal' });
+}
+$('#pj-ql').onclick = qlModal;
 $('#tk-edit').onclick = () => { editing = !editing; paint(); };
 registerKey({ key: 'e', label: 'Editar tareas y personajes (en Tareas)', run: () => { editing = !editing; paint(); } });
 function focusHash() {
