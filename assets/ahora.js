@@ -1,8 +1,8 @@
 import {
 $, $$, esc, ico, on, onTick, onStore, bind, countdown, fmtClock, fmtLeft, leftNext, schedule, upcoming, nextReset, renderUpcoming,
 nextBelled, bellButton, getBell, EVENTS, isLive, isVisible, catIcon, tzSentence, versioned, characters, taskList, taskDone, taskProgress,
-setTaskDone, toast, prefs, setPrefs, partsIn, displayTz, store, confTag, clockLeft, HOUR, MIN,
-} from './core.js?v=6bb26aea23';
+setTaskDone, toast, prefs, setPrefs, partsIn, displayTz, store, confTag, clockLeft, gname, galt, alertName, HOUR, MIN,
+} from './core.js?v=42acf93068';
 const html = document.documentElement;
 /* ---------- resets y mantenimiento ---------- */
 function paintResets() {
@@ -25,20 +25,20 @@ function paintHero() {
 const now = Date.now(), nb = nextBelled(now), box = $('#hero');
 const occ = upcoming(now, { count: 20, minor: false }).find(o => o.start > now || o.entry > now);
 if (!occ) { box.innerHTML = '<p class="hero-hint">No hay eventos visibles. Activalos en Ajustes.</p>'; return; }
-const ev = occ.ev, name = ev.name, live = isLive(occ, now), portal = live && occ.entry > now;
+const ev = occ.ev, name = gname(ev), live = isLive(occ, now), portal = live && occ.entry > now;
 const lbl = !live ? 'empieza en' : portal ? `${ev.entryLabel || 'entrada abierta'} · cierra en` : 'termina en';
 const target = !live ? occ.start : portal ? occ.entry : occ.end;
 const bits = [ev.entry ? `${ev.entryLabel} ${ev.entry} min` : '', ev.duration ? `dura ${ev.duration >= 60 ? ev.duration / 60 + ' h' : ev.duration + ' min'}` : '', occ.maint === 'quizas' ? 'puede caer en el mantenimiento' : ''].filter(Boolean);
 const same = nb && nb.item.id === ev.id, mine = getBell(ev.id);
-const nbName = nb && (nb.occ.ev?.short || nb.item.short || nb.item.label);
+const nbName = nb && (nb.occ.ev ? gname(nb.occ.ev, 'short') || gname(nb.occ.ev) : alertName(nb.item));
 const hint = mine ? `${ico('i-bell-on')} <span>Te aviso ${leadsTxt(mine)}.${nb && !same ? ` Con campana: <b>${esc(nbName)}</b> <span class="cd" id="hero-nb"></span>` : ''}</span>`
 : nb ? `${ico('i-bell-on')} <span>Con campana: <b>${esc(nbName)}</b> <span class="cd" id="hero-nb"></span></span>`
 : `${ico('i-bell')} <span>Tocá la campana y te aviso antes. El permiso se pide recién ahí.</span>`;
-box.innerHTML = `<div class="hero-main"><p class="hero-n">${esc(name)}</p><p class="hero-l">${lbl}</p><p class="hero-c cd" id="hero-c"></p>
+box.innerHTML = `<div class="hero-main"><p class="hero-n"${galt(ev) ? ` title="${esc(galt(ev))}"` : ''}>${esc(name)}</p><p class="hero-l">${lbl}</p><p class="hero-c cd" id="hero-c"></p>
 <p class="hero-s"><time>${fmtClock(live ? occ.end : occ.start, { now })}${live ? ' fin' : ''}</time>${bits.map(b => `<span>${esc(b)}</span>`).join('')}${confTag(ev)}</p></div>
 <div class="hero-side"></div>
 <p class="hero-hint">${hint}</p>`;
-$('.hero-side', box).prepend(bellButton(ev.id, ev.name));
+$('.hero-side', box).prepend(bellButton(ev.id, name));
 bind($('#hero-c'), n => [fmtLeft(target - n), n + leftNext(target - n)]);
 const hn = $('#hero-nb');
 if (hn) bind(hn, nb.live ? () => 'ya empezó' : clockLeft(nb.occ.start));
@@ -51,8 +51,8 @@ const pr = taskProgress(activo, now), d = taskDone(activo, 'daily', now);
 const daily = taskList().filter(t => t.period === 'daily' && !t.optional);
 const pct = pr.daily.total ? Math.round(pr.daily.done / pr.daily.total * 100) : 0;
 const row = t => { const v = d[t.id] || 0, max = t.count || 1, ok = v >= max, id = 'ah-t-' + t.id;
-return max > 1 ? `<li class="tk-i${ok ? ' ok' : ''}"><a href="tareas/#t-${esc(t.id)}"><span class="tk-nm">${esc(t.name)} <b>${v}/${max}</b></span>${t.detail ? `<small>${esc(t.detail)}</small>` : ''}</a></li>`
-: `<li class="tk-i${ok ? ' ok' : ''}"><input type="checkbox" id="${id}" data-tk="${esc(t.id)}"${ok ? ' checked' : ''}><label for="${id}"><span class="tk-nm">${esc(t.name)}</span>${t.detail ? `<small>${esc(t.detail)}</small>` : ''}</label></li>`; };
+return max > 1 ? `<li class="tk-i${ok ? ' ok' : ''}"><a href="tareas/#t-${esc(t.id)}"><span class="tk-nm">${esc(gname(t))} <b>${v}/${max}</b></span>${t.detail ? `<small>${esc(gname(t, 'detail'))}</small>` : ''}</a></li>`
+: `<li class="tk-i${ok ? ' ok' : ''}"><input type="checkbox" id="${id}" data-tk="${esc(t.id)}"${ok ? ' checked' : ''}><label for="${id}"><span class="tk-nm">${esc(gname(t))}</span>${t.detail ? `<small>${esc(gname(t, 'detail'))}</small>` : ''}</label></li>`; };
 $('#tk').innerHTML = `<div class="tk-p"><span><b>${pr.daily.done}</b>/${pr.daily.total} diarias</span><span><b>${pr.weekly.done}</b>/${pr.weekly.total} semanales</span><span class="tk-c">${esc(ch.name)}</span></div>
 <div class="bar" role="img" aria-label="${pct}% de las diarias"><i style="--w:${pct}%"></i></div>
 <ul class="tk-l">${daily.slice(0, 6).map(row).join('')}</ul>${pr.daily.total && pr.daily.done >= pr.daily.total ? '<p class="tk-ok">Diarias listas hasta el reset.</p>' : ''}`;
@@ -82,11 +82,11 @@ if (p.h % step === 0 && t > t0 && t < t1) axis.push(`<span style="left:${pct(t)}
 const rows = evs.map(ev => {
 const bl = c.list.filter(o => o.id === ev.id && Math.max(o.end, o.start + 1) > t0 && o.start < t1).map(o => {
 const w = Math.max(o.end - o.start, 0), cls = ['tl-b', isLive(o, now) && 'live', o.maint === 'si' && 'skip', o.maint === 'quizas' && 'quizas', !w && 'pt'].filter(Boolean).join(' ');
-const tip = `${ev.name} · ${fmtClock(o.start, { now, day: false })}${w ? '–' + fmtClock(o.end, { now, day: false }) : ''}${o.maint === 'si' ? ' · no ocurre: mantenimiento' : o.maint === 'quizas' ? ' · puede caer en el mantenimiento' : ''}`;
+const tip = `${gname(ev)} · ${fmtClock(o.start, { now, day: false })}${w ? '–' + fmtClock(o.end, { now, day: false }) : ''}${o.maint === 'si' ? ' · no ocurre: mantenimiento' : o.maint === 'quizas' ? ' · puede caer en el mantenimiento' : ''}`;
 const portal = o.entry && w ? `<b style="width:${(o.entry - o.start) / w * 100}%"></b>` : '';
 return `<i class="${cls}" style="left:${pct(o.start)};width:${w ? `calc(${pct(o.end)} - ${pct(o.start)})` : '0'}" title="${esc(tip)}">${portal}</i>`;
 }).join('');
-return `<div class="tl-row" id="tl-${ev.id}"><span class="tl-l">${ico(catIcon(ev))}<span>${esc((PH.matches && ev.tiny) || ev.short || ev.name)}</span></span><div class="tl-tr">${bl}</div></div>`;
+return `<div class="tl-row" id="tl-${ev.id}"><span class="tl-l">${ico(catIcon(ev))}<span>${esc((PH.matches && gname(ev, 'tiny')) || gname(ev, 'short') || gname(ev))}</span></span><div class="tl-tr">${bl}</div></div>`;
 }).join('');
 const resets = c.list.filter((o, i, L) => o.ev.category === 'reset' && o.start > t0 && o.start < t1 && !(o.id === 'reset-diario' && L.some(w => w.id === 'reset-semanal' && w.start === o.start)))
 .map(o => `<i class="tl-rs${o.id === 'reset-semanal' ? ' wk' : ''}" style="left:${pct(o.start)}"><span>${o.id === 'reset-semanal' ? 'Reset semanal' : 'Reset'}</span></i>`).join('');
@@ -163,7 +163,7 @@ const m = location.hash.match(/^#ev-(.+)$/);
 if (!m) return;
 const id = decodeURIComponent(m[1]), ev = EVENTS.get(id);
 if (!ev) return;
-if (!isVisible(ev)) toast(`<b>${esc(ev.name)}</b> está oculto.`, { action: { label: 'Mostrarlo', run: () => setPrefs({ vis: { ...prefs().vis, [id]: true } }) } });
+if (!isVisible(ev)) toast(`<b>${esc(gname(ev))}</b> está oculto.`, { action: { label: 'Mostrarlo', run: () => setPrefs({ vis: { ...prefs().vis, [id]: true } }) } });
 const el = $(`#up [data-ev="${CSS.escape(id)}"]`) || $(`#tl-${CSS.escape(id)}`) || (ev.category === 'reset' ? $('#resets') : null);
 if (!el) return;
 el.scrollIntoView({ block: 'center', behavior: html.classList.contains('rm') ? 'auto' : 'smooth' });
@@ -185,6 +185,7 @@ on('structure', () => { paintResets(); paintHero(); paintTl(); });
 on('prefs', paintAll);
 on('profile', paintAll);
 on('bells', paintHero);
+on('gamelang', () => { paintHero(); paintTl(); paintTk(); });
 on('reset', paintTk);
 onStore('hub-tareas', paintTk);
 onStore('hub-personajes', paintTk);

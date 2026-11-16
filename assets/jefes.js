@@ -1,15 +1,16 @@
 import {
 $, esc, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, toast, announce, store, versioned, norm, profile, serverName,
 FACCION, serverFaccion, setFaccion, ROOT, SCHEDULE, maintWindows, bellButton, getBell, setTimers, registerPalette, registerKey, partsIn, wallToUtc, displayTz,
-HUB_API, LNA_MSG, lnaBlocked, MIN, HOUR, DAY,
-} from './core.js?v=6bb26aea23';
+HUB_API, LNA_MSG, lnaBlocked, gname, galt, gboth, gameLang, modal, DATA, MIN, HOUR, DAY,
+} from './core.js?v=42acf93068';
 const D = JSON.parse($('#page-data').textContent), WIN = D.windowMin * MIN, KEEP = 30 * MIN, TOL = 3 * MIN;
-const BOSSES = D.bosses.map(b => ({ ...b, fac: b.faction === 'Elyos' ? 'elyos' : 'asmodian', cyc: b.respawnMin * MIN, world: b.respawnSource === 'oficial', hay: norm(`${b.name} ${b.nameEn} ${b.teleport || ''}`) }));
+const DR = D.drops, IT = DR.items;
+const BOSSES = D.bosses.map(b => ({ ...b, fac: b.faction === 'Elyos' ? 'elyos' : 'asmodian', cyc: b.respawnMin * MIN, world: b.respawnSource === 'oficial', tier: DR.bosses[b.id]?.t || 3, top: DR.bosses[b.id]?.t === 1, hay: norm(`${gboth(b)} ${gboth(b, 'teleport')}`) }));
 const BY = new Map(BOSSES.map(b => [b.id, b]));
 const KILLS = versioned('hub-kills', 1, { k: {} });          // {"<server>|<jefe>": epoch ms del kill}
-const CFG = versioned('hub-jefes', 1, { com: 'off' });       // com: off | ver | compartir · orden: spawn | nombre | nivel · fav: ids fijados arriba
+const CFG = versioned('hub-jefes', 1, { com: 'off' });       // com: off | ver | compartir · orden: spawn | importancia | nombre | nivel · fav: ids fijados arriba
 const OCU = versioned('hub-jefes-ocultos', 1, { ids: [] });
-const ord = () => ['nombre', 'nivel'].includes(CFG.get().orden) ? CFG.get().orden : 'spawn';
+const ord = () => ['importancia', 'nombre', 'nivel'].includes(CFG.get().orden) ? CFG.get().orden : 'spawn';
 const favs = () => new Set(CFG.get().fav || []), ocultos = () => new Set(OCU.get().ids || []);
 const MAINT = SCHEDULE.maintenance?.fieldBossesAfterMaintenance !== 'keep';
 const POLL = 30e3, RETRY = 60e3, LIVE_POLL = 60e3, LIVE_VALID = 15 * MIN;
@@ -98,15 +99,15 @@ return j;
 }
 async function share(b, t) {
 const j = await send('/api/kills', b, { t });
-if (!j) toast(`Comunidad sin conexión: el kill de <b>${esc(b.name)}</b> quedó solo en tu navegador.`, { ms: 7000 });
-else if (j.err) toast(`La comunidad no tomó el kill de <b>${esc(b.name)}</b>: ${esc(j.err)}. Tu timer sigue igual.`, { ms: 7000 });
-else toast(`Compartí el kill de <b>${esc(b.name)}</b> con ${esc(serverName(srv()))}.`);
+if (!j) toast(`Comunidad sin conexión: el kill de <b>${esc(gname(b))}</b> quedó solo en tu navegador.`, { ms: 7000 });
+else if (j.err) toast(`La comunidad no tomó el kill de <b>${esc(gname(b))}</b>: ${esc(j.err)}. Tu timer sigue igual.`, { ms: 7000 });
+else toast(`Compartí el kill de <b>${esc(gname(b))}</b> con ${esc(serverName(srv()))}.`);
 }
 async function deny(b) {
 const j = await send('/api/kills/deny', b);
 if (!j) toast('Comunidad sin conexión: no pude mandar el "No estaba".');
 else if (j.err) toast(`No se anotó: ${esc(j.err)}.`, { ms: 7000 });
-else toast(`Anotado: <b>${esc(b.name)}</b> no estaba. Le resta confianza a ese reporte.`);
+else toast(`Anotado: <b>${esc(gname(b))}</b> no estaba. Le resta confianza a ese reporte.`);
 }
 /* ---------- timers ---------- */
 function timer(b, now, K = KILLS.get().k) {
@@ -129,9 +130,108 @@ let nextChange = Infinity, roveId = 0, noneOpen = false, hidOpen = false;
 let held = false;
 const SOON = 15 * MIN;                                   // "sale pronto": la cuenta regresiva se enciende
 const GROUPS = [['now', 'Para ir ahora'], ['soon', 'Próximos'], ['stale', 'Sin confirmar', 'hubo mantenimiento'], ['none', 'Sin datos']];
+const TIER_TXT = { 1: () => `Set ${gradeTxt('Unique')}`, 2: () => `Set ${gradeTxt('Legend')} o alma de pet`, 3: () => `Set ${gradeTxt('Rare')}` };
 const grpOf = s => s === 'alive' || s === 'window' || s === 'due' ? 'now' : s === 'spawns' ? 'soon' : s;
 const pic = (b, sz, px) => `<img class="jf-p" src="${ROOT}assets/jefes/${b.retrato}-${sz}.webp" width="${px}" height="${px}" alt="" loading="lazy">`;
 const cyc = (tm, b, now) => !tm || tm.stale ? 0 : tm.alive || now >= tm.start ? 1 : Math.max(0, Math.min(1, 1 - (tm.start - now) / b.cyc));
+/* ---------- drops: qué suelta cada jefe (boss-drops.json; criterio en decisions.md, "Drops de jefes") ---------- */
+const GRADE_ES = { Common: 'Común', Rare: 'Raro', Legend: 'Legendario', Unique: 'Único', Epic: 'Épico', Special: 'Especial' };
+const GEAR = { arma: 0, accesorio: 1, armadura: 2 };   // orden de la tira: armas, accesorios, armadura
+const IC = ROOT + 'assets/ic/';
+const gradeTxt = g => (gameLang() === 'en' ? DR.gradeEn[g] : GRADE_ES[g]) || g;
+const qcls = g => 'q-' + String(g || 'common').toLowerCase();
+const pct = n => n < 0.01 ? '<0,01 %' : `${n.toLocaleString('es-AR', { maximumFractionDigits: n >= 10 ? 0 : n >= 1 ? 1 : 2 })} %`;
+const icImg = (it, px) => `<img src="${IC}${esc(it.icon)}.webp" width="${px}" height="${px}" alt="" loading="lazy" decoding="async">`;
+const dropsOf = b => DR.bosses[b.id] || { t: 3, d: [], p: [] };
+const teSirve = () => false;
+function pieces(b) {
+const by = new Map();
+for (const [id, ch, via] of dropsOf(b).d) {
+const it = IT[id];
+if (!(it.kind in GEAR)) continue;
+const k = it.nameEn + it.icon, x = by.get(k);
+if (!x || (x.via && !via)) by.set(k, { id, ch, via: !!via });
+}
+return [...by.values()].sort((a, c) => GEAR[IT[a.id].kind] - GEAR[IT[c.id].kind] || a.ch - c.ch);
+}
+function souls(b) {
+const own = store.get('pets-owned', []), have = new Set(Array.isArray(own) ? own.map(String) : []);
+return dropsOf(b).d.filter(([id]) => IT[id].pet).map(([id]) => ({ id, pet: IT[id].pet, falta: !have.has(String(IT[id].pet)) }));
+}
+const petName = s => { const p = DATA.pets?.find(x => String(x[0]) === String(s.pet)); return p ? gname({ name: p[1], nameEn: p[2] }) : gname(IT[s.id]); };
+const tipTxt = (id, ch) => `${gname(IT[id])} · ${gradeTxt(IT[id].grade)} · ${pct(ch)}`;
+const icon = (id, ch, px, btn) => {
+const c = `jf-ic ${qcls(IT[id].grade)}${teSirve(id) ? ' is-want' : ''}`;
+return btn ? `<button type="button" class="${c}" data-it="${id}" data-ch="${ch}" aria-label="${esc(tipTxt(id, ch))}">${icImg(IT[id], px)}</button>`
+: `<span class="${c}" data-it="${id}" data-ch="${ch}">${icImg(IT[id], px)}</span>`;
+};
+function rowDrops(b) {
+const S = souls(b), P = pieces(b).slice(0, S.length ? 2 : 3);
+return `<span class="jf-d">${S.map(s => s.falta
+? `<span class="jf-pet" data-it="${s.id}" data-ch="100">${icImg(IT[s.id], 26)}<b class="l">Pet que te falta</b><b class="s">Te falta</b></span>`
+: icon(s.id, 100, 26)).join('')}${P.map(x => icon(x.id, x.ch, 26)).join('')}</span>`;
+}
+const cardDrops = b => `<span class="jf-d" role="group" aria-label="Equipo que suelta">${pieces(b).map(x => icon(x.id, x.ch, 30, true)).join('')}<button type="button" class="linkbtn jf-vd" data-drops>Ver drops</button></span>`;
+const TIP = document.createElement('div');
+TIP.id = 'jf-tip';
+TIP.className = 'jf-tip';
+TIP.popover = 'manual';
+TIP.setAttribute('role', 'tooltip');
+document.body.append(TIP);
+let tipFor = null;
+function showTip(el) {
+const it = IT[el.dataset.it];
+if (!it) return;
+tipFor = el;
+TIP.className = 'jf-tip ' + qcls(it.grade);
+TIP.innerHTML = `${icImg(it, 40)}<span><b>${esc(gname(it))}</b><small>${esc(gradeTxt(it.grade))} · ${pct(+el.dataset.ch)}</small></span>`;
+if (!TIP.matches(':popover-open')) TIP.showPopover();
+const r = el.getBoundingClientRect(), w = TIP.offsetWidth, h = TIP.offsetHeight;
+TIP.style.left = Math.max(8, Math.min(innerWidth - w - 8, r.left + r.width / 2 - w / 2)) + 'px';
+TIP.style.top = (r.top - h - 8 < 8 ? r.bottom + 8 : r.top - h - 8) + 'px';
+}
+function hideTip() { if (tipFor) { tipFor = null; TIP.hidePopover(); } }
+let dpB = null, dpBox = null, zona = null;
+const dli = (it, id, ch, px) => `<li class="${qcls(it.grade)}${teSirve(id) ? ' is-want' : ''}" data-id="${id}">${icImg(it, px)}<span class="jf-dn"><b>${esc(gname(it))}</b><small>${esc(gradeTxt(it.grade))}</small></span><span class="jf-dc">${ch == null ? '' : pct(ch)}</span></li>`;
+function dropsHtml(b) {
+const x = dropsOf(b), own = x.d.filter(d => !d[2]);
+const sec = (h, L, cls = '') => L.length ? `<section class="jf-ds${cls}"><h3>${h}</h3><ul class="jf-dl">${L.map(([id, ch]) => dli(IT[id], id, ch, 36)).join('')}</ul></section>` : '';
+return `<div class="jf-dh">${pic(b, b.top ? 192 : 80, 56)}<span>${galt(b) ? `<b>${esc(galt(b))}</b>` : ''}<small>Nivel ${b.level}</small></span></div>`
++ souls(b).filter(s => s.falta).map(s => `<p class="jf-dpet">${icImg(IT[s.id], 40)}<span><b>Pet que te falta</b><small>${esc(petName(s))} · 100 %</small></span></p>`).join('')
++ sec('Equipo exclusivo', own.filter(([id]) => IT[id].kind in GEAR))
++ own.filter(([id]) => IT[id].kind === 'cofre').map(([cid, cch]) => sec(`${icImg(IT[cid], 28)} ${esc(gname(IT[cid]))} <small>${pct(cch)}</small>`, x.d.filter(d => d[2] === cid), ' jf-dcof')).join('')
++ sec('Otros', own.filter(([id]) => !(IT[id].kind in GEAR) && IT[id].kind !== 'cofre'))
++ (x.z ? '<details class="jf-zona"><summary>Tabla de zona compartida <small>lo que suelta cualquier jefe de la zona</small></summary><div class="jf-zl" aria-live="polite"></div></details>' : '');
+}
+const loadZona = () => zona ||= fetch(ROOT + DR.zona).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }).catch(e => { zona = null; throw e; });
+async function paintZona(det) {
+const box = $('.jf-zl', det), b = dpB;
+if (!det.open || box.dataset.done) return;
+box.innerHTML = '<p class="jf-zw">Cargando…</p>';
+try {
+const z = await loadZona();
+if (dpB !== b) return;
+box.dataset.done = '1';
+box.innerHTML = `<ul class="jf-dl">${(z.tables[dropsOf(b).z] || []).map(([id, ch]) => dli(z.items[id], id, ch, 28)).join('')}</ul>`;
+} catch { box.innerHTML = '<p class="jf-zw">No se pudo cargar. Probá de nuevo con conexión.</p>'; }
+}
+function paintDrops() {
+dpBox.innerHTML = dropsHtml(dpB);
+const h = dpBox.closest('dialog')?.querySelector('h2');
+if (h) h.textContent = gname(dpB);
+$('.jf-zona', dpBox)?.addEventListener('toggle', e => paintZona(e.currentTarget));
+}
+async function openDrops(b) {
+hideTip();
+if (dpB) return;
+dpB = b;
+dpBox = document.createElement('div');
+dpBox.className = 'jf-dp';
+const done = modal({ title: gname(b), node: dpBox, cls: 'jf-dm' });
+paintDrops();
+await done;
+dpB = dpBox = null;
+}
 function row(b, tm, now, { lv = false } = {}) {
 const s = tm ? state(tm, now) : 'none', ap = tm?.src === 'com' ? '≈ ' : '';
 const at = tm && ap + fmtClock(tm.start, { now }), win = tm && ap + span(tm.start, tm.end, now);   // Questlog da la hora; tu kill, la ventana
@@ -149,33 +249,35 @@ const denyBtn = tm?.src === 'com' && s !== 'stale' && com() === 'compartir'
 ? '<button type="button" class="btn ghost jf-deny" data-deny title="Fuiste y no estaba muerto, o el reporte no cierra: le resta confianza">No estaba</button>' : '';
 const fix = tm?.src === 'vos';                         // con tu timer, el botón corrige (nunca lo pisa sin preguntar)
 const soon = s === 'spawns' && tm.start - now <= SOON ? ' is-soon' : '';
-const meta = [lv && `Nv ${b.level}`, b.teleport && tpTxt(b.teleport), b.world && `cada ${cycTxt(b.respawnMin)}`].filter(Boolean).map(esc).join(' · ');
-const info = `Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)} (${b.respawnSource === 'oficial' ? 'oficial, parche Global' : 'medido por la comunidad'})`;
-return `<li class="jf-r s-${s}${tm ? ' src-' + tm.src : ''}${soon}${b.world ? ' jf-wc' : ''}" id="b-${b.id}" data-boss="${b.id}" data-lv="${b.level}" tabindex="-1">
-${b.world ? pic(b, 192, 96) : pic(b, 80, 40)}
-<span class="jf-n" title="${info}"><b>${esc(b.name)}</b><small>${meta}</small></span>
+const meta = [lv && `Nv ${b.level}`, tpTxt(gname(b, 'teleport')), b.top && `cada ${cycTxt(b.respawnMin)}`].filter(Boolean).map(esc).join(' · ');
+const info = `${galt(b) ? esc(galt(b)) + ' · ' : ''}Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)} (${b.respawnSource === 'oficial' ? 'oficial, parche Global' : 'medido por la comunidad'})`;
+return `<li class="jf-r s-${s}${tm ? ' src-' + tm.src : ''}${soon}${b.top ? ' jf-wc' : ''}" id="b-${b.id}" data-boss="${b.id}" data-lv="${b.level}" data-tier="${b.tier}" tabindex="-1">
+${b.top ? pic(b, 192, 96) : pic(b, 80, 40)}
+<span class="jf-n" title="${info}"><b>${esc(gname(b))}</b><small>${meta}</small></span>${b.top ? cardDrops(b) : rowDrops(b)}
 <span class="jf-w" title="${esc(tip)}"><span class="jf-s">${st}</span><span class="jf-t">${when}${src}</span></span>
-<span class="jf-a">${denyBtn}<button type="button" class="btn ghost jf-kill" data-kill="${fix ? 'fix' : 'new'}" title="${fix ? 'Corregir la hora de tu kill, anotar uno nuevo o quitar tu timer' : 'Lo mataste y no figura: anotá tu kill'}">${fix ? 'Corregir' : 'Lo maté'}</button></span><span class="jf-b"></span>${b.world ? `
-<span class="jf-cy"><i style="--p:${cyc(tm, b, now).toFixed(4)}"></i></span>` : `<button type="button" class="jf-mb" data-menu aria-haspopup="dialog" aria-label="Más: fijar u ocultar ${esc(b.name)}" title="Fijar arriba u ocultar"><svg aria-hidden="true"><use href="#i-more"/></svg></button>`}</li>`;
+<span class="jf-a">${denyBtn}<button type="button" class="btn ghost jf-kill" data-kill="${fix ? 'fix' : 'new'}" title="${fix ? 'Corregir la hora de tu kill, anotar uno nuevo o quitar tu timer' : 'Lo mataste y no figura: anotá tu kill'}">${fix ? 'Corregir' : 'Lo maté'}</button></span><span class="jf-b"></span>${b.top ? `
+<span class="jf-cy"><i style="--p:${cyc(tm, b, now).toFixed(4)}"></i></span>` : `<button type="button" class="jf-mb" data-menu aria-haspopup="dialog" aria-label="Más: ver drops, fijar u ocultar ${esc(gname(b))}" title="Ver drops, fijar arriba u ocultar"><svg aria-hidden="true"><use href="#i-more"/></svg></button>`}</li>`;
 }
 function paint() {
 if (held) return;
 const now = Date.now(), f = viewFac(), q = norm($('#jf-q').value).trim(), hit = b => !q || b.hay.includes(q), K = KILLS.get().k;
 const fe = document.activeElement, fb = fe?.closest?.('[data-boss]')?.dataset.boss, fgt = fe?.matches?.('[data-gt]') ? '[data-gt]' : fe?.matches?.('[data-hid]') ? '[data-hid]' : null;
-const fsel = !fb ? null : fe.matches('[data-kill]') ? '[data-kill]' : fe.matches('.bell') ? '.bell' : fe.matches('[data-deny]') ? '[data-deny]' : fe.matches('[data-menu]') ? '[data-menu]' : null;
+const fsel = !fb ? null : fe.matches('[data-kill]') ? '[data-kill]' : fe.matches('.bell') ? '.bell' : fe.matches('[data-deny]') ? '[data-deny]' : fe.matches('[data-menu]') ? '[data-menu]'
+: fe.matches('[data-drops]') ? '[data-drops]' : fe.matches('[data-it]') ? `[data-it="${fe.dataset.it}"]` : null;
+hideTip();
 const world = [], rest = [];
 nextChange = Infinity;
 for (const b of BOSSES) {
 const tm = timer(b, now, K);
 if (tm) for (const x of [tm.start - SOON, tm.start, tm.end, tm.end + KEEP, tm.maint]) if (x > now && x < nextChange) nextChange = x;
-if (b.fac === f) (b.world ? world : rest).push([b, tm]);
+if (b.fac === f) (b.top ? world : rest).push([b, tm]);
 }
 const rk = ([, tm]) => tm ? RANK[state(tm, now)] : RANK.none;
 rest.sort((a, c) => rk(a) - rk(c) || ((a[1]?.start || 0) - (c[1]?.start || 0)) * (rk(a) === RANK.alive ? -1 : 1));
 publish(now, K);
 const o = ord(), fv = favs(), oc = ocultos(), all = rest.filter(([b]) => hit(b));
 const hid = all.filter(([b]) => oc.has(b.id)), shown = all.filter(([b]) => !oc.has(b.id));
-if (o !== 'spawn') shown.sort(([a], [c]) => (o === 'nivel' && a.level - c.level) || a.name.localeCompare(c.name, 'es'));
+if (o !== 'spawn' && o !== 'importancia') shown.sort(([a], [c]) => (o === 'nivel' && a.level - c.level) || gname(a).localeCompare(gname(c), 'es'));
 const pins = shown.filter(([b]) => fv.has(b.id)), loose = shown.filter(([b]) => !fv.has(b.id)), by = { now: [], soon: [], stale: [], none: [] };
 if (o === 'spawn') for (const x of loose) by[grpOf(x[1] ? state(x[1], now) : 'none')].push(x);
 const fold = by.none.length < loose.length, open = noneOpen || !!q, lv = o === 'nivel';
@@ -186,6 +288,7 @@ return `<section class="jf-grp g-${g}" aria-label="${label}"><h3 class="jf-gh">$
 };
 const html = [pins.length && grp('fav', 'Fijados', pins),
 ...(o === 'spawn' ? GROUPS.filter(([g]) => by[g].length).map(([g, label, sub]) => grp(g, label, by[g], { tog: g === 'none' && fold, sub }))
+: o === 'importancia' ? [1, 2, 3].map(t => [t, loose.filter(([b]) => b.tier === t)]).filter(([, L]) => L.length).map(([t, L]) => grp('t' + t, TIER_TXT[t](), L))
 : [loose.length && grp('all', o === 'nivel' ? 'Por nivel' : 'Por nombre', loose)]),
 hidOpen && hid.length && grp('hid', 'Ocultos', hid)].filter(Boolean).join('');
 $('#jf-world').hidden = $('#jf-all').hidden = false;   // ocultas hasta el primer pintado: así nada visible se corre (CLS 0)
@@ -198,7 +301,7 @@ for (const li of $('#jf-main').querySelectorAll('[data-boss]')) {
 const b = BY.get(+li.dataset.boss), l = $('[data-left]', li), a = $('[data-ago]', li);
 if (l) { const t = +l.dataset.left; bind(l, n => jLeft(t - n, n)); }
 if (a) bind(a, ago(+a.dataset.ago));
-$('.jf-b', li).append(bellButton(bellId(b), b.name, /s-(none|stale)/.test(li.className) ? { hint: 'Suena cuando haya timer.' } : {}));
+$('.jf-b', li).append(bellButton(bellId(b), gname(b), /s-(none|stale)/.test(li.className) ? { hint: 'Suena cuando haya timer.' } : {}));
 }
 nextCyc = now + MIN;
 const rv = $(`#b-${roveId}`);
@@ -222,13 +325,13 @@ const pf = myFac(), list = [];
 for (const b of BOSSES) {
 const tm = timer(b, now, K);
 if (!tm || tm.stale) continue;
-const s = state(tm, now), w = b.world && b.fac === pf;
+const s = state(tm, now), w = b.top && b.fac === pf;   // los 4 importantes (equipo Unique) van a la tira y a Próximos
 if (!w && tm.src !== 'vos' && !getBell(bellId(b))) continue;
 const end = tm.src === 'ql' && s !== 'spawns' ? (w && live ? Math.max(tm.end, live.fetchedAt + LIVE_VALID) : tm.end) : tm.end;
 if (end <= now) continue;
 list.push({
-id: bellId(b), label: b.name, ...(w ? { short: /Gartua|Lagta/.exec(b.name)?.[0] } : {}), start: tm.start, end, ...(tm.maint ? { until: tm.maint } : {}), href: ROOT + 'jefes/#b-' + b.id,
-note: tpTxt(b.teleport), nowText: 'Ya debería estar', src: SRC_TXT[tm.src], ...(tm.src === 'com' ? { approx: true } : {}),
+id: bellId(b), label: b.name, labelEn: b.nameEn, ...(w ? { short: /Gartua|Lagta|Dartan|Kashapa/.exec(b.name)?.[0], shortEn: /Gartua|Lagta|Dartan|Kashapa/.exec(b.nameEn)?.[0] } : {}), start: tm.start, end, ...(tm.maint ? { until: tm.maint } : {}), href: ROOT + 'jefes/#b-' + b.id,
+note: tpTxt(b.teleport), noteEn: tpTxt(b.teleportEn), nowText: 'Ya debería estar', src: SRC_TXT[tm.src], ...(tm.src === 'com' ? { approx: true } : {}),
 ...(w ? { up: true } : {}), ...(s === 'alive' ? { liveText: 'vivo' } : tm.src === 'ql' ? { liveText: 'debería estar' } : {}),
 });
 }
@@ -287,7 +390,7 @@ if (km && KM.matches(':popover-open')) KM.hidePopover();   // comparte el anteri
 const now = Date.now();
 km = { b, base: now, prev: KILLS.get().k[kkey(b)] };
 if (fresh) { setKill(b, now); paint(); }
-KM.innerHTML = `<p class="bm-t"><b>${esc(b.name)}</b> · ${fresh ? '¿hace cuánto cayó?' : 'tu kill'}</p>
+KM.innerHTML = `<p class="bm-t"><b>${esc(gname(b))}</b> · ${fresh ? '¿hace cuánto cayó?' : 'tu kill'}</p>
 ${fresh ? `<div class="bm-leads jf-offs" role="group" aria-label="Hace cuánto lo mataste">${[0, 1, 5, 10, 15].map(m => `<button type="button" data-off="${m}">${m ? m + ' min' : 'Recién'}</button>`).join('')}</div>`
 : '<div class="jf-fix"><button type="button" class="btn" data-again>Murió de nuevo ahora</button><button type="button" class="btn ghost jf-clear" data-clear>Quitar timer</button></div>'}
 <label class="jf-ex">Hora exacta <input type="time" id="jf-ex"></label>
@@ -297,7 +400,7 @@ updKm(true);
 KM.showPopover();
 placeKm();
 $(fresh ? '[data-off="0"]' : '[data-again]', KM).focus();
-if (fresh) announce(`${b.name}: sale ${span(now + b.cyc, now + b.cyc + WIN, now)}`);
+if (fresh) announce(`${gname(b)}: sale ${span(now + b.cyc, now + b.cyc + WIN, now)}`);
 }
 function updKm(input) {
 const { b, base } = km, t = KILLS.get().k[kkey(b)], now = Date.now();
@@ -325,9 +428,9 @@ let mmB = null;
 function openMm(b) {
 mmB = b;
 const fav = favs().has(b.id), oc = ocultos().has(b.id);
-MM.setAttribute('aria-label', b.name);
-MM.innerHTML = `<p class="bm-t"><b>${esc(b.name)}</b></p><p class="jf-mi">Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)} (${b.respawnSource === 'oficial' ? 'oficial' : 'medido por la comunidad'})</p>
-<div class="jf-mm-b">${oc ? '' : `<button type="button" class="btn ghost" data-fav>${fav ? 'Quitar de fijados' : 'Fijar arriba'}</button>`}<button type="button" class="btn ghost" data-ocu>${oc ? 'Mostrar en la lista' : 'Ocultar'}</button></div>`;
+MM.setAttribute('aria-label', gname(b));
+MM.innerHTML = `<p class="bm-t"><b>${esc(gname(b))}</b></p><p class="jf-mi">Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)} (${b.respawnSource === 'oficial' ? 'oficial' : 'medido por la comunidad'})</p>
+<div class="jf-mm-b"><button type="button" class="btn ghost" data-dv>Ver drops</button>${oc ? '' : `<button type="button" class="btn ghost" data-fav>${fav ? 'Quitar de fijados' : 'Fijar arriba'}</button>`}<button type="button" class="btn ghost" data-ocu>${oc ? 'Mostrar en la lista' : 'Ocultar'}</button></div>`;
 MM.showPopover();
 placeAt(MM, $(`#b-${b.id} [data-menu]`));
 $('button', MM).focus();
@@ -345,12 +448,13 @@ OCU.set({ ids: [...o] });
 MM.addEventListener('click', e => {
 const b = mmB;
 if (!b) return;
+if (e.target.closest('[data-dv]')) { MM.hidePopover(); openDrops(b); return; }
 if (e.target.closest('[data-fav]')) {
 const on = !favs().has(b.id);
 setFav(b, on);
 MM.hidePopover();
 paint();
-toast(on ? `<b>${esc(b.name)}</b> queda fijado arriba.` : `<b>${esc(b.name)}</b> vuelve a su lugar.`);
+toast(on ? `<b>${esc(gname(b))}</b> queda fijado arriba.` : `<b>${esc(gname(b))}</b> vuelve a su lugar.`);
 $(`#b-${b.id} [data-menu]`)?.focus();
 } else if (e.target.closest('[data-ocu]')) {
 const on = !ocultos().has(b.id), L = visRows(), i = L.findIndex(li => +li.dataset.boss === b.id);
@@ -359,10 +463,10 @@ if (on) setFav(b, false);
 MM.hidePopover();
 paint();
 if (on) {
-toast(`Ocultaste <b>${esc(b.name)}</b>. Vuelve desde "ocultos", al final de la lista.`, { ms: 6000, action: { label: 'Deshacer', run: () => { setOcu(b, false); paint(); } } });
+toast(`Ocultaste <b>${esc(gname(b))}</b>. Vuelve desde "ocultos", al final de la lista.`, { ms: 6000, action: { label: 'Deshacer', run: () => { setOcu(b, false); paint(); } } });
 (visRows()[Math.min(i, visRows().length - 1)] || $('[data-hid]'))?.focus();
 } else {
-toast(`<b>${esc(b.name)}</b> vuelve a la lista.`);
+toast(`<b>${esc(gname(b))}</b> vuelve a la lista.`);
 $(`#b-${b.id} [data-menu]`)?.focus();
 }
 }
@@ -391,7 +495,7 @@ setKill(b, null);
 if (!timer(b, Date.now())) noneOpen = true;           // sin tu timer y sin Questlog cae en "Sin datos": que no desaparezca
 KM.hidePopover();
 paint();
-toast(`Quitaste tu timer de <b>${esc(b.name)}</b>${liveMap.has(b.id) ? ': vuelve el dato en vivo' : ''}.`);
+toast(`Quitaste tu timer de <b>${esc(gname(b))}</b>${liveMap.has(b.id) ? ': vuelve el dato en vivo' : ''}.`);
 $(`#b-${b.id} [data-kill]`)?.focus();
 return;
 }
@@ -401,7 +505,7 @@ setKill(b, prev ?? null);
 if (!timer(b, Date.now())) noneOpen = true;
 KM.hidePopover();
 paint();
-toast(prev ? `Deshice: <b>${esc(b.name)}</b> vuelve a tu kill anterior.` : `Deshice: <b>${esc(b.name)}</b> vuelve al dato en vivo.`);
+toast(prev ? `Deshice: <b>${esc(gname(b))}</b> vuelve a tu kill anterior.` : `Deshice: <b>${esc(gname(b))}</b> vuelve al dato en vivo.`);
 $(`#b-${b.id} [data-kill]`)?.focus();
 }
 });
@@ -424,10 +528,18 @@ if (e.target.closest('[data-gt]')) { noneOpen = !noneOpen; paint(); return; }   
 if (e.target.closest('[data-hid]')) { hidOpen = !hidOpen; paint(); return; }     // ocultos: mostrar o esconder
 const li = e.target.closest('[data-boss]'), b = li && BY.get(+li.dataset.boss);
 if (!b) return;
+const it = e.target.closest('button[data-it]');
 if (e.target.closest('[data-kill]')) kill(b);
 else if (e.target.closest('[data-menu]')) openMm(b);
 else if (e.target.closest('[data-deny]')) deny(b);
+else if (it) { if (tipFor === it && e.pointerType !== 'mouse') hideTip(); else showTip(it); }   // tira de los importantes: el toque muestra nombre, grado y chance (otro toque lo saca)
+else if (e.target.closest('[data-drops]') || !e.target.closest('button, a, input, select, .bell, .bellmenu')) openDrops(b);   // tocar la fila: sus drops
 });
+$('#jf-main').addEventListener('pointerover', e => { const el = e.target.closest('[data-it]'); if (e.pointerType === 'mouse' && el && el !== tipFor) showTip(el); });
+$('#jf-main').addEventListener('pointerout', e => { if (e.pointerType === 'mouse' && tipFor && !tipFor.contains(e.relatedTarget)) hideTip(); });
+$('#jf-main').addEventListener('focusin', e => { if (e.target.matches('[data-it]:focus-visible')) showTip(e.target); });   // foco por toque o clic: lo maneja el click
+$('#jf-main').addEventListener('focusout', e => { if (e.target === tipFor) hideTip(); });
+addEventListener('scroll', hideTip, { passive: true });
 const IP = document.createElement('div');
 IP.id = 'jf-ipop';
 IP.className = 'bellmenu jf-ipop';
@@ -444,6 +556,8 @@ $('#jf-fbtn').setAttribute('aria-expanded', String(o));
 if (o) $('#jf-q').focus();
 });
 $('#jf-main').addEventListener('keydown', e => {
+if (e.key === 'Escape' && tipFor) { hideTip(); return; }
+if (e.key === 'Enter' && e.target.matches('[data-boss]')) { e.preventDefault(); openDrops(BY.get(+e.target.dataset.boss)); return; }   // Enter en la fila: sus drops
 if ((e.key !== 'ArrowDown' && e.key !== 'ArrowUp') || e.altKey || e.ctrlKey || e.metaKey) return;
 const L = visRows(), i = L.indexOf(document.activeElement?.closest?.('[data-boss]'));
 if (i < 0) return;
@@ -504,7 +618,7 @@ return BOSSES.map(b => {
 const tm = timer(b, now), s = tm && state(tm, now);
 const when = !tm ? 'sin datos' : s === 'stale' ? 'sin confirmar (mantenimiento)' : s === 'spawns' ? `sale ${fmtClock(tm.start, { now })} · en ${fmtLeft(tm.start - now)}`
 : s === 'alive' ? `vivo desde ${fmtClock(tm.start, { now })}` : s === 'window' ? 'puede estar' : 'debería estar';
-return { id: 'jefe-' + b.id, title: b.name, sub: `${FACCION[b.fac]} · ${tm && tm.src !== 'ql' ? SRC_TXT[tm.src].toLowerCase() + ', ' : ''}${when}`, kw: `${b.nameEn} ${b.teleport || ''} jefe`, icon: 'i-boss', run: () => focusBoss(b) };
+return { id: 'jefe-' + b.id, title: gname(b), sub: `${FACCION[b.fac]} · ${tm && tm.src !== 'ql' ? SRC_TXT[tm.src].toLowerCase() + ', ' : ''}${when}`, kw: `${gboth(b)} ${gboth(b, 'teleport')} jefe`, icon: 'i-boss', run: () => focusBoss(b) };
 });
 },
 });
@@ -538,10 +652,12 @@ if (now >= nextPoll) poll();
 document.addEventListener('visibilitychange', () => { if (!document.hidden && Date.now() - liveTry > 10e3) pullLive(); });
 on('structure', paint);
 on('prefs', paint);
+on('gamelang', () => { paint(); if (dpB) paintDrops(); });
 on('bells', () => publish(Date.now(), KILLS.get().k));
 on('profile', onProfile);
 onStore('hub-kills', paint);
 onStore('hub-jefes', onCom);
 onStore('hub-jefes-ocultos', paint);
+onStore('pets-owned', () => { paint(); if (dpB) paintDrops(); });   // la colección del Bestiario (Pets, otra pestaña o el sync)
 addEventListener('hashchange', fromHash);
 if (location.hash) setTimeout(fromHash, 60);

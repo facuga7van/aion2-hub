@@ -30,7 +30,7 @@ if (w) w.hidden = false;
 export const store = {
 get(k, d) { try { const v = localStorage.getItem(k); return v == null ? d : JSON.parse(v); } catch { return d; } },
 set(k, v) {
-try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); return true; }
+try { v == null ? localStorage.removeItem(k) : localStorage.setItem(k, JSON.stringify(v)); emit('store', k); return true; }
 catch { warnStorage(); return false; }
 },
 };
@@ -92,6 +92,22 @@ export function setPrefs(patch) { P = { ...P, ...patch }; PREFS.set(P); emit('pr
 export const LOCAL_TZ = Intl.DateTimeFormat().resolvedOptions().timeZone;
 export const displayTz = () => P.clock === 'server' ? serverTz() : LOCAL_TZ;
 export const isVisible = ev => P.vis[ev.id] ?? !ev.hidden;
+/* ---------- idioma del juego: la interfaz sigue en español; los nombres del juego, como en tu cliente ---------- */
+let GL = store.get('hub-idioma-juego', 'es') === 'en' ? 'en' : 'es';
+export const gameLang = () => GL;
+export function setGameLang(l, { remote = false } = {}) {
+l = l === 'en' ? 'en' : 'es';
+if (l === GL) return;
+GL = l;
+if (!remote) store.set('hub-idioma-juego', l);
+document.documentElement.dataset.gl = l;
+emit('gamelang', l);
+}
+export const gname = (o, f = 'name') => (o && ((GL === 'en' && o[f + 'En']) || o[f] || o[f + 'En'])) || '';
+export const galt = (o, f = 'name') => { const a = o && (GL === 'en' ? o[f] : o[f + 'En']); return a && a !== gname(o, f) ? a : ''; };
+export const gboth = (o, f = 'name') => [o?.[f], o?.[f + 'En']].filter(Boolean).join(' ');
+const CLASES = { Gladiador: 'Gladiator', Templario: 'Templar', Asesino: 'Assassin', Arquero: 'Ranger', Hechicero: 'Sorcerer', Espiritualista: 'Spiritmaster', 'Clérigo': 'Cleric', Cantor: 'Chanter' };
+export const gclass = c => (GL === 'en' && CLASES[c]) || c;
 /* ---------- hora ---------- */
 const DTF = new Map(), WD = { Sun: 0, Mon: 1, Tue: 2, Wed: 3, Thu: 4, Fri: 5, Sat: 6 };
 export const DOW = ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'];
@@ -326,8 +342,10 @@ export const CREDITS = [
 ['Horarios y eventos', 'Notas y avisos oficiales de PLAYNC (NCSOFT). Lo que no tiene aviso oficial lo midieron jugadores y se cruzó con questlog.gg y shugo.gg; va rotulado.'],
 ['Jefes en vivo', 'Telemetría de jugadores: la app de escritorio de questlog.gg ve los jefes en las partidas de sus usuarios. Llega a través del servidor de la Bitácora. Si activás los reportes de la comunidad, también lo que avisan otros jugadores de tu server ("Estimado").'],
 ['Jefes: nombres, teleports y retratos', 'Base de datos de Aion 2 de questlog.gg. Los ciclos "medidos" los midió la comunidad (Inven); los oficiales, del parche Global.'],
+['Jefes: drops', 'Qué suelta cada jefe y con qué chance: base de datos de questlog.gg cruzada con los datos del cliente Global que publica aion2data.com (https://aion2data.com/monsters). Íconos del CDN oficial de PLAYNC, re-guardados chicos.'],
 ['Personaje', 'Ficha pública de PLAYNC (equipo, skills, Daevanion, nivel de objeto) e íconos del CDN oficial de PLAYNC, re-guardados chicos. Nombres de skills en inglés, tablas de amplificación y builds de la comunidad: questlog.gg. Lo que usan los top: el armory público de PLAYNC sobre la lista de mayor CP de questlog.gg. Guías de builds: aion2data.com (https://aion2data.com). Puertas de contenido: notas oficiales de parche de PLAYNC; las de Expedición y Trascendencia, de guías de la comunidad.'],
-['Pets', 'El Bestiario Esquivo, con datos de questlog.gg.'],
+['Personaje: títulos y logros', 'Conteo y títulos equipados: ficha pública de PLAYNC. Catálogo de títulos y logros (pasos, metas, recompensas, estatuas del Panteón): base de datos de questlog.gg, cruzada con los datos del cliente de aion2data.com (https://aion2data.com). Qué es "importante": criterio propio con lo que equipan los top. La lista de tus títulos y tu Panteón se carga desde characters.json de la app de escritorio de questlog.gg, en tu navegador. Íconos: CDN oficial de PLAYNC.'],
+['Pets', 'El Bestiario Esquivo. Datos, mapas, coordenadas de spawns y retratos: base de datos y mapa interactivo de questlog.gg (Aion 2 global). Tiendas y eventos de las Especiales: aion2vault.com, wikily.gg y notas de NCSOFT. Grieta (Spacetime Rift): guía de expcarry.com. La colección se carga desde characters.json de la app de escritorio de questlog.gg.'],
 ['Aion 2', 'Nombres, imágenes y marcas de Aion 2 son de NCSOFT. Bitácora Daeva es un sitio de fans, sin relación con NCSOFT: sin anuncios, sin cookies, sin rastreo.'],
 ];
 export function openCredits() {
@@ -354,6 +372,7 @@ const ITEMS = new Map();
 export const LEADS = [10, 5, 1, 0];
 export function registerAlertable(item) { ITEMS.set(item.id, item); rebuildQueue(Date.now()); }
 export const alertable = id => ITEMS.get(id);
+export const alertName = it => it ? gname(it, 'short') || gname(it, 'label') : '';
 export const alertPrefs = () => A;
 export function setAlertPrefs(patch) { A = { ...A, ...patch }; saveA(); rebuildQueue(Date.now()); emit('bells', A); }
 export const getBell = id => A.bells[id] || null;
@@ -438,7 +457,7 @@ function fire(q, now) {
 if (DONE.has(q.key)) return;
 DONE.add(q.key);
 if (now - q.at > STALE) return;                  // la compu estuvo dormida: un aviso viejo no sirve
-const it = ITEMS.get(q.id), name = it?.short || it?.label;
+const it = ITEMS.get(q.id), name = alertName(it);
 if (!it || (it.until && now >= it.until)) return;  // timer suelto que dejó de valer (p. ej. hubo mantenimiento)
 const title = q.lead ? `${name} en ${q.lead} min` : `¡${name}! ${it.nowText || 'Empieza ahora'}`;
 const body = [fmtClock(q.occ.start, { now }), it.note?.(q.occ)].filter(Boolean).join(' · ');
@@ -486,7 +505,7 @@ const now = Date.now();
 for (const [id, it] of ITEMS) if (it.stored) ITEMS.delete(id);
 for (const t of storedTimers(now)) {
 const ok = n => !(t.until && n >= t.until);
-ITEMS.set(t.id, { ...t, stored: true, note: () => t.note, next: n => n < t.start && ok(n) ? t : null, current: n => n >= t.start && n < t.end && ok(n) ? t : null });
+ITEMS.set(t.id, { ...t, stored: true, note: () => gname(t, 'note'), next: n => n < t.start && ok(n) ? t : null, current: n => n >= t.start && n < t.end && ok(n) ? t : null });
 }
 rebuildQueue(now);
 nextB = 0;                                         // la tira y las listas se repintan en el próximo tick
@@ -500,7 +519,7 @@ const nb = A.title ? nextBelled(now) : null;
 let t = BASE_TITLE;
 titleNeedsSeconds = false;
 if (nb) {
-const name = nb.item.short || nb.item.label;
+const name = alertName(nb.item);
 if (nb.live) t = `¡YA! ${name} · Bitácora`;
 else { const ms = nb.occ.start - now; titleNeedsSeconds = ms < 2 * MIN; t = `${fmtLeft(ms)} · ${name} · Bitácora`; }
 }
@@ -514,7 +533,7 @@ if (l) l.href = dot ? DATA.favicon.dot : DATA.favicon.base;
 }
 /* ---------- campana (componente) ---------- */
 const leadTxt = l => l ? `${l} min antes` : 'al inicio';
-export function bellButton(id, label = alertable(id)?.label || id, { hint = '' } = {}) {
+export function bellButton(id, label = gname(alertable(id), 'label') || id, { hint = '' } = {}) {
 const b = document.createElement('button');
 b.type = 'button';
 b.className = 'bell';
@@ -634,8 +653,8 @@ if (t) {
 const li = doc.createElement('li'), live = now >= t.start;
 li.className = 'up-r up-tm' + (live ? ' live' : '');
 li.dataset.tm = t.id;
-li.innerHTML = `${ico('i-boss', 'up-i')}<span class="up-n"><span class="up-nt">${t.approx ? '≈ ' : ''}${esc(t.short || t.label)}</span>${t.src ? `<small class="up-st">${esc(t.src)}</small>` : ''}</span><time class="up-t" datetime="${new Date(t.start).toISOString()}">${live ? 'desde ' + fmtClock(t.start, { now, day: false }) : fmtClock(t.start, { now })}</time><span class="up-c cd"></span>`;
-if (bells) li.append(bellButton(t.id, t.label));
+li.innerHTML = `${ico('i-boss', 'up-i')}<span class="up-n"><span class="up-nt">${t.approx ? '≈ ' : ''}${esc(alertName(t))}</span>${t.src ? `<small class="up-st">${esc(t.src)}</small>` : ''}</span><time class="up-t" datetime="${new Date(t.start).toISOString()}">${live ? 'desde ' + fmtClock(t.start, { now, day: false }) : fmtClock(t.start, { now })}</time><span class="up-c cd"></span>`;
+if (bells) li.append(bellButton(t.id, gname(t, 'label')));
 bind($('.up-c', li), timerText(t));
 ol.append(li);
 continue;
@@ -648,8 +667,8 @@ confOf(o.ev) === 'sin' && confTag(o.ev)].filter(Boolean).join('');
 const edge = portal ? o.entry : live ? o.end : o.start;
 const when = portal ? `cierra ${fmtClock(o.entry, { now, day: false })}` : live ? `hasta ${fmtClock(o.end, { now, day: false })}` : fmtClock(o.start, { now });
 const st = live ? (portal ? esc(o.ev.entryLabel) : 'en curso') : o.ev.kind === 'hourly' ? 'cada hora' : '';
-li.innerHTML = `${ico(catIcon(o.ev), 'up-i')}<span class="up-n"><span class="up-nt">${esc(o.ev.short || o.ev.name)}</span>${tags}${st ? `<small class="up-st${live ? '' : ' up-ev'}">${st}</small>` : ''}</span><time class="up-t" datetime="${new Date(edge).toISOString()}">${when}</time><span class="up-c cd"></span>`;
-if (bells) li.append(bellButton(o.id, o.ev.name));
+li.innerHTML = `${ico(catIcon(o.ev), 'up-i')}<span class="up-n"><span class="up-nt">${esc(gname(o.ev, 'short') || gname(o.ev))}</span>${tags}${st ? `<small class="up-st${live ? '' : ' up-ev'}">${st}</small>` : ''}</span><time class="up-t" datetime="${new Date(edge).toISOString()}">${when}</time><span class="up-c cd"></span>`;
+if (bells) li.append(bellButton(o.id, gname(o.ev)));
 countdown($('.up-c', li), edge);
 ol.append(li);
 }
@@ -657,7 +676,7 @@ if (!L.length) ol.innerHTML = '<li class="up-empty">No hay eventos visibles. Act
 box.replaceChildren(ol);
 };
 draw();
-const offs = [on('structure', draw), on('prefs', draw), on('profile', draw)];
+const offs = [on('structure', draw), on('prefs', draw), on('profile', draw), on('gamelang', draw)];
 return () => offs.forEach(f => f());
 }
 /* ---------- tira "Ahora" (36 px, todas las páginas) ---------- */
@@ -666,7 +685,7 @@ const a = document.createElement('a');
 a.className = 'st-i ' + cls;
 a.href = ROOT + '#ev-' + o.id;
 const live = isLive(o, now);
-a.innerHTML = `${live ? '<i class="st-dot" aria-hidden="true"></i>' : ''}<b>${esc(o.ev.short || o.ev.name)}</b>${live ? '' : `<small>${fmtClock(o.start, { now })}</small>`}<span class="cd"></span>`;
+a.innerHTML = `${live ? '<i class="st-dot" aria-hidden="true"></i>' : ''}<b>${esc(gname(o.ev, 'short') || gname(o.ev))}</b>${live ? '' : `<small>${fmtClock(o.start, { now })}</small>`}<span class="cd"></span>`;
 bindStatus($('.cd', a), o);
 return a;
 }
@@ -698,7 +717,7 @@ if (tm) {
 const a = document.createElement('a');
 a.className = 'st-i st-timer';
 a.href = tm.href || ROOT;
-a.innerHTML = `<b>${tm.approx ? '≈ ' : ''}${esc(tm.short || tm.label)}</b><small>${fmtClock(tm.start, { now })}</small><span class="cd"></span>`;
+a.innerHTML = `<b>${tm.approx ? '≈ ' : ''}${esc(alertName(tm))}</b><small>${fmtClock(tm.start, { now })}</small><span class="cd"></span>`;
 bind($('.cd', a), n => { const [t, d] = timerText(tm)(n); return [n < tm.start ? 'en ' + t : t, d]; });
 box.append(a);
 }
@@ -820,17 +839,28 @@ const rows = [['1 – 5', 'Ir a ' + NAV.map(n => n.label).join(', ')], ['/  o  C
 ['M', 'Silenciar avisos 1 hora (otra vez: activar)'], ['?', 'Esta ayuda'], ['Esc', 'Cerrar'], ...KEYS.filter(k => k.key !== 'f').map(k => [k.key.toUpperCase(), k.label])];
 modal({ title: 'Teclado', cls: 'help', html: `<dl class="keys">${rows.map(([k, v]) => `<dt>${k.split('  ').map(x => `<kbd>${esc(x)}</kbd>`).join(' ')}</dt><dd>${esc(v)}</dd>`).join('')}</dl>` });
 }
+/* ---------- cuenta y sync (src/cuenta.js, lazy) ---------- */
+export const loadCuenta = () => import('./cuenta.js' + new URL(import.meta.url).search);
+const CUENTA_OFF = 'Sin conexión: la cuenta se carga cuando vuelva.';
+function cuentaBox() {
+const f = Object.assign(document.createElement('fieldset'), { className: 's-cuenta', innerHTML: '<legend>Cuenta</legend>' });
+loadCuenta().then(m => m.mount(f), () => f.insertAdjacentHTML('beforeend', `<p class="hint">${CUENTA_OFF}</p>`));
+return f;
+}
 /* ---------- ajustes y onboarding de un paso ---------- */
 export function openSettings({ welcome = false } = {}) {
 const pr = profile(), now = Date.now();
 const regOpts = Object.entries(REG).map(([k, r]) => `<option value="${k}"${k === pr.region ? ' selected' : ''}>${esc(r.name)}</option>`).join('');
-const evRows = EVS.filter(e => e.category !== 'reset').map(e => `<label class="chk"><input type="checkbox" data-vis="${e.id}"${isVisible(e) ? ' checked' : ''}> ${esc(e.name)}${confOf(e) === 'sin' ? ' ' + confTag(e) : ''}</label>`).join('');
-const html = `${welcome ? '<p class="lead">Elegí dónde jugás y la Bitácora te muestra los horarios de tu server. Después lo cambiás en Ajustes (o lo fija tu personaje).</p>' : ''}
+const evRows = EVS.filter(e => e.category !== 'reset').map(e => `<label class="chk"><input type="checkbox" data-vis="${e.id}"${isVisible(e) ? ' checked' : ''}> <span data-evn="${e.id}">${esc(gname(e))}</span>${confOf(e) === 'sin' ? ' ' + confTag(e) : ''}</label>`).join('');
+const html = `${welcome ? '<p class="lead">Elegí dónde jugás y la Bitácora te muestra los horarios de tu server. Después lo cambiás en Ajustes (o lo fija tu personaje).</p><p class="hint">¿Ya la usás en otro dispositivo? <button type="button" class="linkbtn" data-hub="cuenta">Entrá con tu cuenta</button> y trae todo.</p>' : ''}
 <fieldset><legend>Dónde jugás</legend>
 <div class="f2"><label>Región<span class="sel"><select id="s-reg">${regOpts}</select></span></label>
 <label>Servidor<span class="sel"><select id="s-srv"></select></span></label></div>
 <div class="f2" id="s-fac"><span class="flab" id="s-fac-l">Facción</span><div class="seg" role="group" aria-labelledby="s-fac-l"><button type="button" data-fac="elyos">Elyos</button><button type="button" data-fac="asmodian">Asmodian</button></div></div>
 <p class="hint" id="s-tz"></p></fieldset>
+<fieldset><legend>${welcome ? '¿En qué idioma tenés el juego?' : 'Nombres del juego'}</legend>
+<div class="f2"><div class="seg" role="group" aria-label="Nombres del juego"><button type="button" data-glang="es">Español</button><button type="button" data-glang="en">English</button></div></div>
+<p class="hint">Jefes, eventos, mapas, ítems y skills con los nombres de tu cliente. La Bitácora sigue en español.</p></fieldset>
 ${welcome ? '' : `<fieldset><legend>Horas</legend>
 <div class="f2"><div class="seg" role="group" aria-label="Qué reloj"><button type="button" data-clock="local">Tu reloj</button><button type="button" data-clock="server">Hora del server</button></div>
 <div class="seg" role="group" aria-label="Formato"><button type="button" data-h12="0">24 h</button><button type="button" data-h12="1">12 h</button></div></div></fieldset>
@@ -846,6 +876,7 @@ ${welcome ? '' : `<fieldset><legend>Horas</legend>
 <fieldset><legend>Eventos que ves</legend><div class="evs">${evRows}</div></fieldset>`}`;
 const box = document.createElement('div');
 box.innerHTML = html;
+if (!welcome) $('fieldset', box).after(cuentaBox());
 const srv = $('#s-srv', box), reg = $('#s-reg', box);
 const paintSrv = () => {
 const r = reg.value, cur = store.get('hub-server', null), L = serverList(r);
@@ -860,6 +891,8 @@ const paintTz = () => { $('#s-tz', box).textContent = tzSentence(Date.now()); };
 const paintSeg = () => {
 $$('[data-clock]', box).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.clock === P.clock)));
 $$('[data-h12]', box).forEach(b => b.setAttribute('aria-pressed', String(!!+b.dataset.h12 === P.h12)));
+$$('[data-glang]', box).forEach(b => b.setAttribute('aria-pressed', String(b.dataset.glang === GL)));
+$$('[data-evn]', box).forEach(n => { n.textContent = gname(EVENTS.get(n.dataset.evn)); });
 };
 paintSrv(); paintFac(); paintTz(); paintSeg();
 reg.onchange = () => { setProfile({ region: reg.value, server: null }); paintSrv(); paintTz(); paintFac(); };
@@ -869,7 +902,8 @@ setProfile({ server: id, ...(id ? { faccion: serverFaccion(id) } : {}) });
 paintFac();
 };
 box.addEventListener('click', e => {
-const f = e.target.closest('[data-fac]'), c = e.target.closest('[data-clock]'), h = e.target.closest('[data-h12]');
+const f = e.target.closest('[data-fac]'), c = e.target.closest('[data-clock]'), h = e.target.closest('[data-h12]'), g = e.target.closest('[data-glang]');
+if (g) { setGameLang(g.dataset.glang); paintSeg(); }
 if (f) { setProfile({ faccion: f.dataset.fac }); paintFac(); }
 if (c) { setPrefs({ clock: c.dataset.clock }); paintSeg(); }
 if (h) { setPrefs({ h12: !!+h.dataset.h12 }); paintSeg(); }
@@ -977,14 +1011,14 @@ if (m !== html.classList.contains('mini')) { html.classList.toggle('mini', m); r
 mqMini.addEventListener?.('change', setMini);
 function registerBuiltins() {
 for (const ev of EVS) registerAlertable({
-id: ev.id, label: ev.name, short: ev.short, href: ROOT + '#ev-' + ev.id,
+id: ev.id, label: ev.name, short: ev.short, labelEn: ev.nameEn, shortEn: ev.shortEn, href: ROOT + '#ev-' + ev.id,
 next: now => nextOcc(ev.id, now), current: now => currentOcc(ev.id, now),
 note: o => o.ev.entry ? `${o.ev.entryLabel} ${o.ev.entry} min` : o.ev.notes?.split('.')[0],
 });
 registerPalette('nav', { group: 'Sección', items: NAV.map((n, i) => ({ id: 'nav-' + n.id, title: n.label, sub: n.desc, icon: n.icon, href: ROOT + n.href, pin: true, kw: String(i + 1) })) });
 registerPalette('cmd', {
 group: 'Acción', items: () => [
-{ id: 'cmd-ajustes', title: 'Ajustes', sub: 'Región, server, facción, horas y avisos', icon: 'i-gear', run: () => openSettings(), pin: true, kw: 'configuracion server region faccion' },
+{ id: 'cmd-ajustes', title: 'Ajustes', sub: 'Región, server, facción, idioma del juego, horas y avisos', icon: 'i-gear', run: () => openSettings(), pin: true, kw: 'configuracion server region faccion idioma ingles english nombres' },
 { id: 'cmd-mute', title: isMuted() ? 'Activar avisos' : 'Silenciar avisos 1 hora', sub: 'Tecla M', icon: 'i-bell-off', run: () => toggleMute(), pin: true, kw: 'mute silencio' },
 { id: 'cmd-pip', title: 'Sacar ventana', sub: 'Próximos en una ventana chica, siempre encima', icon: 'i-pip', run: () => popOut(), pin: true, kw: 'mini flotante picture overlay' },
 { id: 'cmd-creditos', title: 'Fuentes y créditos', sub: 'De dónde salen los horarios, los jefes y las imágenes', icon: 'i-ext', run: () => openCredits(), kw: 'fuentes creditos datos questlog plaync shugo' },
@@ -998,24 +1032,24 @@ const now = Date.now();
 return EVS.map(ev => {
 const o = currentOcc(ev.id, now) || nextOcc(ev.id, now);
 const sub = !o ? '' : isLive(o, now) ? `En curso · ${statusText(o, now)[0]}` : `Próxima ${fmtClock(o.start, { now })} · en ${fmtLeft(o.start - now)}`;
-return { id: 'ev-' + ev.id, title: ev.name, sub, icon: catIcon(ev), href: ROOT + '#ev-' + ev.id, kw: ev.short + ' ' + (ev.notes || '') };
+return { id: 'ev-' + ev.id, title: gname(ev), sub, icon: catIcon(ev), href: ROOT + '#ev-' + ev.id, kw: [gboth(ev), gboth(ev, 'short'), ev.notes].filter(Boolean).join(' ') };
 });
 },
 });
 registerPalette('tareas', {
-group: 'Tarea', items: () => taskList().map(t => ({ id: 't-' + t.id, title: t.name, sub: `${t.period === 'weekly' ? 'Semanal' : 'Diaria'}${t.detail ? ' · ' + t.detail : ''}`, icon: 'i-tareas', href: ROOT + 'tareas/#t-' + t.id })),
+group: 'Tarea', items: () => taskList().map(t => ({ id: 't-' + t.id, title: gname(t), sub: `${t.period === 'weekly' ? 'Semanal' : 'Diaria'}${t.detail ? ' · ' + gname(t, 'detail') : ''}`, kw: gboth(t), icon: 'i-tareas', href: ROOT + 'tareas/#t-' + t.id })),
 });
 if (DATA.pets) registerPalette('pets', {
 group: 'Pet', items: () => {
 const f = profile().faccion === 'asmodian' ? 'a' : 'e';
-return DATA.pets.filter(p => p[3].includes(f)).map(([id, name, en, , sub]) => ({ id: 'pet-' + id, title: name, sub, kw: en + ' pet mascota', icon: 'i-pets', href: ROOT + 'pets/#pet-' + id, w: 0.9 }));
+return DATA.pets.filter(p => p[3].includes(f)).map(([id, name, en, , sub]) => ({ id: 'pet-' + id, title: gname({ name, nameEn: en }), sub, kw: `${name} ${en || ''} pet mascota`, icon: 'i-pets', href: ROOT + 'pets/#pet-' + id, w: 0.9 }));
 },
 });
 registerPalette('personajes', {
 group: 'Personaje', items: () => {
 const mine = myChars().map(c => c.pj), seen = new Set();
 return [...mine, ...store.get('hub-pj-favoritos', []), ...store.get('hub-pj-recientes', [])].filter(c => c?.k && !seen.has(c.k.toLowerCase()) && seen.add(c.k.toLowerCase()))
-.map((c, i) => ({ id: 'pj-' + c.k, title: c.n, sub: [mine.includes(c) && 'Mi personaje', c.l && 'Nv ' + c.l, c.c, serverName(c.s)].filter(Boolean).join(' · '), icon: 'i-personaje', href: ROOT + 'personaje/#' + c.k.split('/').map(encodeURIComponent).join('/'), pin: i < 6, kw: 'personaje pj ficha' }));
+.map((c, i) => ({ id: 'pj-' + c.k, title: c.n, sub: [mine.includes(c) && 'Mi personaje', c.l && 'Nv ' + c.l, gclass(c.c), serverName(c.s)].filter(Boolean).join(' · '), icon: 'i-personaje', href: ROOT + 'personaje/#' + c.k.split('/').map(encodeURIComponent).join('/'), pin: i < 6, kw: 'personaje pj ficha' }));
 },
 });
 }
@@ -1037,6 +1071,9 @@ onStore('hub-tareas', renderStrip); onStore('hub-personajes', renderStrip);
 onTick(now => { checkAlerts(now); titleAndFavicon(now); }, { hidden: true });
 onStore('hub-alertas', () => { A = AKEY.get(); rebuildQueue(Date.now()); emit('bells', A); for (const b of $$('.bell')) paintBell(b); });
 onStore('hub-prefs', () => { P = PREFS.get(); emit('prefs', P); });
+onStore('hub-idioma-juego', () => setGameLang(store.get('hub-idioma-juego', 'es'), { remote: true }));
+html.dataset.gl = GL;
+on('gamelang', () => { renderStrip(); titleAndFavicon(Date.now()); });
 syncTimers();
 onStore('hub-timers', syncTimers);
 for (const k of ['hub-region', 'hub-server', 'hub-faccion']) onStore(k, () => { CACHE = null; emit('profile', profile()); });
@@ -1058,11 +1095,13 @@ else if (e.target.closest('[data-hub=search]')) openPalette();
 else if (e.target.closest('[data-hub=help]')) openHelp();
 else if (e.target.closest('[data-hub=credits]')) openCredits();
 else if (e.target.closest('[data-hub=pip]')) popOut();
+else if (e.target.closest('[data-hub=cuenta]')) loadCuenta().then(m => m.open(), () => toast(CUENTA_OFF));
 else if (e.target.closest('#hub-warn [data-x]')) $('#hub-warn').hidden = true;
 });
 startClock();
 tick();
 if (!store.get('hub-onboarded', 0) && !html.classList.contains('mini') && !store.get('hub-server', null)) openSettings({ welcome: true });
+if (store.get('hub-cuenta', null)) { const lc = () => loadCuenta().catch(() => {}); document.readyState === 'complete' ? lc() : addEventListener('load', lc, { once: true }); } // con sesión: sync
 if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !DATA.noSW)
 addEventListener('load', () => setTimeout(() => navigator.serviceWorker.register(ROOT + 'sw.js').catch(() => {}), 3000), { once: true });
 }

@@ -166,22 +166,27 @@ return out.sort((a, b) => b.count - a.count);
 }
 /* ---------- mapa de una pet (ficha) ---------- */
 const FN = { elyos: 'Elyos', asmodian: 'Asmodian' };
-export function petMap(host, pet, { mode, saveData, fac, rift }) {
+export function petMap(host, pet, { mode, saveData, fac, rift, pn, gn }) {
 let dead = false, m = null;
 Promise.all([fetch(`assets/spawns/${pet.id}.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }), cssP]).then(([data]) => {
 if (dead) return;
-let reg = 0, mob = -1;
+const own = data.regions.findIndex(r => r.zone === fac()), ab = data.regions.findIndex(r => r.zone === 'abismo');
+let reg = own >= 0 ? own : ab >= 0 ? ab : 0, mob = -1;
 host.innerHTML = `<div class="mapa-ui"><div class="mapa-tabs"></div><div class="mapa-chips" role="group" aria-label="Mob"></div><p class="mapa-grieta" hidden>${ico('c-grieta')}Grieta · nv 45+ · abre cada 3 h · portal ~10 min · 60 min adentro</p><div class="mapa-host"></div><p class="mesa-sum"></p></div>`;
 const tabs = host.querySelector('.mapa-tabs'), chips = host.querySelector('.mapa-chips'), mh = host.querySelector('.mapa-host'), sum = host.querySelector('.mesa-sum');
 const region = () => {
 const R = data.regions[reg];
 tabs.className = data.regions.length > 1 ? 'mapa-chips' : '';
-tabs.innerHTML = data.regions.length > 1 ? data.regions.map((r, i) => `<button type="button" data-reg="${i}" aria-pressed="${i === reg}">${esc(r.region)}</button>`).join('') : '';
+tabs.innerHTML = data.regions.length > 1 ? data.regions.map((r, i) => `<button type="button" data-reg="${i}" aria-pressed="${i === reg}">${esc(gn(r, 'region'))}${r.regionId === rift() ? ' · Grieta' : ''}</button>`).join('') : '';
 m?.destroy();
 host.querySelector('.mapa-grieta').hidden = R.regionId !== rift();  // solo el mapa al que lleva tu Grieta
-m = new Mesa(mh, { regionId: R.regionId, label: `Mapa de spawns de ${pet.name} en ${R.region}`, mode, saveData });
+m = new Mesa(mh, { regionId: R.regionId, label: `Mapa de spawns de ${pn(pet)} en ${gn(R, 'region')}`, mode, saveData });
 m.setPoints(R.mobs.map((x, i) => ({ key: i, ink: INKS[i % INKS.length], pts: x.points })));
-m.onFlag = fl => m.look(+fl.dataset.u, +fl.dataset.v, Math.max(m.z * 1.5, 2.4));
+m.onFlag = fl => {
+const d = fl.dataset;
+m.look(+d.u, +d.v, Math.max(m.z * 1.5, 2.4));
+sum.innerHTML = `<b>${esc(d.mob)}</b>${d.sub === 'boss' ? ' (boss de campo)' : d.sub === 'elite' ? ' (élite)' : ''} · nv ${d.lvl} · <b>×${d.n}</b> en esta zona del mapa.`;
+};
 pick(mob);
 };
 const pick = i => {
@@ -189,24 +194,24 @@ mob = i;
 const R = data.regions[reg], ms = i < 0 ? R.mobs : [R.mobs[i]];
 const total = R.mobs.reduce((a, x) => a + x.spawns, 0);
 chips.innerHTML = (R.mobs.length > 1 ? `<button type="button" data-mob="-1" aria-pressed="${i < 0}">Todos · ${total}</button>` : '') +
-R.mobs.map((x, k) => `<button type="button" data-mob="${k}" aria-pressed="${i === k || R.mobs.length === 1}"><i style="--ink:${INKS[k % INKS.length]}"></i>${esc(x.mob)} · nv ${nv(x.lvl)} · ${x.spawns}</button>`).join('');
+R.mobs.map((x, k) => `<button type="button" data-mob="${k}" aria-pressed="${i === k || R.mobs.length === 1}"><i style="--ink:${INKS[k % INKS.length]}"></i>${esc(gn(x, 'mob'))} · nv ${nv(x.lvl)} · ${x.spawns}</button>`).join('');
 for (const g of m.svg.querySelectorAll('g')) g.classList.toggle('off', i >= 0 && +g.dataset.k !== i);
-const fl = merge(ms.flatMap(x => x.flags));
+const fl = merge(ms.flatMap(x => x.flags.map(f => ({ ...f, m: x }))));  // cada banderín sabe de qué mob es (el más denso si se juntan)
 const top = fl[0];
 const lab = [];
 for (const f of fl) if (!lab.some(o => Math.hypot(o.u - f.u, o.v - f.v) < .05)) lab.push(f);
 const boss = ms.length === 1 && ms[0].sub === 'boss' && ms[0].spawns === 1;
-const fx = (f, cls) => ({ u: f.u, v: f.v, cls, html: boss ? ico('c-worldboss') + esc(ms[0].mob.split(',')[0]) : '×' + f.count, data: { u: f.u, v: f.v } });
+const fx = (f, cls) => ({ u: f.u, v: f.v, cls, html: boss ? ico('c-worldboss') + esc(gn(ms[0], 'mob').split(',')[0]) : '×' + f.count, data: { u: f.u, v: f.v, mob: gn(f.m, 'mob'), lvl: nv(f.m.lvl), sub: f.m.sub, n: f.count } });
 m.setFlags([...fl.filter(f => !lab.includes(f)).map(f => fx(f, 'mini')), ...lab.reverse().map(f => fx(f, f === fl[0] ? 'top' : ''))]);
 const P = ms.flatMap(x => x.points), us = P.map(p => p[0]), vs = P.map(p => p[1]);
 const span = Math.max(Math.max(...us) - Math.min(...us), Math.max(...vs) - Math.min(...vs), .02);
 m.home = [top.u, top.v, clamp(.42 / span, 1.3, 1.6)];
 m.goHome(!!sum.textContent);
-const n = ms.reduce((a, x) => a + x.spawns, 0), where = `${esc(R.region)}${FN[R.zone] && R.zone !== fac() ? ` (zona ${FN[R.zone]})` : ''}`;
+const n = ms.reduce((a, x) => a + x.spawns, 0), where = `${esc(gn(R, 'region'))}${FN[R.zone] && R.zone !== fac() ? ` (zona ${FN[R.zone]})` : ''}`;
 const txt = n === 1 ? `<b>1 spawn</b> en ${where}, al <b>${compass(top.u, top.v)}</b> del mapa.` :
 `<b>${n} spawns</b> en ${where}. Zona más densa: <b>${compass(top.u, top.v)}</b> (×${top.count}).`;
 sum.innerHTML = txt;
-m.label(`Mapa de spawns de ${pet.name}: ${sum.textContent}`);
+m.label(`Mapa de spawns de ${pn(pet)}: ${sum.textContent}`);
 };
 host.addEventListener('click', e => {
 const b = e.target.closest('[data-mob],[data-reg]'); if (!b) return;
@@ -216,23 +221,34 @@ region();
 }).catch(() => { if (!dead) host.innerHTML = '<p class="mesa-sum">No pude cargar el mapa de spawns.</p>'; });
 return { destroy() { dead = true; m?.destroy(); } };
 }
-/* ---------- Plan de Grieta: banderines del mapa enemigo (Altgard o Verteron) por banda de nivel ---------- */
-export function plan(mapEl, listEl, { BY, owned, isMax, mode, saveData, ver, file, rift }) {
-let data = null, m = null, sel = null, filt = [...ver.children].find(b => b.getAttribute('aria-pressed') === 'true')?.dataset.v || 'faltan', dead = false;
+/* ---------- Mapa de farmeo: una región por pestaña, un pin por pet (su zona más densa); tocar un pin dice pet, mob y nivel ---------- */
+export function plan(mapEl, listEl, { BY, owned, isMax, mode, saveData, ver, tabs, cap, regions, rl, pn, gn, start, count, onRegion }) {
+let data = null, m = null, sel = null, rid = start, dead = false;
+let filt = [...ver.children].find(b => b.getAttribute('aria-pressed') === 'true')?.dataset.v || 'faltan';
+const files = {}, R = () => regions.find(r => r.id === rid), full = () => esc(gn(R(), 'full'));
 const want = id => filt === 'todas' || (filt === 'faltan' ? !owned.has(id) : owned.has(id) && !isMax(id));
+const SUB = { boss: ' (boss de campo)', elite: ' (élite)' };
+const entryTxt = (e, n) => `<b>${esc(pn(BY.get(e.petId)))}</b>: ${esc(gn(e, 'mob'))}${SUB[e.sub] || ''} · nv ${e.lvl}` +
+(n ? ` · <b>×${n}</b> en esta zona` : '') + ` · ${e.spawns} spawn${e.spawns > 1 ? 's' : ''} en ${full()}. <a href="#pet-${e.petId}">Ver la ficha</a>`;
+const tabsUI = () => {
+tabs.innerHTML = regions.map(r => { const n = count(r.id), l = esc(rl(r)); return `<button type="button" data-reg="${r.id}" aria-pressed="${r.id === rid}"${n ? ` aria-label="${l}: te faltan ${n}"` : ''}>${l}${n ? ` <b>${n}</b>` : ''}</button>`; }).join('');
+};
+const pin = (e, f, cls) => ({ u: f.u, v: f.v, cls: 'pin' + cls, style: `--bc:${BAND[e.band]}`, data: { pet: e.petId, e: e.i, n: f.count },
+html: `<img src="assets/p/${e.petId}-128.webp" alt="" loading="lazy" decoding="async"><span>${f.count}</span>` });
 function render() {
+tabsUI();
 if (!data) return;
-const es = data.entries.filter(e => want(e.petId));
-if (sel && !es.some(e => e.petId === sel)) sel = null;
+const es = data.entries.filter(e => want(e.petId)), name = full();
+if (sel && !es.some(e => e.petId === sel)) { sel = null; cap.textContent = ''; }
 if (!es.length) {
-listEl.innerHTML = filt === 'faltan' ? `<div class="gr-empty"><b>Ya tenés todas las de ${esc(rift)}.</b>Daeva completo. Tocá "Subir a 3" para ver dónde farmear almas.</div>`
-: `<div class="gr-empty"><b>Nada para subir.</b>Las de ${esc(rift)} que tenés ya están al máximo.</div>`;
+listEl.innerHTML = filt === 'faltan' ? `<div class="gr-empty"><b>Ya tenés todas las de ${name}.</b>Tocá "Subir a 3" para ver dónde farmear almas, o elegí otro mapa.</div>`
+: filt === 'subir' ? `<div class="gr-empty"><b>Nada para subir.</b>Las de ${name} que tenés ya están al máximo.</div>` : `<div class="gr-empty"><b>Sin pets en ${name}.</b></div>`;
 } else {
 listEl.innerHTML = data.bands.map(b => {
 const rows = new Map();
 for (const e of es.filter(e => e.band === b.band)) {
 const r = rows.get(e.petId) || rows.set(e.petId, { mobs: new Set(), lo: 99, hi: 0, n: 0 }).get(e.petId);
-r.mobs.add(e.mob); r.lo = Math.min(r.lo, e.lvl); r.hi = Math.max(r.hi, e.lvl); r.n += e.spawns;
+r.mobs.add(gn(e, 'mob')); r.lo = Math.min(r.lo, e.lvl); r.hi = Math.max(r.hi, e.lvl); r.n += e.spawns;
 }
 if (!rows.size) return '';
 return `<div class="gr-band" style="--bc:${BAND[b.band]}"><h3><i></i>Nivel ${b.label}<span>${rows.size} pet${rows.size > 1 ? 's' : ''}</span></h3>` +
@@ -240,41 +256,69 @@ return `<div class="gr-band" style="--bc:${BAND[b.band]}"><h3><i></i>Nivel ${b.l
 const p = BY.get(id);
 return `<button type="button" class="gr-row${owned.has(id) ? ' own' : ''}" data-pet="${id}" aria-pressed="${sel === id}">` +
 `<span class="pl" data-g="${p.genusKey}"><img src="assets/p/${id}-128.webp" width="40" height="40" alt="" loading="lazy" decoding="async"></span>` +
-`<span><b>${esc(p.name)}</b><small>${[...r.mobs].map(esc).join(', ')} · nv ${nv([r.lo, r.hi])}</small></span><em>${r.n}<small>spawns</small></em></button>` +
-(sel === id ? `<p class="souls" style="margin:6px 0 0 50px"><a href="#pet-${id}">Abrir la ficha de ${esc(p.name)}</a></p>` : '');
+`<span><b>${esc(pn(p))}</b><small>${[...r.mobs].map(esc).join(', ')} · nv ${nv([r.lo, r.hi])}</small></span><em>${r.n}<small>spawns</small></em></button>` +
+(sel === id ? `<p class="souls" style="margin:6px 0 0 50px"><a href="#pet-${id}">Abrir la ficha de ${esc(pn(p))}</a></p>` : '');
 }).join('') + '</div>';
 }).join('');
 }
-m.setFlags(es.flatMap(e => e.flags.slice(0, sel === e.petId ? 8 : 1).map(f => ({
-u: f.u, v: f.v, cls: 'pin' + (sel ? (e.petId === sel ? ' hi' : ' off') : ''), style: `--bc:${BAND[e.band]}`, data: { pet: e.petId },
-html: `<img src="assets/p/${e.petId}-128.webp" alt="" loading="lazy" decoding="async"><span>${f.count}</span>`,
-}))));
+const byPet = new Map();
+for (const e of es) (byPet.get(e.petId) || byPet.set(e.petId, []).get(e.petId)).push(e);
+const pins = [];
+for (const [id, list] of byPet) {
+if (sel === id) { for (const e of list) for (const f of e.flags) pins.push(pin(e, f, ' hi')); continue; }
+const e = list.reduce((a, x) => x.flags[0].count > a.flags[0].count ? x : a);
+pins.push(pin(e, e.flags[0], sel ? ' off' : ''));
 }
-function toggle(id) {
+m.setFlags(pins);
+m.el.classList.toggle('many', byPet.size > 40);
+}
+function select(id, look = true) {
 sel = sel === id ? null : id;
 render();
-if (sel) {
-const f = data.entries.filter(x => x.petId === sel).flatMap(x => x.flags).sort((a, b) => b.count - a.count)[0];
+if (!sel) { cap.textContent = ''; m.goHome(); return; }
+const es = data.entries.filter(x => x.petId === sel);
+cap.innerHTML = es.length === 1 ? entryTxt(es[0]) : `<b>${esc(pn(BY.get(sel)))}</b>: ${es.map(e => `${esc(gn(e, 'mob'))}${SUB[e.sub] || ''} nv ${e.lvl} (${e.spawns})`).join(', ')} en ${full()}. <a href="#pet-${sel}">Ver la ficha</a>`;
+if (!look) return;
+const f = es.flatMap(x => x.flags).sort((a, b) => b.count - a.count)[0];
 m.look(f.u, f.v, Math.max(m.z, 2.2));
 if (matchMedia('(max-width:1080px)').matches && mapEl.getBoundingClientRect().top < 0) mapEl.scrollIntoView({ block: 'start', behavior: RM ? 'auto' : 'smooth' });
-} else m.goHome();
 }
+function load() {
+sel = null; data = null; cap.textContent = '';
+onRegion?.(rid);
+m?.destroy(); m = null;
 mapEl.innerHTML = '<div class="mesa-skel"><span>Desplegando el mapa…</span></div>'; listEl.innerHTML = '';
-Promise.all([fetch(file).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }), cssP]).then(([d]) => {
-if (dead) return;
-data = d;
-m = new Mesa(mapEl, { regionId: d.regionId, label: `Mapa de ${rift} con las pets de la Grieta que te faltan`, mode, saveData });
-m.home = [.56, .52, 1.25];
+tabsUI();
+const asked = rid;
+files[rid] ||= fetch(`assets/spawns/region-${rid}.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+Promise.all([files[rid], cssP]).then(([d]) => {
+if (dead || asked !== rid) return;
+data = d; d.entries.forEach((e, i) => { e.i = i; });
+m = new Mesa(mapEl, { regionId: rid, label: `Mapa de ${gn(R(), 'full')} con las pets que te faltan`, mode, saveData });
+const fl = d.entries.flatMap(e => e.flags), us = fl.map(f => f.u), vs = fl.map(f => f.v);
+const span = Math.max(Math.max(...us) - Math.min(...us), Math.max(...vs) - Math.min(...vs), .02);
+m.home = [(Math.max(...us) + Math.min(...us)) / 2, (Math.max(...vs) + Math.min(...vs)) / 2, clamp(.8 / span, 1, 1.6)];
 m.goHome(false);
-m.onFlag = fl => toggle(fl.dataset.pet);
+m.onFlag = el => {
+const e = data.entries[+el.dataset.e];
+if (sel !== e.petId) select(e.petId, false);
+m.look(+el.style.left.slice(0, -1) / 100, +el.style.top.slice(0, -1) / 100, Math.max(m.z, 2.2));
+cap.innerHTML = entryTxt(e, +el.dataset.n);
+};
 render();
-}).catch(() => { if (!dead) mapEl.innerHTML = '<p class="gr-empty">No pude cargar el Plan de Grieta.</p>'; });
-const onList = e => { const b = e.target.closest('.gr-row'); if (b) toggle(b.dataset.pet); };
+}).catch(() => { if (!dead && asked === rid) { delete files[rid]; mapEl.innerHTML = '<p class="gr-empty">No pude cargar el mapa.</p>'; } });
+}
+const onList = e => { const b = e.target.closest('.gr-row'); if (b) select(b.dataset.pet); };
 const onVer = e => {
 const b = e.target.closest('button'); if (!b) return;
 filt = b.dataset.v; for (const x of ver.children) x.setAttribute('aria-pressed', x === b);
 render();
 };
-listEl.addEventListener('click', onList); ver.addEventListener('click', onVer);
-return { refresh: render, destroy() { dead = true; m?.destroy(); listEl.removeEventListener('click', onList); ver.removeEventListener('click', onVer); } };
+const onTab = e => { const b = e.target.closest('[data-reg]'); if (b && b.dataset.reg !== rid) { rid = b.dataset.reg; load(); } };
+listEl.addEventListener('click', onList); ver.addEventListener('click', onVer); tabs.addEventListener('click', onTab);
+load();
+return {
+refresh: render,
+destroy() { dead = true; m?.destroy(); tabs.innerHTML = ''; listEl.removeEventListener('click', onList); ver.removeEventListener('click', onVer); tabs.removeEventListener('click', onTab); },
+};
 }

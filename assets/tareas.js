@@ -1,13 +1,13 @@
 import {
 $, esc, ico, on, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal,
-characters, taskList, taskDone, setTaskDone, PJ, TK, profile, serverName, registerKey, prefs, confOf, confTag, clockLeft,
-} from './core.js?v=6bb26aea23';
+characters, taskList, taskDone, setTaskDone, PJ, TK, profile, serverName, registerKey, prefs, confOf, confTag, clockLeft, gname, gclass,
+} from './core.js?v=42acf93068';
 const PER = { daily: { t: 'Diarias', when: 'reset diario' }, weekly: { t: 'Semanales', when: 'reset del miércoles' } };
 let editing = false;
 const uid = () => Math.random().toString(36).slice(2, 9);
 function paint() {
 const now = Date.now(), { list, activo } = characters(), focusId = document.activeElement?.id;
-$('#pj-tabs').innerHTML = list.map(c => `<button type="button" data-pj="${esc(c.id)}" aria-pressed="${c.id === activo}">${esc(c.name)}${c.clase ? `<small>${esc(c.clase)}</small>` : ''}${editing && c.id !== 'main' ? `<span class="pj-x" data-pjdel="${esc(c.id)}" role="button" tabindex="0" aria-label="Quitar ${esc(c.name)}">${ico('i-x')}</span>` : ''}</button>`).join('');
+$('#pj-tabs').innerHTML = list.map(c => `<button type="button" data-pj="${esc(c.id)}" aria-pressed="${c.id === activo}">${esc(c.name)}${c.clase ? `<small>${esc(gclass(c.clase))}</small>` : ''}${editing && c.id !== 'main' ? `<span class="pj-x" data-pjdel="${esc(c.id)}" role="button" tabindex="0" aria-label="Quitar ${esc(c.name)}">${ico('i-x')}</span>` : ''}</button>`).join('');
 for (const per of ['daily', 'weekly']) paintGroup(per, activo, now);
 $('#tk-edit').setAttribute('aria-pressed', String(editing));
 document.body.classList.toggle('tk-editing', editing);
@@ -34,12 +34,12 @@ const tags = [t.optional && '<em class="tag">opcional</em>', t.custom && '<em cl
 const lv = t.custom ? 'oficial' : t.unverified?.length ? 'sin' : confOf(t);
 const conf = lv === 'oficial' ? '' : ' ' + confTag(t, { lv, note: (t.unverified || []).join(' · ') });
 const ctrl = max > 1
-? `<span class="tk-step" role="group" aria-label="${esc(t.name)}: ${v} de ${max}"><button type="button" class="iconbtn" data-dec="${esc(t.id)}" aria-label="Una menos"${v ? '' : ' disabled'}>${ico('i-minus')}</button><output id="${id}" tabindex="-1">${v}/${max}</output><button type="button" class="iconbtn" data-inc="${esc(t.id)}" aria-label="Una más"${ok ? ' disabled' : ''}>${ico('i-plus')}</button></span>`
+? `<span class="tk-step" role="group" aria-label="${esc(gname(t))}: ${v} de ${max}"><button type="button" class="iconbtn" data-dec="${esc(t.id)}" aria-label="Una menos"${v ? '' : ' disabled'}>${ico('i-minus')}</button><output id="${id}" tabindex="-1">${v}/${max}</output><button type="button" class="iconbtn" data-inc="${esc(t.id)}" aria-label="Una más"${ok ? ' disabled' : ''}>${ico('i-plus')}</button></span>`
 : `<input type="checkbox" id="${id}" data-chk="${esc(t.id)}"${ok ? ' checked' : ''}>`;
 return `<li class="tk-row${ok ? ' ok' : ''}${t.optional ? ' opt' : ''}" data-t="${esc(t.id)}" data-per="${per}">
-${max > 1 ? '' : ctrl}<label class="tk-txt" ${max > 1 ? '' : `for="${id}"`}><span class="tk-name">${esc(t.name)}${tags}</span>${t.detail || conf ? `<small>${esc(t.detail || '')}${conf}</small>` : ''}</label>
+${max > 1 ? '' : ctrl}<label class="tk-txt" ${max > 1 ? '' : `for="${id}"`}><span class="tk-name">${esc(gname(t))}${tags}</span>${t.detail || conf ? `<small>${esc(gname(t, 'detail'))}${conf}</small>` : ''}</label>
 ${t.event ? `<span class="tk-ev cd" id="ev-${per}-${esc(t.id)}"></span>` : ''}${max > 1 ? ctrl : ''}
-<button type="button" class="iconbtn tk-del" data-del="${esc(t.id)}" aria-label="Quitar ${esc(t.name)}" title="${t.custom ? 'Borrar' : 'Ocultar'}">${ico('i-trash')}</button></li>`;
+<button type="button" class="iconbtn tk-del" data-del="${esc(t.id)}" aria-label="Quitar ${esc(gname(t))}" title="${t.custom ? 'Borrar' : 'Ocultar'}">${ico('i-trash')}</button></li>`;
 }
 /* ---------- acciones ---------- */
 const active = () => characters().activo;
@@ -78,7 +78,7 @@ const before = structuredClone(t);
 if (item.custom) t.custom = t.custom.filter(x => x.id !== id); else t.hidden = [...t.hidden, id];
 TK.set(t);
 paint();
-toast(`${item.custom ? 'Borré' : 'Oculté'} <b>${esc(item.name)}</b>.`, { action: { label: 'Deshacer', run: () => { TK.set(before); paint(); } } });
+toast(`${item.custom ? 'Borré' : 'Oculté'} <b>${esc(gname(item))}</b>.`, { action: { label: 'Deshacer', run: () => { TK.set(before); paint(); } } });
 }
 $('#pj-tabs').addEventListener('click', e => {
 const del = e.target.closest('[data-pjdel]');
@@ -195,6 +195,7 @@ paint();
 on('reset', e => { paint(); toast(e.period === 'weekly' ? 'Reset semanal: tareas semanales y diarias limpias.' : 'Reset diario: las diarias quedaron limpias.'); });
 on('profile', paint);
 on('prefs', paint);
+on('gamelang', paint);
 onStore('hub-tareas', paint);
 onStore('hub-personajes', paint);
 addEventListener('hashchange', focusHash);

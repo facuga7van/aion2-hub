@@ -41,12 +41,13 @@ C.toast('Listo, volvió como estaba.');
 };
 }
 const have = () => `tenés <b>${C.PETS.filter(p => C.owned.has(p.id)).length}</b> de ${C.N} · <b>${C.PETS.filter(p => C.isMax(p.id)).length}</b> al máximo`;
-function applyImport(map, mode) {
+function applyImport(map, mode, ql) {
 const undo = mode === 'replace' ? guard() : null;
 if (undo) { C.owned.clear(); for (const k in C.level) delete C.level[k]; }
 for (const [id, lv] of map) if (C.BY.has(id)) { C.owned.add(id); C.level[id] = undo ? lv : Math.max(C.level[id] || 0, lv); }
 C.save(); C.refreshAll(); C.apply();
-C.toast('Listo: ' + have(), 8000, undo?.());
+const miss = ql ? C.PETS.filter(p => !C.owned.has(p.id)).length : 0;
+C.toast('Listo: ' + have() + (miss ? ` · <button type="button" class="linkbtn" data-faltan>Ver las ${miss} que te faltan</button>` : ''), miss ? 15000 : 8000, undo?.());
 }
 const lvSummary = m => { const c = [0, 0, 0, 0]; for (const v of m.values()) c[v]++; return `${c[1]} en nivel 1, ${c[2]} en nivel 2, ${c[3]} al máximo`; };
 const ours = m => new Map([...m].filter(([id]) => C.BY.has(id)));
@@ -98,8 +99,8 @@ g.keys.push(key); g.names.push(String(j.roster?.[key]?.name || ch.name || key.re
 return gs.size ? { groups: [...gs.values()].sort((a, b) => b.list.size - a.list.size) } : { err: 'empty' };
 }
 const ERR = {
-wrong: () => `Ese no parece ser el characters.json de Questlog ni un respaldo de este sitio. La carpeta es <code>${C.QL_DIR}</code>`,
-empty: () => 'Ese archivo no tiene pets todavía. Abrí la app de Questlog mientras jugás (ahí se guarda tu colección) y volvé a probar.',
+wrong: () => `Ese no parece ser el characters.json de la app de DPS ni un respaldo de este sitio. La carpeta es <code>${C.QL_DIR}</code>`,
+empty: () => 'Ese archivo no tiene pets todavía. Abrí la app de DPS mientras jugás (ahí se guarda tu colección) y volvé a probar.',
 read: () => 'No pude leer el archivo. Probá de nuevo.',
 };
 const qlErr = k => modal('No es ese archivo', `<p class="imp-err">${ERR[k]()}</p>`, [['', 'Entendido', 'gold']]);
@@ -115,19 +116,19 @@ const r = parseQL(j);
 if (r.err) return qlErr(r.err);
 const pref = C.ls.get('pets-questlog-char', null);
 const auto = silent && pref && r.groups.find(g => g.keys.includes(pref));
-if (auto) { applyImport(ours(auto.list), 'add'); synced(); return; }
+if (auto) { applyImport(ours(auto.list), 'add', true); synced(); return; }
 let sel = Math.max(0, r.groups.findIndex(g => g.keys.includes(pref)));
 const sum = g => { const m = ours(g.list); return `Importar <b>${g.list.size} pets</b> (<b>${m.size}</b> de esta lista): ${lvSummary(m)}.`; };
 const body = (r.groups.length > 1 ? `<p>Hay ${r.groups.length} colecciones en el archivo (una por server o cuenta). Elegí la tuya:</p><div class="imp-groups">${r.groups.map((g, i) =>
 `<label><input type="radio" name="grp" value="${i}"${i === sel ? ' checked' : ''}><span><b>${C.esc(g.names.join(', '))}</b><small>${g.list.size} pets · ${ours(g.list).size} de esta lista</small></span></label>`).join('')}</div>` : `<p>Colección de: <b>${C.esc(r.groups[0].names.join(', '))}</b></p>`) +
 `<p id="impSum">${sum(r.groups[sel])}</p>${NOTE}`;
-const done = modal('Importar desde Questlog', body, MODES);
+const done = modal('Importar desde la app de DPS', body, MODES);
 await css();
 $('#impBody').addEventListener('change', e => { if (e.target.name === 'grp') { sel = +e.target.value; $('#impSum').innerHTML = sum(r.groups[sel]); } });
 const mode = await done;
 if (!mode) return;
 C.ls.set('pets-questlog-char', r.groups[sel].keys[0]);
-applyImport(ours(r.groups[sel].list), mode);
+applyImport(ours(r.groups[sel].list), mode, true);
 synced();
 }
 function synced() { C.ls.set('pets-questlog-sync', Date.now()); qlUI(); }
@@ -155,7 +156,7 @@ C.save(); C.refreshAll(); C.apply();
 C.toast('Borraste tu colección de este navegador.', 9000, undo());
 } else if (k === 'quick') quick();
 }
-/* ---------- Carga rápida: las 89 en una grilla, tocar = subir de nivel ---------- */
+/* ---------- Carga rápida: toda la colección en una grilla, tocar = subir de nivel ---------- */
 let rq;
 const lv = id => C.owned.has(id) ? (C.level[id] || 1) : 0;
 async function quick() {
@@ -172,10 +173,10 @@ rq.innerHTML = `<header class="rq-h"><div class="rq-t"><h2 id="rqT">Carga rápid
 `<label class="buscar rq-q">${ico('i-search')}<input type="search" id="rqQ" placeholder="Buscar pet" aria-label="Buscar pet en la carga rápida" autocomplete="off" spellcheck="false" enterkeyhint="search"></label>` +
 `<button type="button" class="btn gold rq-x" autofocus>Listo</button>` +
 `<p class="rq-hint">Tocá cada pet hasta su nivel: sin <b>→ 1 → 2 → 3</b> → sin.</p></header><div class="rq-b">` +
-D.cats.filter(c => PETS.some(p => p.cat === c.key)).map(c => `<section class="rq-s" data-cat="${c.key}" style="--c:${c.color}"><div class="rq-sh">${ico('c-' + c.key)}<h3>${esc(C.catLabel(c))} <span></span></h3>` +
+D.cats.filter(c => PETS.some(p => p.cat === c.key)).map(c => `<section class="rq-s" data-cat="${c.key}" style="--c:var(--c-${c.key})"><div class="rq-sh">${ico(C.cico(c.key))}<h3>${esc(C.catLabel(c))} <span></span></h3>` +
 `<button type="button" class="rq-all" data-all="1">Marcar todas (nv 1)</button><button type="button" class="rq-all" data-all="0">Desmarcar todas</button></div><div class="rq-g">` +
 PETS.filter(p => p.cat === c.key).map(p => `<button type="button" class="rq-p" data-id="${p.id}"><span class="rq-i pl" data-g="${p.genusKey}">` +
-`<img src="${imgUrl(p.id, 128)}" alt="" width="64" height="64" loading="lazy" decoding="async"></span><span class="rq-n">${esc(p.name)}</span>` +
+`<img src="${imgUrl(p.id, 128)}" alt="" width="64" height="64" loading="lazy" decoding="async"></span><span class="rq-n">${esc(C.PN(p))}</span>` +
 '<span class="rq-v" aria-hidden="true"><i></i><i></i><i></i></span></button>').join('') + '</div></section>').join('') +
 '<p class="rq-none" hidden>Nada con esa búsqueda.</p></div>';
 document.body.append(rq);
@@ -211,12 +212,12 @@ rq.querySelector('.rq-none').hidden = !!any;
 q.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); q.blur(); rq.querySelector('.rq-p:not([hidden])')?.focus(); } });
 rq.addEventListener('close', () => { C.refreshAll(); C.apply(); });
 }
-export function facChanged() { if (rq) { if (rq.open) rq.close(); rq.remove(); rq = null; } }
+export function facChanged() { if (rq) { if (rq.open) rq.close(); const t = rq.querySelector('#hub-toast'); if (t) document.body.append(t); rq.remove(); rq = null; } }
 function paint() {
 for (const b of rq.querySelectorAll('.rq-p')) {
 const id = b.dataset.id, l = lv(id);
 b.dataset.lv = l; b.setAttribute('aria-pressed', l > 0);
-b.setAttribute('aria-label', `${C.BY.get(id).name}, ${l ? 'nivel ' + l : 'no la tenés'}`);
+b.setAttribute('aria-label', `${C.PN(C.BY.get(id))}, ${l ? 'nivel ' + l : 'no la tenés'}`);
 }
 for (const s of rq.querySelectorAll('.rq-s')) {
 const ids = [...s.querySelectorAll('.rq-p')].map(b => b.dataset.id);

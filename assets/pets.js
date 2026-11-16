@@ -1,8 +1,13 @@
-import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, setProfile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton } from './core.js?v=6bb26aea23';
+import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=42acf93068';
 const VQ = new URL(import.meta.url).search;  // ?v=<hash>: los módulos lazy van con la misma versión
 const D = JSON.parse($('#pets-data').textContent);
 const ALL = D.pets, BY = new Map(ALL.map(p => [p.id, p]));
 const G = D.genus;
+const PLE = Object.fromEntries(Object.entries(D.dungeons).map(([k, d]) => [k, d.en]));  // lugar ES -> EN
+for (const p of ALL) for (const r of p.routes) if (r.placeEn) PLE[r.place] = r.placeEn;
+const PN = p => gname({ name: p.name, nameEn: p.en });
+const MOB = r => gname(r, 'mob');
+const PLACE = k => gname({ name: k, nameEn: PLE[k] });
 const GSLUG = { feral: 'fera', intellect: 'cogni', nature: 'natura', trans: 'varian', special: 'especial' };
 const mq = q => matchMedia(q).matches;
 const RM = mq('(prefers-reduced-motion: reduce)');
@@ -19,17 +24,23 @@ const toast = (html, ms = 3600, fn, label = 'Deshacer') => hubToast(html, { ms, 
 /* ---------- facción: Elyos (default, como el Bestiario) o Asmodian ---------- */
 const facOf = () => profile().faccion === 'asmodian' ? 'asmodian' : 'elyos';
 let FAC = facOf();
-const inF = p => p.f.includes(D.fac[FAC].k);
+const inF = p => p.f.includes(D.fac[FAC].k);  // esquiva para tu facción (la lista del Bestiario)
 const SK = 'hub-pets-sin-especiales';
 let SIN = !!ls.get(SK, false);
 if (SIN && new URLSearchParams(location.search).get('genus') === 'especial') { SIN = false; ls.set(SK, false); }
 const isSp = p => SIN && p.genusKey === 'special';
-const vis = p => inF(p) && !isSp(p);
-const PETS = ALL.filter(vis);  // se reemplaza en el lugar al cambiar de facción o el toggle (coleccion.js guarda la referencia)
+const vis = p => !isSp(p);
+const PETS = ALL.filter(vis);  // se reemplaza en el lugar con el toggle (coleccion.js guarda la referencia)
 let N = PETS.length;
-const catLabel = c => c.label.replace('{zona}', D.fac[FAC].riftName);
+const catLabel = c => c.label[D.fac[FAC].k];
 const FNAME = { elyos: 'Elyos', asmodian: 'Asmodian', abismo: 'Abismo' };
 const zoneTxt = z => z !== 'abismo' && z !== FAC ? ` (zona ${FNAME[z]})` : '';
+const far = r => !!r.zone && r.zone !== FAC && r.zone !== 'abismo';  // ruta fuera de tu mapa (Grieta o territorio enemigo)
+const cico = k => /^(alt|ver)/.test(k) ? (k.startsWith(D.fac[FAC].rc) ? 'c-grieta' : 'c-mapa') + (k.endsWith('_dg') ? '_dg' : '') : 'c-' + k;
+const ftxt = el => { const c = el.cloneNode(true); c.querySelectorAll((FAC === 'asmodian' ? '.fe' : '.fa') + (gameLang() === 'en' ? ',.n-es' : ',.n-en')).forEach(x => x.remove()); return c.textContent; };
+const RID = { verteron: '1010', eltnen: '1011', altgard: '1110', morheim: '1111' };
+const inReg = (p, r) => r === 'abismo' ? p.routes.some(x => x.zone === 'abismo') : r === 'grieta' ? inF(p) && p.cat.startsWith(D.fac[FAC].rc)
+: r === 'dungeon' ? p.routes.some(x => x.kind === 'dungeon') : r === 'cofre' ? p.cat === 'cofre' : p.routes.some(x => x.regionId === RID[r]);
 /* ---------- colección (mismo formato del Bestiario en pets-owned / pets-level) ---------- */
 const owned = new Set((ls.get('pets-owned', []) || []).map(String));
 const level = ls.get('pets-level', {}) || {};
@@ -41,7 +52,7 @@ const isMax = id => owned.has(id) && level[id] === 3;
 const ownN = () => PETS.filter(p => owned.has(p.id)).length;
 for (const p of ALL) {
 const cat = D.cats.find(c => c.key === p.cat);
-p.hay = norm([p.name, p.en, p.genus, ...Object.values(D.fac).map(f => cat.label.replace('{zona}', f.riftName)), $('.ch', CARD.get(p.id)).textContent,
+p.hay = norm([p.name, p.en, p.genus, ...Object.values(cat.label), $('.ch', CARD.get(p.id)).textContent,
 ...p.routes.flatMap(r => [r.mob, r.mobEn, r.place, r.placeEn, r.note, r.shop, r.kind === 'fboss' && 'boss de campo']),
 ...p.chests.flatMap(c => [c.name, c.en])].filter(Boolean).join(' '));
 p.words = [...new Set(p.hay.split(/[^a-z0-9]+/).filter(w => w.length > 2))];
@@ -68,16 +79,16 @@ $$('.fu .shop[data-until],.pcard[data-until]').forEach(li => li.classList.toggle
 const dead = p => !p.routes.some(r => r.kind !== 'shop');
 /* ---------- filtros ---------- */
 const U = new URLSearchParams(location.search);
-const F = { q: '', qRaw: U.get('q') || '', ver: U.get('ver') || '', genus: U.get('genus') || '', cat: U.get('cat') || '', group: U.get('agrupar') || '', vista: U.get('vista') || '' };
+const F = { q: '', qRaw: U.get('q') || '', ver: U.get('ver') || '', genus: U.get('genus') || '', reg: U.get('reg') || '', esq: U.get('esq') === '1', group: U.get('agrupar') || '', vista: U.get('vista') || '' };
 if (!['', 'faltan', 'subir', 'completas'].includes(F.ver)) F.ver = '';
-const qIn = $('#q'), selG = $('#fGenus'), selC = $('#fCat'), selGr = $('#fGroup');
+const qIn = $('#q'), selG = $('#fGenus'), selR = $('#fReg'), selGr = $('#fGroup');
 setQ(F.qRaw);
-qIn.value = F.qRaw; selG.value = F.genus; selC.value = F.cat; selGr.value = F.group;
-F.genus = selG.value; F.cat = selC.value; F.group = selGr.value;
+qIn.value = F.qRaw; selG.value = F.genus; selR.value = F.reg; selGr.value = F.group;
+F.genus = selG.value; F.reg = selR.value; F.group = selGr.value;
 function match(p) {
-if (!inF(p)) return false;
 if (isSp(p)) return false;
-if (F.cat && p.cat !== F.cat) return false;
+if (F.esq && !inF(p)) return false;
+if (F.reg && !inReg(p, F.reg)) return false;
 if (F.genus && GSLUG[p.genusKey] !== F.genus) return false;
 const o = owned.has(p.id), m = isMax(p.id);
 if (F.ver === 'faltan' && o) return false;
@@ -95,22 +106,23 @@ for (const [id, c] of CARD) c.style.order = TOK.length && !c.hidden ? rank(BY.ge
 const sug = $('#sug');
 sug.hidden = n || !TOK.length;
 if (!sug.hidden) sug.innerHTML = '¿Quisiste decir ' + PETS.map(p => [TOK.reduce((a, t) => a + Math.min(9, ...p.nm.split(' ').map(w => osa(t, w))), 0), p])
-.sort((a, b) => a[0] - b[0]).slice(0, 3).map(([, p]) => `<a href="#pet-${p.id}">${esc(p.name)}</a>`).join(', ') + '?';
-const free = !TOK.length && !F.genus && !F.cat && !F.ver;
+.sort((a, b) => a[0] - b[0]).slice(0, 3).map(([, p]) => `<a href="#pet-${p.id}">${esc(PN(p))}</a>`).join(', ') + '?';
+const free = !TOK.length && !F.genus && !F.reg && !F.esq && !F.ver;
 for (const s of $$('.cap', album)) s.hidden = !s.querySelector('.pcard:not([hidden])') && !(free && s.querySelector('.also'));
 album.dataset.ver = F.ver;
 album.dataset.view = F.vista === 'lista' ? 'lista' : 'album';
-const onlySeg = !TOK.length && !F.genus && !F.cat;
+const onlySeg = !TOK.length && !F.genus && !F.reg && !F.esq;
 $('#vacio').hidden = n > 0;
 $('#vacioT').textContent = onlySeg && EMPTY[F.ver] ? (F.ver === 'subir' && !owned.size ? 'Todavía ninguna. Marcá la primera.' : EMPTY[F.ver]) : 'Nada con esos filtros.';
 $('#limpiar').hidden = onlySeg && !!EMPTY[F.ver];
 $('#cuenta').innerHTML = (n === N ? `<b>${N}</b> pets` : `Mostrando <b>${n}</b> de ${N}`) + (fuzzy && n ? ' (parecidas)' : '') + ` · tenés <b id="cOwn">${ownN()}</b>`;
 for (const b of $$('#ver button')) b.setAttribute('aria-pressed', b.dataset.v === F.ver);
 for (const b of $$('#vista button')) b.setAttribute('aria-pressed', b.dataset.vista === F.vista);
-selG.classList.toggle('on', !!F.genus); selC.classList.toggle('on', !!F.cat); selGr.classList.toggle('on', !!F.group);
+$('#esq').setAttribute('aria-pressed', F.esq);
+selG.classList.toggle('on', !!F.genus); selR.classList.toggle('on', !!F.reg); selGr.classList.toggle('on', !!F.group);
 const u = new URLSearchParams();
 if (F.qRaw.trim()) u.set('q', F.qRaw.trim());
-for (const [k, v] of [['ver', F.ver], ['genus', F.genus], ['cat', F.cat], ['agrupar', F.group], ['vista', F.vista]]) if (v) u.set(k, v);
+for (const [k, v] of [['ver', F.ver], ['genus', F.genus], ['reg', F.reg], ['esq', F.esq ? '1' : ''], ['agrupar', F.group], ['vista', F.vista]]) if (v) u.set(k, v);
 const s = u.toString();
 history.replaceState(history.state, '', location.pathname + (s ? '?' + s : '') + location.hash);
 }
@@ -118,15 +130,16 @@ history.replaceState(history.state, '', location.pathname + (s ? '?' + s : '') +
 const SECTIONS = new Map($$('.cap', album).map(s => { s._ids = $$('.pcard', s).map(c => c.dataset.id); return [s.dataset.key, s]; }));
 const ROMAN = 'I II III IV V VI VII VIII IX X XI XII XIII XIV XV XVI XVII XVIII'.split(' ');
 function fieldReg() {
-const out = {}, rift = D.fac[FAC].riftName, en = FNAME[FAC === 'elyos' ? 'asmodian' : 'elyos'];
-out[rift] = `Zona ${en}: entrás por la Grieta. Mobs de campo.`;
-for (const p of PETS) for (const r of p.routes) if (r.kind === 'fboss' && !out[r.place])
-out[r.place] = r.zone === FAC ? `Mapa ${FNAME[FAC]}: boss de campo.` : `Zona ${FNAME[r.zone]}: boss de campo en territorio enemigo.`;
-return Object.fromEntries(Object.entries(out).sort((a, b) => (b[0] === rift) - (a[0] === rift) || a[1].startsWith('Mapa') - b[1].startsWith('Mapa')));
+const out = {}, n = {}, rift = D.fac[FAC].riftName;
+for (const p of PETS) for (const r of p.routes) if (r.kind === 'field' || r.kind === 'fboss') { out[r.place] ||= r; n[r.place] = (n[r.place] || 0) + 1; }
+const rk = r => (r.zone === FAC ? 0 : r.zone === 'abismo' ? 1 : r.place === rift ? 2 : 3) * 1e4 - n[r.place];  // dentro de cada grupo, la que más pets tiene
+const info = r => r.zone === FAC ? ['mapa', `Tu mapa (${FNAME[FAC]}).`] : r.zone === 'abismo' ? ['comun', 'Abismo: de las dos facciones.']
+: r.place === rift ? ['grieta', `Zona ${FNAME[r.zone]}: entrás por la Grieta.`] : ['worldboss', `Zona ${FNAME[r.zone]}: territorio enemigo, solo boss de campo.`];
+return Object.fromEntries(Object.values(out).sort((a, b) => rk(a) - rk(b)).map(r => [r.place, info(r)]));
 }
 const SHOP = 'Tienda, pase o evento', CHESTS = 'Solo cofres', UNID = 'Instancia sin identificar';
 function places(p) {
-const out = p.routes.filter(r => r.kind === 'field' || r.kind === 'fboss').sort((a, b) => b.spawns - a.spawns).map(r => r.place);
+const out = p.routes.filter(r => r.kind === 'field' || r.kind === 'fboss').sort((a, b) => far(a) - far(b) || b.spawns - a.spawns).map(r => r.place);
 for (const r of p.routes) if (r.kind === 'dungeon') out.push(r.unidentified ? UNID : r.place);
 if (p.routes.some(r => r.kind === 'shop')) out.push(SHOP);
 return [...new Set(out.length ? out : [CHESTS])];
@@ -148,12 +161,12 @@ for (const r of rest) (also.get(r) || also.set(r, []).get(r)).push(p.id);
 const rk = k => FR[k] ? Object.keys(FR).indexOf(k) : k === UNID ? 900 : k === SHOP ? 901 : k === CHESTS ? 902 : 10;
 return [...new Set([...m.keys(), ...also.keys()])].sort((a, b) => rk(a) - rk(b) || (m.get(b)?.length || 0) - (m.get(a)?.length || 0) || a.localeCompare(b)).map(k => {
 const dg = D.dungeons[k];
-const kind = k === D.fac[FAC].riftName ? 'grieta' : FR[k] ? 'worldboss' : dg ? 'dungeon' : k === CHESTS || k === SHOP ? 'cofre' : '';
-let line = FR[k] || (dg ? `${dg.type === 'raid' ? 'Raid' : 'Dungeon de grupo'} · ${dg.modes.length} dificultad${dg.modes.length > 1 ? 'es' : ''} en questlog.` :
-k === SHOP ? 'Atelier, Daeva Pass, mercaderes y eventos.' : k === CHESTS ? 'Sin ruta fija: solo cofres de mascota.' : 'Questlog no dice en qué dungeon aparecen.');
+const kind = FR[k] ? FR[k][0] : dg ? 'dungeon' : k === CHESTS || k === SHOP ? 'cofre' : '';
+let line = FR[k]?.[1] || (dg ? `${dg.type === 'raid' ? 'Raid' : 'Dungeon de grupo'} · ${dg.modes.length} dificultad${dg.modes.length > 1 ? 'es' : ''} en los datos.` :
+k === SHOP ? 'Atelier, Daeva Pass, mercaderes y eventos.' : k === CHESTS ? 'Sin ruta fija: solo cofres de mascota.' : 'Los datos no dicen en qué dungeon aparecen.');
 const a = also.get(k);
-if (a) line += `<span class="also"><br>También acá: ${a.map(id => `<a href="#pet-${id}">${esc(BY.get(id).name)}</a>`).join('')}</span>`;
-return { key: 'lugar:' + FAC + ':' + k, title: k, icon: k === SHOP ? 'i-shop' : k === UNID ? 'i-help' : 'c-' + kind, color: kind ? `var(--c-${kind})` : 'var(--niebla)', line, ids: m.get(k) || [] };
+if (a) line += `<span class="also"><br>También acá: ${a.map(id => `<a href="#pet-${id}">${esc(PN(BY.get(id)))}</a>`).join('')}</span>`;
+return { key: 'lugar:' + FAC + ':' + k, title: PLACE(k), icon: k === SHOP ? 'i-shop' : k === UNID ? 'i-help' : 'c-' + kind, color: kind ? `var(--c-${kind})` : 'var(--niebla)', line, ids: m.get(k) || [] };
 });
 }
 return D.cats.map(c => ({ key: 'cat:' + c.key, ids: ALL.filter(p => p.cat === c.key).map(p => p.id) }));
@@ -170,7 +183,7 @@ s.innerHTML = `<header class="cap-h"><span class="cap-n">${ROMAN[i] || ''}</span
 SECTIONS.set(g.key, s);
 }
 s._ids = g.ids;
-$('.cap-n', s).textContent = ROMAN[i] || '';
+if (!g.key.startsWith('cat:')) $('.cap-n', s).textContent = ROMAN[i] || '';  // los capítulos traen del build su número por facción
 const grid = $('.grid', s);
 for (const id of g.ids) grid.append(CARD.get(id));
 frag.append(s);
@@ -200,12 +213,11 @@ $('.bar i', s).style.setProperty('--w', (ids.length ? o / ids.length * 100 : 0) 
 $('.cap-p', s).hidden = !ids.length;
 }
 const opt = (sel, key, label, ids) => { const o = sel.querySelector(`option[value="${key}"]`); if (o) o.textContent = `${label} ${ids.filter(id => owned.has(id)).length}/${ids.length}`; };
-for (const g of D.genusOrder) opt(selG, GSLUG[g], G[g].label, ALL.filter(p => inF(p) && p.genusKey === g).map(p => p.id));  // Especial cuenta aunque esté oculta
-const chip = Object.fromEntries([...selC.options].map(o => [o.value, o.textContent.replace(/ \d+\/\d+$/, '')]));
-for (const c of D.cats) opt(selC, c.key, chip[c.key], PETS.filter(p => p.cat === c.key).map(p => p.id));
+for (const g of D.genusOrder) opt(selG, GSLUG[g], G[g].label, ALL.filter(p => p.genusKey === g).map(p => p.id));  // Especial cuenta aunque esté oculta
+for (const o of selR.options) if (o.value) opt(selR, o.value, o.value === 'grieta' ? `Grieta (${D.fac[FAC].riftName})` : o.textContent.replace(/ \d+\/\d+$/, ''), PETS.filter(p => inReg(p, o.value)).map(p => p.id));
 $('#exBars').innerHTML = D.cats.map(c => {
 const ids = PETS.filter(p => p.cat === c.key), o = ids.filter(p => owned.has(p.id)).length;
-return ids.length ? `<div style="color:${c.color}" title="${esc(catLabel(c))}">${ico('c-' + c.key)}<span class="bar"><i style="--w:${o / ids.length * 100}%"></i></span><span><b>${o}</b>/${ids.length}</span></div>` : '';
+return ids.length ? `<div style="color:var(--c-${c.key})" title="${esc(catLabel(c))}">${ico(cico(c.key))}<span class="bar"><i style="--w:${o / ids.length * 100}%"></i></span><span><b>${o}</b>/${ids.length}</span></div>` : '';
 }).join('');
 colM?.syncExport();
 const co = $('#cOwn'); if (co) co.textContent = own;
@@ -251,12 +263,13 @@ if (v.length === 1 && TOK.length) openPet(v[0].dataset.id);
 } else if (e.key === 'ArrowDown' && first()) { e.preventDefault(); $('h3 a', first()).focus(); }
 });
 selG.addEventListener('change', () => { F.genus = selG.value; if (F.genus === 'especial' && SIN) setSin(false); else apply(); });
-selC.addEventListener('change', () => { F.cat = selC.value; apply(); });
+selR.addEventListener('change', () => { F.reg = selR.value; apply(); });
+$('#esq').addEventListener('click', () => { F.esq = !F.esq; apply(); });
 selGr.addEventListener('change', () => { F.group = selGr.value; regroup(); apply(); });
 $('#ver').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { F.ver = b.dataset.v; apply(); } });
 $('#vista').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { F.vista = b.dataset.vista; apply(); } });
 $('#limpiar').addEventListener('click', () => {
-Object.assign(F, { ver: '', genus: '', cat: '' }); setQ(''); qIn.value = ''; selG.value = ''; selC.value = ''; apply();
+Object.assign(F, { ver: '', genus: '', reg: '', esq: false }); setQ(''); qIn.value = ''; selG.value = ''; selR.value = ''; apply();
 });
 registerKey({ key: 'f', label: 'Pets: buscar en el álbum', run: () => { qIn.focus(); qIn.select(); } });
 /* ---------- tilt holográfico (solo puntero fino) ---------- */
@@ -299,6 +312,8 @@ return all[Math.random() * all.length | 0] || BY.get(presaId) || PETS[0];
 function presaLabel() {
 if (!presaId) return;
 $('#presaLbl').textContent = !owned.has(presaId) ? 'Tu próxima presa' : !isMax(presaId) ? 'Para subir a nivel 3' : 'Daeva completo · de tu colección';
+$('#presaRt').textContent = ftxt($('.rt', CARD.get(presaId)));
+$('#presaName').textContent = presaImg.alt = PN(BY.get(presaId));
 }
 function showPresa(p, anim) {
 presaId = p.id;
@@ -307,39 +322,38 @@ presaVit.classList.toggle('dk', $('.pl', CARD.get(p.id)).classList.contains('dk'
 const url = imgUrl(p.id);
 if (anim && almaOn(presaVit)) A.morph(url, owned.has(p.id));
 else if (anim) { presaVit.classList.remove('swap'); void presaVit.offsetWidth; presaVit.classList.add('swap'); }
-presaImg.src = url; presaImg.alt = p.name;
-const a = $('#presaName'); a.textContent = p.name; a.href = '#pet-' + p.id;
-$('#presaRt').textContent = $('.rt', CARD.get(p.id)).textContent;
+presaImg.src = url;
+$('#presaName').href = '#pet-' + p.id;
 presaLabel();
 }
 $('#otra').addEventListener('click', () => showPresa(pickPresa(), true));
 const tip = $('#plumaTip');
 $('#plumaje').addEventListener('pointerover', e => {
 const a = e.target.closest('a'); if (!a) return;
-tip.textContent = BY.get(a.dataset.id).name; tip.style.left = (a.offsetLeft + 1.5) + 'px'; tip.classList.add('on');
+tip.textContent = PN(BY.get(a.dataset.id)); tip.style.left = (a.offsetLeft + 1.5) + 'px'; tip.classList.add('on');
 });
 $('#plumaje').addEventListener('pointerleave', () => tip.classList.remove('on'));
 /* ---------- ficha (dialog) ---------- */
 let cur = null, mapa = null;
-function sorted(p) { return p.routes.filter(r => r.kind !== 'shop').sort((a, b) => (b.spawns || 0) - (a.spawns || 0)); }
+function sorted(p) { return p.routes.filter(r => r.kind !== 'shop').sort((a, b) => far(a) - far(b) || (b.spawns || 0) - (a.spawns || 0)); }
 const SUBL = { normal: 'normal', elite: 'élite', boss: 'boss' };
-const TIP_INF = 'La dungeon la deduje por el rango de IDs y el nivel, porque questlog no le asigna dungeon al trash.';
-const TIP_UNID = 'Questlog tiene el mob pero no dice en qué instancia aparece.';
+const TIP_INF = 'La dungeon la deduje por el rango de IDs y el nivel, porque los datos no le asignan dungeon al trash.';
+const TIP_UNID = 'Los datos tienen el mob pero no dicen en qué instancia aparece.';
 const duda = t => `<button type="button" class="duda" data-tip="${esc(t)}" aria-label="${esc(t)}">${ico('i-help')}</button>`;
 function secRutas(p) {
 const o = owned.has(p.id), lv = level[p.id] || 0, s = G[p.genusKey].souls, [l2, l3] = s.levels.map(x => x.souls);
-const rs = sorted(p), many = rs.filter(r => r.spawns).length > 1;
+const rs = sorted(p), many = rs.filter(r => r.spawns).length > 1, top = rs.reduce((a, r) => (r.spawns || 0) > (a?.spawns || 0) ? r : a, null);
 let lead;
-if (!o) lead = `Necesitás <b>${s.unlock} almas</b> para desbloquearla <span class="q">(según datos de questlog)</span>.`;
+if (!o) lead = `Necesitás <b>${s.unlock} almas</b> para desbloquearla <span class="q">(según los datos del juego)</span>.`;
 else if (lv === 3) lead = 'Está al máximo. Si sale otra alma, no la necesitás.';
-else lead = (lv === 2 ? `Para nivel 3 te faltan <b>${l3} almas</b>` : `${lv ? 'Para' : 'Si está en nivel 1, para'} nivel 3 te faltan <b>${l2 + l3} almas</b> (${l2} + ${l3})`) + ' <span class="q">(según datos de questlog)</span>.';
+else lead = (lv === 2 ? `Para nivel 3 te faltan <b>${l3} almas</b>` : `${lv ? 'Para' : 'Si está en nivel 1, para'} nivel 3 te faltan <b>${l2 + l3} almas</b> (${l2} + ${l3})`) + ' <span class="q">(según los datos del juego)</span>.';
 const rows = rs.map((r, i) => {
-const k = r.kind === 'field' ? ['c-grieta', 'var(--c-grieta)'] : r.kind === 'fboss' ? ['c-worldboss', 'var(--c-worldboss)'] : [r.sub === 'boss' ? 'c-dboss' : 'c-dungeon', r.sub === 'boss' ? 'var(--c-dboss)' : 'var(--c-dungeon)'];
+const k = r.kind === 'field' ? (far(r) ? ['c-grieta', 'var(--c-grieta)'] : ['c-mapa', 'var(--c-mapa)']) : r.kind === 'fboss' ? ['c-worldboss', 'var(--c-worldboss)'] : [r.sub === 'boss' ? 'c-dboss' : 'c-dungeon', r.sub === 'boss' ? 'var(--c-dboss)' : 'var(--c-dungeon)'];
 const sub = r.kind === 'fboss' ? '<span class="tag boss">boss de campo</span>' : r.sub !== 'normal' ? `<span class="tag ${r.sub}">${SUBL[r.sub]}</span>` : '';
-const where = r.kind === 'dungeon' ? (r.unidentified ? 'Instancia sin identificar' + duda(TIP_UNID) : esc(r.place) + (r.inferred ? ' (inferido)' + duda(TIP_INF) : ''))
-: esc(r.place) + zoneTxt(r.zone);
+const where = r.kind === 'dungeon' ? (r.unidentified ? 'Instancia sin identificar' + duda(TIP_UNID) : esc(PLACE(r.place)) + (r.inferred ? ' (inferido)' + duda(TIP_INF) : ''))
+: esc(PLACE(r.place)) + zoneTxt(r.zone);
 const n = r.spawns ? `<span class="n">${r.spawns}<small>spawn${r.spawns > 1 ? 's' : ''}</small></span>` : '<span></span>';
-return `<li style="--rc:${k[1]}">${ico(k[0], 'ri')}<div><b>${esc(r.mob)}</b>${sub}${many && i === 0 ? '<span class="tag top">Más spawns</span>' : ''}<small>nv ${nv(r.lvl)} · ${where}</small></div>${n}</li>`;
+return `<li style="--rc:${k[1]}">${ico(k[0], 'ri')}<div><b>${esc(MOB(r))}</b>${sub}${many && r === top ? '<span class="tag top">Más spawns</span>' : ''}<small>nv ${nv(r.lvl)} · ${where}</small></div>${n}</li>`;
 }).join('');
 return `<section class="f-sec" id="fRutas"><h3>${o && lv !== 3 ? 'Dónde farmear almas' : 'Cómo conseguirla'}</h3><p class="souls">${lead}</p>` +
 (rows ? `<ol class="rutas">${rows}</ol>` : `<p class="souls">Ningún mob la suelta: mirá la ficha de ruta${p.chests.length ? ' y los cofres' : ''}.</p>`) + '</section>';
@@ -349,14 +363,15 @@ const out = [], seen = new Set();
 for (const r of p.routes) {
 if (r.kind === 'dungeon') {
 const key = r.unidentified ? '?' + r.mob : r.place; if (seen.has(key)) continue; seen.add(key);
-if (r.unidentified) { out.push(`<div class="fr"><h4>Instancia sin identificar${duda(TIP_UNID)}</h4><p>Questlog no dice en qué dungeon aparece <b>${esc(r.mob)}</b> (nv ${nv(r.lvl)}).</p></div>`); continue; }
+if (r.unidentified) { out.push(`<div class="fr"><h4>Instancia sin identificar${duda(TIP_UNID)}</h4><p>Los datos no dicen en qué dungeon aparece <b>${esc(MOB(r))}</b> (nv ${nv(r.lvl)}).</p></div>`); continue; }
 const dg = D.dungeons[r.place], mobs = p.routes.filter(x => x.kind === 'dungeon' && x.place === r.place);
 const on = new Set(mobs.flatMap(x => x.modes || dg.modes.map(m => m.id)));
 const g = dg.modes[0].group, en = dg.modes.find(m => m.energy)?.energy;
 const heur = mobs.some(x => x.modesFrom === 'idPrefix');
-out.push(`<div class="fr"><h4>${esc(dg.name)}${r.inferred ? ' (inferido)' + duda(TIP_INF) : ''}</h4>` +
-`<p><span lang="en">${esc(dg.en)}</span> · ${dg.type === 'raid' ? 'raid' : 'dungeon de grupo'} · ${g[0] === g[1] ? g[0] : g[0] + '-' + g[1]} jugadores${en ? ` · ${en} de energía Odyle` : ''}</p>` +
-`<p>La suelta: ${mobs.map(x => `<b>${esc(x.mob)}</b> (${SUBL[x.sub]}, nv ${nv(x.lvl)})`).join(', ')}</p>` +
+const dn = { name: dg.name, nameEn: dg.en }, alt = galt(dn);
+out.push(`<div class="fr"><h4>${esc(gname(dn))}${r.inferred ? ' (inferido)' + duda(TIP_INF) : ''}</h4>` +
+`<p>${alt ? `<span>${esc(alt)}</span> · ` : ''}${dg.type === 'raid' ? 'raid' : 'dungeon de grupo'} · ${g[0] === g[1] ? g[0] : g[0] + '-' + g[1]} jugadores${en ? ` · ${en} de energía Odyle` : ''}</p>` +
+`<p>La suelta: ${mobs.map(x => `<b>${esc(MOB(x))}</b> (${SUBL[x.sub]}, nv ${nv(x.lvl)})`).join(', ')}</p>` +
 `<div class="modos">${dg.modes.map((m, i) => `<span class="${on.has(m.id) ? '' : 'no'}">${m.diff ? D.diffs[m.diff] : 'Modo ' + (i + 1)}<small>${m.energy ? m.energy + ' E' : ''}</small></span>`).join('')}</div>` +
 (heur ? '<p class="q" style="margin-top:8px">Dificultades estimadas: pueden sobrar.</p>' : '') + '</div>');
 } else if (r.kind === 'shop') {
@@ -379,13 +394,13 @@ return `<section class="f-sec"><h3>${!p.hasMap ? 'Ficha de ruta' : dg && sh ? 'D
 function secCofres(p) {
 if (!p.chests.length) return '';
 return `<section class="f-sec"><h3>Cofres que la pueden dar</h3><ul class="cofres">${p.chests.map(c => c.pct
-? `<li><span style="text-align:left;color:var(--hueso)">${esc(c.name)}</span><span><b>${pct(c.pct)}%</b> · 1 de cada ${num(c.oneIn)} cofres</span><i style="--w:${Math.min(100, c.pct / 2.5 * 100)}%"></i></li>`
-: `<li><span style="text-align:left;color:var(--hueso)">${esc(c.name)}</span><span>sin chance publicada</span></li>`).join('')}</ul></section>`;
+? `<li><span style="text-align:left;color:var(--hueso)">${esc(gname({ name: c.name, nameEn: c.en }))}</span><span><b>${pct(c.pct)}%</b> · 1 de cada ${num(c.oneIn)} cofres</span><i style="--w:${Math.min(100, c.pct / 2.5 * 100)}%"></i></li>`
+: `<li><span style="text-align:left;color:var(--hueso)">${esc(gname({ name: c.name, nameEn: c.en }))}</span><span>sin chance publicada</span></li>`).join('')}</ul></section>`;
 }
 function secDale(p) {
 const x = G[p.genusKey];
-const lines = x.equip.length ? x.equip.map(l => `<p><b>Nv ${l.level}:</b> ${l.stats.map(s => `${esc(s.label)} +${s.value}`).join(' · ')}</p>`).join('') : '<p>Sin bonus de equipar en los datos de questlog.</p>';
-const raw = x.equip.some(l => l.stats.some(s => s.id === 'vehiclesprintcost')) ? '<p class="q">Costo de sprint: valor crudo de questlog.</p>' : '';
+const lines = x.equip.length ? x.equip.map(l => `<p><b>Nv ${l.level}:</b> ${l.stats.map(s => `${esc(s.label)} +${s.value}`).join(' · ')}</p>`).join('') : '<p>Sin bonus de equipar en los datos.</p>';
+const raw = x.equip.some(l => l.stats.some(s => s.id === 'vehiclesprintcost')) ? '<p class="q">Costo de sprint: valor crudo de los datos.</p>' : '';
 return `<details class="f-sec"><summary>Qué te da</summary><div class="dale">${lines}${raw}<p><a href="#genus-${GSLUG[p.genusKey]}" data-genus>Ver la guía de ${x.plural}</a></p></div></details>`;
 }
 function navList() { const v = $$('.pcard:not([hidden])', album).map(c => c.dataset.id); return v.includes(cur) ? v : PETS.map(p => p.id); }
@@ -395,9 +410,10 @@ const list = navList(), i = Math.max(0, list.indexOf(p.id)), prev = BY.get(list[
 const top = fBody.scrollTop;
 mapa?.destroy(); mapa = null;
 dlg.dataset.g = p.genusKey; dlg.dataset.cat = p.cat;
-const other = !inF(p) ? `<p class="f-otra">No está en la lista ${FNAME[FAC]}: ${FAC === 'elyos' ? 'los Elyos' : 'los Asmodian'} la farmean en su mapa.</p>` : '';
-fBody.innerHTML = `<div class="f-top" aria-hidden="true"><span>${esc(p.name)}</span></div><div class="f-vit"><div class="vitrina pl${$('.pl', card).classList.contains('dk') ? ' dk' : ''}" id="fVit" data-g="${p.genusKey}"><img src="${imgUrl(p.id)}" width="256" height="256" alt="${esc(p.name)}"><span class="flash" aria-hidden="true"></span></div>` +
-`<h2 id="fN">${esc(p.name)}</h2>${p.en !== p.name ? `<p class="en" lang="en">${esc(p.en)}</p>` : ''}` +
+const other = inF(p) ? `<p class="f-otra">Esquiva para ${FNAME[FAC]}: ningún mob de tu mapa la suelta.</p>` : '';
+const pn = PN(p), pa = galt({ name: p.name, nameEn: p.en });
+fBody.innerHTML = `<div class="f-top" aria-hidden="true"><span>${esc(pn)}</span></div><div class="f-vit"><div class="vitrina pl${$('.pl', card).classList.contains('dk') ? ' dk' : ''}" id="fVit" data-g="${p.genusKey}"><img src="${imgUrl(p.id)}" width="256" height="256" alt="${esc(pn)}"><span class="flash" aria-hidden="true"></span></div>` +
+`<h2 id="fN">${esc(pn)}</h2>${pa ? `<p class="en">${esc(pa)}</p>` : ''}` +
 `<p class="tg"><span class="gn">${ico('g-' + p.genusKey)}${p.genus}</span>${$('.ch', card).outerHTML}${p.isNew && !card.classList.contains('exp') ? `<span class="nueva">Nueva · ${fecha(p.createdAt)}</span>` : ''}</p>${other}</div>` +
 `<div class="f-act"><button type="button" class="btn tengo" id="fTengo" aria-pressed="${o}"><span class="wax"></span><span>${o ? 'La tengo' : 'Marcar: la tengo'}</span></button>` +
 `<div class="nivel" role="group" aria-label="Nivel"><span>Nv</span>${[1, 2, 3].map(n => `<button type="button" data-lv="${n}" aria-pressed="${o && lv === n}" aria-label="Nivel ${n}">${n}</button>`).join('')}</div>` +
@@ -405,11 +421,11 @@ fBody.innerHTML = `<div class="f-top" aria-hidden="true"><span>${esc(p.name)}</s
 secRutas(p) +
 (p.hasMap ? `<section class="f-sec" aria-labelledby="fMapT"><h3 id="fMapT">Mapa de spawns</h3><div id="fMapa"><div class="mesa-skel"><span>Desplegando el mapa…</span></div></div></section>` : '') +
 secFicha(p) + secCofres(p) + secDale(p) +
-`<footer class="f-pie"><button type="button" data-nav="-1" aria-label="Anterior: ${esc(prev.name)}">${ico('i-l')}<span>${esc(prev.name)}</span></button>` +
-`<a href="https://questlog.gg/aion-2/en/db/pet/${p.id}" target="_blank" rel="noopener">questlog #${p.id}${ico('i-ext')}</a>` +
-`<button type="button" data-nav="1" aria-label="Siguiente: ${esc(next.name)}"><span>${esc(next.name)}</span>${ico('i-r')}</button></footer>`;
+`<footer class="f-pie"><button type="button" data-nav="-1" aria-label="Anterior: ${esc(PN(prev))}">${ico('i-l')}<span>${esc(PN(prev))}</span></button>` +
+`<button type="button" data-hub="credits">Fuentes${ico('i-ext')}</button>` +
+`<button type="button" data-nav="1" aria-label="Siguiente: ${esc(PN(next))}"><span>${esc(PN(next))}</span>${ico('i-r')}</button></footer>`;
 fBody.scrollTop = keepScroll ? top : 0;
-if (p.hasMap) mesa().then(m => { if (cur === p.id && $('#fMapa')) mapa = m.petMap($('#fMapa'), p, { mode, saveData, fac: () => FAC, rift: () => D.fac[FAC].rift }); }).catch(() => { const el = $('#fMapa'); if (el) el.innerHTML = '<p class="souls">No pude cargar el mapa.</p>'; });
+if (p.hasMap) mesa().then(m => { if (cur === p.id && $('#fMapa')) mapa = m.petMap($('#fMapa'), p, { mode, saveData, fac: () => FAC, rift: () => D.fac[FAC].rift, pn: PN, gn: gname }); }).catch(() => { const el = $('#fMapa'); if (el) el.innerHTML = '<p class="souls">No pude cargar el mapa.</p>'; });
 alma().then(a => { if (a && cur === p.id && dlg.open) a.mount($('#fVit'), imgUrl(p.id), o); });
 }
 function openPet(id, { push = true, vt = true } = {}) {
@@ -489,10 +505,10 @@ e.preventDefault(); openPet(id);
 async function share(p) {
 const url = location.origin + location.pathname + '#pet-' + p.id;
 if (navigator.share && mq('(pointer:coarse)')) {
-try { await navigator.share({ title: `${p.name} · Bitácora Daeva`, text: `¿Quién viene a farmear ${p.name}?`, url }); } catch { /* cancelado */ }
+try { await navigator.share({ title: `${PN(p)} · Bitácora Daeva`, text: `¿Quién viene a farmear ${PN(p)}?`, url }); } catch { /* cancelado */ }
 return;
 }
-copy(url, `Link copiado: <b>${esc(p.name)}</b>`);
+copy(url, `Link copiado: <b>${esc(PN(p))}</b>`);
 }
 {
 let y0 = null, dy = 0;
@@ -510,7 +526,7 @@ const WIN = !MOBILE && /win/i.test(navigator.userAgentData?.platform || navigato
 let colM = null, colP = null, qlAuto = false;
 const col = () => colP ||= import('./pets-coleccion.js' + VQ).then(m => {
 m.init({ D, PETS, BY, get N() { return N; }, owned, level, save, paint, counts, refreshAll, apply, toast, copy, esc, ico, norm, ls, isMax, imgUrl, RM, WIN, QL_DIR, dirtyUI,
-catLabel, inF, base: () => location.origin + location.pathname, VQ });
+catLabel, cico, inF, PN, base: () => location.origin + location.pathname, VQ });
 return colM = m;
 });
 function goBackup() { $('#bak').scrollIntoView({ block: 'center' }); $('#exCopy').focus({ preventScroll: true }); }
@@ -541,7 +557,7 @@ addEventListener('keydown', e => { if (e.key === 'Escape' && !ov.hidden) off(); 
 }
 new IntersectionObserver((es, o) => { if (es.some(e => e.isIntersecting)) { o.disconnect(); col(); } }, { rootMargin: '600px 0px' }).observe($('#coleccion'));
 if (!WIN) {
-$('#qlLead').textContent = MOBILE ? 'La app de Questlog es solo para Windows. Desde el celu, usá la Carga rápida o abrí tu link de respaldo.' : 'La app de Questlog es solo para Windows.';
+$('#qlLead').textContent = MOBILE ? 'La app de DPS es solo para Windows. Desde el celu, usá la Carga rápida o abrí tu link de respaldo.' : 'La app de DPS es solo para Windows.';
 for (const x of ['#qlSteps', '.ql-path', '#qlDir', '#qlDrop']) $(x).hidden = true;
 $('#qlLoad').classList.remove('gold'); $('#qlLoad').lastChild.textContent = MOBILE ? 'Restaurar un respaldo (.json)' : 'Tengo el archivo igual';
 }
@@ -559,6 +575,10 @@ ls.set('pets-nudge', 1);
 toast(IOS ? 'En iPhone, Safari puede borrar tu colección tras 7 días sin entrar: agregá el sitio a inicio o guardá un respaldo.'
 : 'Tu colección se guarda solo en este navegador. Guardá un respaldo.', 10000, goBackup, 'Respaldo');
 }
+document.addEventListener('click', e => {
+if (!e.target.closest('#hub-toast [data-faltan]')) return;
+hideToast(); F.ver = 'faltan'; apply(); album.scrollIntoView({ block: 'start' });
+});
 /* ---------- guía de genus: detalle del slot ---------- */
 $('#genus').addEventListener('click', e => {
 const b = e.target.closest('.s'); if (!b) return;
@@ -566,7 +586,7 @@ const x = G[b.dataset.g], s = x.slots[b.dataset.n - 1], t = x.slotTypes.find(t =
 $$('#genus .s').forEach(o => o.setAttribute('aria-pressed', o === b));
 const top = Math.max(...t.top.map(o => o.pct));
 const box = $('#gslot'); box.style.setProperty('--sc', `var(--s-${t.key})`);
-box.innerHTML = `<div class="gs-h"><h3><i></i>${x.plural} · slot ${s.n}</h3><span>${esc(t.label)} · nivel de desbloqueo ${s.openLevel} <span class="q">(según datos de questlog)</span></span></div>` +
+box.innerHTML = `<div class="gs-h"><h3><i></i>${x.plural} · slot ${s.n}</h3><span>${esc(t.label)} · nivel de desbloqueo ${s.openLevel} <span class="q">(según los datos del juego)</span></span></div>` +
 `<ul class="gs-top">${t.top.map(o => `<li style="--w:${o.pct / top * 100}%"><b>${esc(o.label)}</b><span>hasta +${num(o.max)} · ${pct(o.pct)}%</span><i></i></li>`).join('')}</ul>` +
 `<p class="gs-meta">Puede tirar <b>${t.nStats}</b> stats distintos · <b>${pct(t.fillerPct || 0)}%</b> de las tiradas son HP/MP máx. · ` +
 (s.lock.crystals ? `Bloquearlo: <b>${num(s.lock.crystals)}</b> cristales + <b>${num(s.lock.gold)}</b> de oro.` : 'Este slot no se bloquea.') + '</p>';
@@ -581,10 +601,14 @@ const saveData = !!navigator.connection?.saveData;
 const mode = { get: () => ls.get('pets-mapa', RM ? 'plano' : 'mesa'), set: v => ls.set('pets-mapa', v) };
 let mesaP = null, plan = null, planOn = false;
 const mesa = () => mesaP ||= import('./pets-mesa.js' + VQ);
+const missingIn = rid => PETS.filter(p => !owned.has(p.id) && p.routes.some(r => r.regionId === rid)).length;
 function mountPlan() {
 plan?.destroy(); plan = null;
+const f = D.fac[FAC];
 mesa().then(m => {
-plan = m.plan($('#grMap'), $('#grList'), { BY, owned, isMax, esc, mode, saveData, ver: $('#grVer'), file: `assets/spawns/grieta-${FAC}.json`, rift: D.fac[FAC].riftName, open: id => openPet(id) });
+plan = m.plan($('#grMap'), $('#grList'), { BY, owned, isMax, mode, saveData, ver: $('#grVer'), tabs: $('#grReg'), cap: $('#grCap'), fac: FAC,
+regions: D.regions, rl: r => gname(r) + (r.id === f.rift ? ' · Grieta' : ''), pn: PN, gn: gname, start: f.main, count: missingIn,
+onRegion: rid => { $('#grNote').hidden = rid !== f.rift; } });
 }).catch(() => { $('#grMap').innerHTML = '<p class="gr-empty">No pude cargar el mapa.</p>'; });
 }
 {
@@ -592,7 +616,7 @@ const io = new IntersectionObserver(es => {
 if (!es.some(e => e.isIntersecting)) return;
 io.disconnect(); planOn = true; mountPlan();
 }, { rootMargin: '700px 0px' });
-io.observe($('#grieta'));
+io.observe($('#mapa'));
 }
 {
 const el = $('#grNext');
@@ -638,7 +662,6 @@ $$('.pl img[data-lazy]', album).forEach(im => { im.classList.add('lz'); io.obser
 /* ---------- facción: selector de la página = perfil del hub ---------- */
 function facUI() {
 document.documentElement.dataset.pf = FAC;
-for (const b of $$('#pf button')) b.setAttribute('aria-pressed', b.dataset.pf === FAC);
 }
 function relist() {
 PETS.splice(0, PETS.length, ...ALL.filter(vis)); N = PETS.length;
@@ -661,11 +684,12 @@ sinUI(); relist();
 }
 $('#sinEsp').addEventListener('click', () => setSin(!SIN));
 $('#espShow').addEventListener('click', () => setSin(false));
-$('#pf').addEventListener('click', e => {
-const b = e.target.closest('[data-pf]'); if (!b) return;
-setProfile({ faccion: b.dataset.pf });  // emite 'profile' → setFac
-});
 on('profile', () => setFac(facOf()));
+on('gamelang', () => {
+for (const k of [...SECTIONS.keys()]) if (k.startsWith('lugar:')) SECTIONS.delete(k);
+if (F.group === 'lugar') regroup();
+refreshAll(); apply(); colM?.facChanged?.();
+});
 /* ---------- arranque ---------- */
 new ResizeObserver(([e]) => document.documentElement.style.setProperty('--barh', Math.round(e.borderBoxSize?.[0]?.blockSize ?? e.target.offsetHeight) + 'px')).observe($('#barra'));
 facUI(); sinUI();

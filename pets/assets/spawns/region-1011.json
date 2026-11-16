@@ -1,0 +1,1 @@
+{"regionId":"1011","region":"Eltnen","regionEn":"Eltnen","zone":"elyos","bands":[{"band":2,"min":80,"max":80,"label":"80"}],"entries":[{"petId":"1103","mob":"Egetis, el Glotón","mobEn":"Gluttonous Egetis","lvl":80,"band":2,"sub":"boss","spawns":1,"flags":[{"u":0.4932,"v":0.3785,"count":1}]}]}
