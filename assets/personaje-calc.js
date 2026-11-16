@@ -35,7 +35,9 @@ for (const n of nodesOf(boards[b.id])) if (n.open) p.daevanion += NODE_COST[n.gr
 }
 return { total: Object.values(p).reduce((a, b) => a + b, 0), parts: p };
 }
-export const useful = s => !!s && !!s.acquired && s.level > 1 && (s.category === 'Passive' || !!s.equipped);
+export const OFFBAR = new Set(['11260000', '12260000', '13260000', '14260000', '15240000', '16200000', '17240000', '18200000']);
+const inBar = s => !!s?.acquired && (s.category === 'Passive' || !!s.equipped || OFFBAR.has(String(s.id)));
+export const useful = (s, x) => inBar(s) && (s.category === 'Passive' ? s.level : x?.base ?? s.level) > 1;
 export const NORMAL_CAP = 14, BASE_CAP = 10, DAE_CAP = 4, STIG_CAP = 20;
 export const SPEC = { Active: [8, 12, 16], Dp: [5, 10, 15, 20] };
 export function skillParts(d, items, boards) {
@@ -60,16 +62,17 @@ for (const s of d.skills || []) { const x = get(s.id); x.base = Math.max(0, (s.l
 return out;
 }
 export function skillHint(s, x) {
-if (s.category === 'Dp') return s.level >= STIG_CAP ? 'Al tope: 20' : `Con Fragmentos de Estigma hasta 20 (te faltan ${STIG_CAP - (s.level || 0)})`;
+if (s.category === 'Dp') return !s.equipped ? '' : s.level >= STIG_CAP ? 'Al tope: 20' : `Con Fragmentos de Estigma hasta 20 (te faltan ${STIG_CAP - (s.level || 0)})`;
 if (!x) return '';
 if (x.base < BASE_CAP) return `${BASE_CAP - x.base} con puntos de skill (la base llega a ${BASE_CAP})`;
 if (x.dae < x.daeMax) return `${x.daeMax - x.dae} con Daevanion: ${[...new Set(x.daeMiss)].join(', ')}`;
 return 'Lo que sigue sale de líneas de Arcana y de equipo';
 }
+export const topLevels = (T, k) => new Map(((T?.[k]?.skills?.length ? T[k] : k !== 'support' && T?.all)?.skills || []).map(s => [String(s.id), s.lvl]));
 const FIERCE = new Set(['311030002', '311040002', '311050002']);
 export function kindGuess(d, items, sets = {}) {
 const sup = new Set((sets.support || []).map(x => String(x.id))), pvpS = new Set((sets.pvp || []).map(x => String(x.id)));
-const core = (d.skills || []).filter(s => s.category === 'Dp' && s.level > 0).map(s => String(s.id));
+const core = (d.skills || []).filter(s => s.category === 'Dp' && s.equipped && s.level > 0).map(s => String(s.id)); // como coreOf del server: subidas y puestas
 const its = Object.values(items || {});
 const stones = its.flatMap(it => (it.magicStoneStat || []).map(m => String(m.id))).filter(id => /^pvp/i.test(id)).length;
 const lines = its.flatMap(it => (it.subStats || []).map(m => String(m.id))).filter(id => /^pvp/i.test(id)).length;
@@ -120,20 +123,21 @@ const parts = skillParts(d, items, boards), sk = new Map((d.skills || []).map(s 
 for (const b of d.daevanion || []) for (const n of nodesOf(boards[b.id])) {
 if (n.type !== 'SkillLevel' || n.open) continue;
 const m = String(n.effectList?.[0]?.desc || '').match(/^(.+) \+(\d+)$/), s = m && (d.skills || []).find(x => x.name === m[1]);
-if (s && useful(s)) daeN.push({ s, board: b.name, cost: NODE_COST[n.grade] || 0 });
+if (s && useful(s, parts.get(String(s.id)))) daeN.push({ s, board: b.name, cost: NODE_COST[n.grade] || 0 });
 }
 if (daeN.length) {
 const per = new Map();
 for (const x of daeN) { const k = String(x.s.id); per.set(k, [...(per.get(k) || []), x]); }
 const spec = [...per.values()].map(l => { const s = l[0].s, tl = top.get(String(s.id)) ?? 0, core = !top.size || tl >= s.level;
-return { s, l, tl, core, T: core ? (SPEC[s.category] || []).find(t => s.level < t && s.level + l.length >= t) : undefined }; })
-.sort((x, y) => (!!y.T - !!x.T) || (y.core - x.core) || (y.tl - x.tl) || y.l.length - x.l.length);
-const pts = daeN.reduce((t, x) => t + x.cost, 0), hd = spec[0];
-cand.push({ id: 'dae', icon: hd.s.icon, title: hd.T ? `${hd.s.name} a ${hd.T}: nueva especialización` : `Abrí los ${daeN.length} nodos de skill que te faltan`,
-gain: [`+${daeN.length} niveles de skill`, `+${pts} de nivel de objeto`], skills: spec.slice(0, 4).map(x => ({ icon: x.s.icon, name: x.s.name, n: x.l.length, T: x.T })),
+return { s, l, tl, core, T: core ? (SPEC[s.category] || []).find(t => s.level < t && s.level + l.length >= t && (!top.size || tl >= t)) : undefined }; })
+.sort((x, y) => (!!y.T - !!x.T) || (OFFBAR.has(String(x.s.id)) - OFFBAR.has(String(y.s.id))) || (y.core - x.core) || (y.tl - x.tl) || y.l.length - x.l.length);
+const pts = daeN.reduce((t, x) => t + x.cost, 0), hd = spec[0], key = spec.filter(x => x.core).slice(0, 4);
+cand.push({ id: 'dae', icon: (key[0] || hd).s.icon, T: hd.T, title: hd.T ? `${hd.s.name} a ${hd.T}: nueva especialización` : `Abrí los ${daeN.length} nodos de skill que te faltan`,
+gain: [`+${daeN.length} niveles de skill`, `+${pts} de nivel de objeto`], skills: key.length ? key.map(x => ({ icon: x.s.icon, name: x.s.name, n: x.l.length, T: x.T })) : undefined,
 cost: `${pts} puntos de Daevanion (cristales: subir de nivel y mazmorras selladas)`, il: pts, dmg: hd.T ? 0.9 : 0.05, sure: 'seguro', heal: 1 });
 }
-const low = (d.skills || []).filter(s => s.category !== 'Dp' && useful(s) && (parts.get(String(s.id))?.base ?? 10) < BASE_CAP);
+const low = (d.skills || []).filter(s => { const x = parts.get(String(s.id)); return s.category !== 'Dp' && inBar(s) && (x?.base ?? 10) < BASE_CAP
+&& (top.size ? (top.get(String(s.id)) ?? 0) >= BASE_CAP : useful(s, x)); });
 if (low.length) cand.push({ id: 'pts', icon: low[0].icon, title: `Subí ${low.length > 1 ? `${low.length} skills` : low[0].name} con puntos de skill`, gain: [`+${low.reduce((t, s) => t + BASE_CAP - parts.get(String(s.id)).base, 0)} niveles de skill`],
 skills: low.slice(0, 4).map(s => ({ icon: s.icon, name: s.name, n: BASE_CAP - parts.get(String(s.id)).base })), cost: 'Solo si te quedan puntos: la ficha oficial no muestra cuántos tenés', il: 0, dmg: 0.3, sure: 'estimado', heal: 1 });
 const ar = (d.daevanion || [])[4];
@@ -142,7 +146,7 @@ cost: '100 fragmentos = 1 cristal de Ariel, hasta 30 por personaje', il: 0, dmg:
 const P = kind === 'support'
 ? { dae: 100, pts: 90, arc: 80, enc: 70, 'amp-acc': 60, 'amp-arma': 55, ariel: 40, 'amp-arm': 20 }
 : { 'amp-acc': 100, 'amp-arma': 100, dae: 80, enc: 70, arc: 60, pts: 50, ariel: 40, 'amp-arm': 10 };
-const score = c => P[c.id] + (c.id.startsWith('amp') ? c.dmg * 100 : 0) - (c.id === 'dae' && !c.skills[0].T ? 40 : 0);
+const score = c => P[c.id] + (c.id.startsWith('amp') ? c.dmg * 100 : 0) - (c.id === 'dae' && !c.T ? 40 : 0);
 const steps = cand.sort((x, y) => score(y) - score(x)).slice(0, 5);
 const ampAll = eq.reduce((s, e) => s + 5 * Math.max(0, (items[e.slot]?.maxExceedEnchantLevel || 0) - (e.exceed || 0)), 0);
 const daeAll = (d.daevanion || []).slice(0, 4).reduce((s, b) => s + nodesOf(boards[b.id]).filter(n => !n.open).reduce((t, n) => t + (NODE_COST[n.grade] || 0), 0), 0);

@@ -1,8 +1,8 @@
 import {
 $, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, setTitle, myChars, gname, galt, gclass, gameLang, on,
-} from './core.js?v=b1b9f0665f';
-import { GATES, gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=b1b9f0665f';
+} from './core.js?v=8f51688881';
+import { GATES, gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=8f51688881';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -327,6 +327,7 @@ try { CUR.set(cls, await api('/api/curated', { class: cls })); } catch { CUR.del
 if (cur === c) { paintBuild(); if (TAB === 'daevanion') paintPanel(); }
 }
 const curated = c => CUR.get(CLS_KEY[c.d.profile.class]) || null;
+const topSkills = (c, k) => topLevels(curated(c)?.top, k);
 /* ---------- build que sigue (Estándar / Healer / PvP), guardada por personaje ---------- */
 const kindStored = ref => store.get(BLD, {})[ref.k.toLowerCase()] || null;
 const okKind = (c, k) => kindsOf(c).some(([v]) => v === k) ? k : null;
@@ -411,7 +412,7 @@ return `<div class="pj-wait" role="status"><span class="pj-spin" aria-hidden="tr
 /* ---------- próximos pasos + camino ---------- */
 const gameIcon = (u, sz) => img(u, sz, 'st-ic');
 function stepsHtml() {
-const k = kindOf(cur), P = plan(cur.d, cur.x.items, cur.x.boards, k, new Map((curated(cur)?.top?.[k]?.skills || []).map(s => [String(s.id), s.lvl]))), st = stations(cur.d, cur.x.items, cur.x.boards), g = gateOf(P.path.il);
+const k = kindOf(cur), P = plan(cur.d, cur.x.items, cur.x.boards, k, topSkills(cur, k)), st = stations(cur.d, cur.x.items, cur.x.boards), g = gateOf(P.path.il);
 const steps = P.steps.map((s, i) => `<li class="st" data-step="${s.id}">
 <span class="st-n">${i + 1}</span>
 ${s.icon ? gameIcon(s.icon, 48) : s.board ? icoGame('board_icon_unique_open', 48, 'st-ic') : ''}
@@ -457,27 +458,27 @@ const skName = s => ({ name: s.name, nameEn: s.nameEn && s.nameEn !== s.name ? s
 const hint = (s, x) => s.category === 'Dp' ? (s.level < STIG_CAP ? skillHint(s, x) : '') : x && (x.base < BASE_CAP || x.dae < x.daeMax) ? skillHint(s, x) : '';
 function skillsHtml() {
 const parts = skillParts(cur.d, cur.x.items, cur.x.boards), sk = cur.d.skills || [];
-const top = new Map((curated(cur)?.top?.[kindOf(cur)]?.skills || []).map(s => [String(s.id), s.lvl]));
+const top = topSkills(cur, kindOf(cur)), use = s => useful(s, parts.get(String(s.id)));
 const row = s => {
 const x = parts.get(String(s.id)) || { base: s.level, dae: 0, gear: 0, arc: 0 }, nm = skName(s);
 const stig = s.category === 'Dp', max = stig ? STIG_CAP : Math.max(25, s.level), w = v => (v / max * 100).toFixed(2) + '%';
 const seg = stig ? `<i class="s-st" style="--w:${w(s.level)}"></i>` : `<i class="s-ba" style="--w:${w(x.base)}"></i><i class="s-da" style="--w:${w(x.dae)}"></i><i class="s-eq" style="--w:${w(x.gear)}"></i><i class="s-ar" style="--w:${w(x.arc)}"></i>`;
 const desc = stig ? `Nivel ${s.level}` : `Nivel ${s.level}: base ${x.base}, Daevanion ${x.dae}, equipo ${x.gear}, Arcanas ${x.arc}`;
 const tl = top.get(String(s.id));
-return `<li class="sk${useful(s) || stig ? '' : ' off'}" data-sk="${s.id}">
+return `<li class="sk${use(s) || stig ? '' : ' off'}" data-sk="${s.id}">
 ${img(s.icon, 40, 'sk-ic')}<span class="sk-n"><b>${esc(gname(nm))}</b>${galt(nm) ? `<small lang="${gameLang() === 'en' ? 'es' : 'en'}">${esc(galt(nm))}</small>` : ''}</span>
 <span class="sk-bar" role="img" aria-label="${esc(desc)}" data-parts="${stig ? s.level : [x.base, x.dae, x.gear, x.arc].join(',')}">${seg}<b class="sk-cap" style="--x:${w(stig ? STIG_CAP : NORMAL_CAP)}" title="${stig ? 'Tope de las estigmas' : 'Tope normal: 10 con puntos + 4 de Daevanion'}"></b></span>
 <b class="sk-lv">${s.level || '—'}</b>
-<small class="sk-h">${[hint(s, x), tl && `los top: ${Math.round(tl)}`, !useful(s) && !stig && 'no la usás'].filter(Boolean).map(esc).join(' · ')}</small></li>`;
+<small class="sk-h">${[hint(s, x), tl && `los top: ${Math.round(tl)}`, !use(s) && !stig && 'no la usás'].filter(Boolean).map(esc).join(' · ')}</small></li>`;
 };
 const act = sk.filter(s => s.category === 'Active'), pas = sk.filter(s => s.category === 'Passive'), sti = sk.filter(s => s.category === 'Dp' && s.level > 0);
-const sorted = l => [...l.filter(useful), ...l.filter(s => !useful(s))];
+const sorted = l => [...l.filter(use), ...l.filter(s => !use(s))];
 return `<section class="pj-sec" aria-labelledby="sk-h"><h3 id="sk-h" class="pj-h">Skills <small>Nivel por fuente contra el tope normal (${NORMAL_CAP})</small></h3>
 <ul class="sk-k"><li class="s-ba"><i></i>Base, con puntos (hasta ${BASE_CAP})</li><li class="s-da"><i></i>Daevanion (hasta 4)</li><li class="s-eq"><i></i>Equipo</li><li class="s-ar"><i></i>Arcanas</li><li class="s-cap"><i></i>Tope normal ${NORMAL_CAP}</li></ul>
 <h4 class="pj-h4">Activas</h4><ul class="sk-l">${sorted(act).map(row).join('')}</ul>
 <h4 class="pj-h4">Pasivas</h4><ul class="sk-l">${pas.map(row).join('')}</ul>
 ${sti.length ? `<h4 class="pj-h4">Estigmas <small>solo con Fragmentos de Estigma, tope ${STIG_CAP}</small></h4><ul class="sk-l sk-sti">${sti.sort((a, b) => b.level - a.level).map(row).join('')}</ul>` : ''}
-<p class="pj-note">Arriba de ${NORMAL_CAP} se sube con líneas de skill de Arcanas (hasta +4 por línea) y del equipo (+1 por línea). Atenuadas: activas que no están en tu barra.</p></section>`;
+<p class="pj-note">Arriba de ${NORMAL_CAP} se sube con líneas de skill de Arcanas (hasta +4 por línea) y del equipo (+1 por línea). Atenuadas: activas que no están en tu barra o que no subiste con puntos.</p></section>`;
 }
 /* ---------- Daevanion: los tableros dibujados con los nodos del juego ---------- */
 let BOARD = 0;

@@ -1,6 +1,8 @@
-import { $, esc, ico, modal, announce } from './core.js?v=b1b9f0665f';
+import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js?v=8f51688881';
+import { useful, skillParts } from './personaje-calc.js?v=8f51688881';
 let X;                                         // {api, MSG, img, gcls, GRADE, nf, curated, CLS_KEY} que pasa personaje.js
 export const init = ctx => { X = ctx; };
+const VQ = new URL(import.meta.url).search;   // ?v=<hash>: assets/pj-items.json con la misma versión
 const SK = (() => { try { return JSON.parse(document.getElementById('page-data')?.textContent || '{}'); } catch { return {}; } })();
 /* ---------- tablas ---------- */
 const CLASSES = [['gladiator', 'Gladiador'], ['templar', 'Templario'], ['ranger', 'Arquero'], ['assassin', 'Asesino'], ['sorcerer', 'Hechicero'], ['elementalist', 'Espiritualista'], ['cleric', 'Clérigo'], ['chanter', 'Cantor']];
@@ -63,27 +65,60 @@ return `<div class="pj-msg bad" role="alert" data-kind="${esc(e.kind || 'server'
 }
 /* ---------- vista: lo que usan los top ---------- */
 const HEAL = new Set(['cleric', 'chanter']);   // Healer solo para las clases que curan
+const CDN = 'https://assets.playnccdn.com/static-aion2-gamedata/resources/';
+const gi = (n, sz) => X.img(n ? CDN + n + '.png' : '', sz);
+let IT = {};
+const getItems = () => once('items', () => fetch(new URL('./pj-items.json' + VQ, import.meta.url)).then(r => r.ok ? r.json() : {}, () => ({})));
+const ARC_EN = { chalice: ['Chalice', 'Grail'], parchment: ['Parchment', 'Parchment'], compass: ['Compass', 'Compass'], bell: ['Bell', 'Bell'], mirror: ['Mirror', 'Mirror'] };
+const arcIco = (c, set) => `Icon_Arcana_Card_${ARC_EN[c][1]}_u_${set === 'Magic' ? 'DefenceSet2' : 'PveSet2'}`;
+const NOBRAND = /\s*\b(en|de|desde)\s+(questlog|plaync|kisk|aion2data)\b/gi;   // los motivos del curado a veces nombran la fuente
 const kindSeg = (C, k, cls) => `<div class="seg cu-k" role="group" aria-label="Tipo de build" id="cu-kd">${KINDS.filter(([v]) => v !== 'support' || HEAL.has(cls)).map(([v, l]) => `<button type="button" data-ck="${v}" aria-pressed="${v === k}">${l} <small>${C.kinds?.[v] ?? 0}</small></button>`).join('')}</div>`;
-const whyP = t => `<p class="pj-empty cu-why" role="status">${esc(t)}</p>`;
+const whyP = t => `<p class="pj-empty cu-why" role="status">${esc(String(t).replace(NOBRAND, ''))}</p>`;
+const tile = ({ id, pic, name, lv, have, dim, sub, s, title }) => `<li class="cu-i${have ? ' have' : ''}${dim ? ' dim' : ''}"${id ? ` data-id="${esc(id)}"` : ''}${title ? ` title="${esc(title)}"` : ''}>
+<span class="cu-iw">${pic}${lv ? `<b class="cu-lv">${lv}</b>` : ''}${have ? `<i class="cu-ok">${ico('i-check')}</i><span class="sr">La tenés. </span>` : ''}</span>
+<span class="cu-in">${esc(name)}</span>${sub ? `<small>${sub}</small>` : ''}${s != null ? share(s) : ''}</li>`;
+const card = (cls, h, body) => `<section class="cu-card ${cls}"><h4 class="cu-ch">${h}</h4>${body}</section>`;
 function topHtml(C, k, cls, cur) {
 const T = C.top?.[k], all = C.top?.all?.n;
 const mine = {};
 for (const [slot, it] of Object.entries(cur?.x?.items || {})) for (const l of it?.subStats || []) (mine[CSLOT[slot]] ||= new Set()).add(String(l.id).toLowerCase());
+const myLv = new Map((cur?.d.skills || []).map(x => [String(x.id), x.level || 0]));
 const myStig = new Set((cur?.d.skills || []).filter(x => x.category === 'Dp' && x.level > 0).map(x => String(x.id)));
 const have = cur?.x ? (s, id) => !!mine[s]?.has(id) : () => false;
 if (!T?.slots) return `<h3 class="pj-h">Lo que usan los mejores <small>${KIND_ES[k]}</small></h3>${whyP(`Sin datos de los top ${KIND_ES[k]}: ${C.reasons?.top?.[k] || `muestra chica (${T?.n || 0} de ${all})`}. No rellenamos con otras builds.`)}`;
-const chip = (s, l) => `<li data-id="${esc(l.id)}"${have(s, l.id) ? ' class="have"' : ''} title="La usan ${often(l.share)} los top (${pct(l.share)} % de las piezas)${have(s, l.id) ? '. Vos la tenés' : ''}">${have(s, l.id) ? ico('i-check') + '<span class="sr">La tenés: </span>' : ''}${esc(l.name)}${share(l.share)}</li>`;
-const rows = TSLOTS.filter(s => T.slots[s]?.lines?.length).map(s => {
+const sk = s => ({ name: s.name, nameEn: SK[s.id]?.[0] });
+const ok = (s, l) => have(s, l.id) ? ico('i-check') + '<span class="sr">La tenés: </span>' : '';
+const chip = (s, l) => `<li data-id="${esc(l.id)}"${have(s, l.id) ? ' class="have"' : ''} title="La usan ${often(l.share)} los top (${pct(l.share)} % de las piezas)${have(s, l.id) ? '. Vos la tenés' : ''}">${ok(s, l)}${esc(l.name)}${share(l.share)}</li>`;
+const pill = (s, l) => `<li data-id="${esc(l.id)}"${have(s, l.id) ? ' class="have"' : ''}>${ok(s, l)}${esc(l.name)}</li>`;
+const slots = TSLOTS.filter(s => T.slots[s]?.lines?.length);
+const piece = s => {
+const x = T.slots[s], it = x.items?.[0], best = x.lines.filter(l => l.tier === 'Best'), en = Math.round(x.enchant || 0);
+return `<li class="cu-p" data-slot="${s}"><span class="eq-i cu-pi"${it ? ` title="${esc(it.name)}${en ? ` · los top la llevan a +${en}` : ''}"` : ''}>${gi(IT[it?.id], 44)}${en ? `<b class="eq-en">+${en}</b>` : ''}</span>
+<b class="cu-pn">${esc(x.name)}</b><ul class="cu-pl">${(best.length ? best : x.lines.filter(l => l.tier === 'Good').slice(0, 3)).map(l => pill(s, l)).join('')}</ul></li>`;
+};
+const rows = slots.map(s => {
 const x = T.slots[s];
 return `<li class="cu-row" data-slot="${s}"><b class="cu-sn">${esc(x.name)}</b>${TIERS.map(([t, lb]) => { const L = x.lines.filter(l => l.tier === t); return L.length ? `<div class="cu-t" data-t="${t}"><small>${lb}</small><ul class="cu-c">${L.map(l => chip(s, l)).join('')}</ul></div>` : ''; }).join('')}</li>`;
 }).join('');
-const stig = T.stigmas.filter(s => s.share >= 0.2);
-const arc = ARC.filter(([c]) => T.arcana?.[c]?.length).map(([c, lb]) => { const a = T.arcana[c][0]; return `<li><span>${lb}</span> <b>${esc(SET_ES[a.set] || a.set)}</b> <small>${often(a.share)}</small></li>`; }).join('');
+const stig = T.stigmas.filter(s => s.share >= 0.2).map(s => tile({ id: s.id, pic: skIcon(s.id, 48), name: gname(sk(s)), lv: s.lvl ? Math.round(s.lvl) : 0, have: myStig.has(String(s.id)), dim: s.share < 0.5, s: s.share, title: `${gboth(sk(s))}: la usan ${often(s.share)}${s.lvl ? `, nivel ${Math.round(s.lvl)}` : ''}` })).join('');
+const skills = (T.skills || []).filter(s => s.cat === 'Passive' || s.onBar >= 0.5).sort((a, b) => b.lvl - a.lvl).slice(0, 8).map(s => {
+const lv = Math.round(s.lvl), m = myLv.get(String(s.id));
+return tile({ id: s.id, pic: skIcon(s.id, 48), name: gname(sk(s)), lv, sub: cur && m != null ? `<span class="${m < lv - 2 ? 'low' : m >= lv ? 'ok' : ''}">vos ${m}</span>` : '', title: `${gboth(sk(s))}${s.cat === 'Passive' ? ' (pasiva)' : ''}: los top la tienen en ${lv}` });
+}).join('');
+const arc = ARC.filter(([c]) => T.arcana?.[c]?.length).map(([c, lb]) => {
+const a = T.arcana[c][0], set = { name: SET_ES[a.set] || a.set, nameEn: a.set }, e = Math.round(T.slots[c]?.enchant || 0);
+return tile({ pic: gi(arcIco(c, a.set), 48), name: gname({ name: lb, nameEn: ARC_EN[c][0] }), lv: e ? '+' + e : 0, sub: esc(gname(set)), s: a.share, title: `${lb} de ${set.name.toLowerCase()}: la usan ${often(a.share)}` });
+}).join('');
 return `<h3 class="pj-h">Lo que usan los mejores ${esc(CLS_ES[cls] || '')} <small>${KIND_ES[k]} · ${T.n} de los ${all} con más poder de combate de Global · semana del ${C.v.slice(8, 10)}/${C.v.slice(5, 7)}</small></h3>
 <div class="cu-top">
-<h4 class="pj-h4">Estigmas${cur ? ' <small>✓ = la tenés subida</small>' : ''}</h4><ul class="cu-stig">${stig.map(s => `<li data-id="${esc(s.id)}"${myStig.has(String(s.id)) ? ' class="have"' : ''}>${skIcon(s.id, 40)}<span><b>${esc(s.name)}</b><small>${myStig.has(String(s.id)) ? '✓ la tenés · ' : ''}la usan ${often(s.share)}${s.lvl ? ` · nivel ${Math.round(s.lvl)}` : ''}</small></span>${share(s.share)}</li>`).join('')}</ul>
-<h4 class="pj-h4">Set de Arcanas</h4><ul class="cu-arc">${arc}</ul>
-<h4 class="pj-h4">Líneas a buscar en cada pieza${cur?.x ? ' <small>✓ = ya la tenés en esa pieza</small>' : ''}</h4><ul class="cu-st">${rows}</ul>
+<div class="cu-g">
+${card('cu-stc', `Estigmas <small>${cur ? 'tilde = ya la tenés subida' : 'atenuadas = solo algunos'}</small>`, `<ul class="cu-is cu-stig">${stig}</ul>`)}
+${arc ? card('cu-arcc', 'Arcanas <small>el set de cada carta</small>', `<ul class="cu-is cu-arc">${arc}</ul>`) : ''}
+${skills ? card('cu-skc', `Skills que más suben <small>nivel de los top${cur ? ' y el tuyo' : ''}</small>`, `<ul class="cu-is cu-sk">${skills}</ul>`) : ''}
+</div>
+<h4 class="pj-h4 cu-eh">Qué buscar en cada pieza <small>las líneas que llevan casi todos${cur?.x ? ' · tilde = ya la tenés' : ''}</small></h4>
+<ul class="cu-eq">${slots.map(piece).join('')}</ul>
+<details class="cu-more"><summary>Todas las líneas, pieza por pieza <small>también las que usan algunos</small></summary><ul class="cu-st">${rows}</ul></details>
 </div>`;
 }
 function recB(r) {
@@ -92,14 +127,20 @@ const u = new URL(r.url), id = +u.searchParams.get('build-id'), slug = decodeURI
 return id && /^[A-Za-z0-9_-]+$/.test(slug) ? { id, slug, name: r.name, char: r.char, author: r.author, likes: r.likes, tags: r.tags || [], url: r.url } : null;
 }
 function recHtml(C, k) {
-const row = (r, i) => `<li class="bl-c cu-r"><b class="bl-v cu-sc" title="Puntaje de 0 a 100: cuánto se parece a los top, votos, si es reciente y si coincide con las guías">${r.score}</b>
-<span class="bl-m"><b class="bl-nm">${esc(r.name || r.char || 'Sin nombre')}</b><small>de ${esc(r.author || '—')} · ${X.nf(r.likes)} votos${r.updatedAt ? ` · actualizada ${ago(r.updatedAt)}` : ''}</small><small class="cu-rw">${esc(r.why || '')}</small></span>
-<span class="bl-a">${recB(r) ? `<button type="button" class="btn" data-rver="${i}">Ver build</button>` : ''}</span></li>`;
+const row = (r, i) => {
+const m = r.parts?.match != null ? pct(r.parts.match) : null;
+return `<li class="cu-r"><b class="cu-sc" style="--q:${+r.score || 0}%" title="Puntaje de 0 a 100: cuánto se parece a los top, votos, si es reciente y si coincide con las guías"><span>${esc(r.score)}</span></b>
+<span class="cu-rm"><b class="bl-nm">${esc(r.name || r.char || 'Sin nombre')}</b><small>${esc(r.author || '—')} · ${X.nf(r.likes)} votos${r.updatedAt ? ` · ${ago(r.updatedAt)}` : ''}</small>
+${m != null ? `<span class="cu-mt" title="${esc(r.why || '')}"><span class="sh" role="img" aria-label="Se parece ${m} % a los top"><i style="--q:${m}%"></i></span><small>${m} % como los top</small>${(r.tags || []).includes('beginner-friendly') ? '<em class="tag gold">Para empezar</em>' : ''}</span>` : `<small class="cu-rw">${esc(r.why || '')}</small>`}</span>
+${recB(r) ? `<button type="button" class="btn" data-rver="${i}">Ver build</button>` : ''}</li>`;
+};
 const main = C.recommended?.[k] || [], prog = C.recommended?.progresion || [];
 return `<h3 class="pj-h">Builds recomendadas <small>${KIND_ES[k]} · las más parecidas a los top</small></h3>
-${main.length ? `<ol class="bl-l cu-rec">${main.map((r, i) => row(r, i)).join('')}</ol>` : whyP(C.reasons?.recommended?.[k] || `No hay builds ${KIND_ES[k]} con respaldo.`)}
-${prog.length ? `<details class="cu-prog"><summary>Para el que recién llega a 45 <small>${prog.length}</small></summary><ol class="bl-l">${prog.map((r, i) => row(r, main.length + i)).join('')}</ol></details>` : ''}`;
+${main.length ? `<ol class="cu-rec">${main.map((r, i) => row(r, i)).join('')}</ol>` : whyP(C.reasons?.recommended?.[k] || `No hay builds ${KIND_ES[k]} con respaldo.`)}
+${prog.length ? `<details class="cu-prog"><summary>Para el que recién llega a 45 <small>${prog.length}</small></summary><ol class="cu-rec">${prog.map((r, i) => row(r, main.length + i)).join('')}</ol></details>` : ''}`;
 }
+let repaint = null;                            // nombres ES/EN: sin ficha, nadie repinta la pestaña
+on('gamelang', () => repaint?.());
 export function view(el, cur, { cls = cur ? X.CLS_KEY[cur.d.profile.class] : null, kind = 'pve', tag = '' } = {}) {
 if (!CLS_ES[cls]) cls = 'chanter';
 let K = kind;
@@ -115,6 +156,7 @@ let seq = 0, cseq = 0, list = [], listFor = null, C = null, R = [];
 const paintCur = () => {
 if (K === 'support' && !HEAL.has(cls)) K = 'pve';
 R = [...(C.recommended?.[K] || []), ...(C.recommended?.progresion || [])];
+repaint = cur ? null : paintCur;
 cuEl.innerHTML = `${cur ? '' : kindSeg(C, K, cls)}${topHtml(C, K, cls, cur)}${recHtml(C, K)}<p class="pj-note">Se recalcula cada semana. No son datos oficiales. <button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button></p>`;
 };
 async function loadCur() {
@@ -123,7 +165,7 @@ C = null; more.hidden = true;
 cuEl.setAttribute('aria-busy', 'true');
 cuEl.innerHTML = loading(`Buscando lo que usan los mejores de ${CLS_ES[cls]}…`);
 try {
-C = await getCur(cls);
+[C, IT] = await Promise.all([getCur(cls), getItems()]);
 if (s !== cseq) return;
 paintCur();
 announce(`Builds de ${CLS_ES[cls]}`);
@@ -194,7 +236,7 @@ return `${d.stale ? '<p class="tag warn">La fuente no responde: es la última ve
 <span class="bd-t"><small>${s[1]} · <span class="eq-gr">${esc(X.GRADE[e.grade] || e.grade)}</span></small><b>${esc(e.name)}</b>
 ${e.lines.length ? `<ul class="ln">${e.lines.map(lineLi).join('')}</ul>` : ''}
 ${e.stones.length ? `<small class="bd-ms">Piedras de maná: ${e.stones.map(x => `${esc(stLabel(x.id))} +${esc(fmt(x.id, x.v))}`).join(' · ')}</small>` : ''}</span></li>`).join('') || '<li class="pj-empty">Sin equipo cargado.</li>'}</ul>
-${d.arcana.length ? `<h3 class="pj-h">Arcanas</h3><ul class="bd-ar">${d.arcana.map(a => `<li><b class="${X.gcls(a.grade)}">${esc(a.name)}${a.lvl ? ` +${a.lvl}` : ''}</b><small>${a.skills.map(s => `${esc(s.name || `Skill ${s.id}`)} +${s.lvl}`).join(' · ') || 'sin skills'}</small></li>`).join('')}</ul>` : ''}
+${d.arcana.length ? `<h3 class="pj-h">Arcanas</h3><ul class="bd-ar bd-arc">${d.arcana.map(a => `<li>${X.img(a.icon, 36)}<b class="${X.gcls(a.grade)}">${esc(a.name)}${a.lvl ? ` +${a.lvl}` : ''}</b><small>${a.skills.map(s => `${esc(s.name || `Skill ${s.id}`)} +${s.lvl}`).join(' · ') || 'sin skills'}</small></li>`).join('')}</ul>` : ''}
 <h3 class="pj-h">Skills y estigmas ${d.skills ? `<small>${esc(d.skills.name || '')}</small>` : ''}</h3>
 ${sk.length ? SKCAT.map(([c, t]) => { const l = sk.filter(s => s.cat === c).sort((a, b) => (b.slot != null) - (a.slot != null)); return l.length ? `<h4 class="pj-h4">${t}</h4><ul class="sk-g">${l.map(s => `<li class="sk2${c !== 'passive' && s.slot == null ? ' off' : ''}">${skIcon(s.id, 28)}<span>${esc(s.name || `Skill ${s.id}`)}</span><b>Nv ${s.lvl}</b></li>`).join('')}</ul>` : ''; }).join('')
 + '<p class="pj-note">Atenuadas: subidas pero sin poner en la barra. Las especializaciones no se muestran: la ficha oficial no las tiene.</p>' : '<p class="pj-empty">Esta build no trae skills.</p>'}
@@ -213,7 +255,7 @@ return { q: max > min ? Math.max(0, Math.min(1, (x - min) / (max - min))) : 1, m
 }
 const rng = r => { const f = v => r.s === 100 ? num(r.pctv ? v / 100 : Math.round(v / 100)) : num(v); return `${f(r.min)}–${f(r.max)}${r.pctv ? ' %' : ''}`; };
 export async function itemBody(it, e, cur, kind) {
-const skills = new Map((cur.d.skills || []).map(s => [String(s.id), s])), use = id => { const s = skills.get(String(id)); return !!s && !!s.acquired && (s.category === 'Passive' || !!s.equipped); };
+const skills = new Map((cur.d.skills || []).map(s => [String(s.id), s])), parts = skillParts(cur.d, cur.x?.items || {}, cur.x?.boards || {}), use = id => useful(skills.get(String(id)), parts.get(String(id)));
 const C = X.curated(cur), T = C?.top?.[kind]?.slots?.[CSLOT[e.slot]];
 let pool = null;
 if (it.subStatRandom && (it.subStats || []).length) try { pool = (await getLines(it.id)).items?.[it.id]?.lines; } catch { /* sin rango */ }
