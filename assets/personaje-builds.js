@@ -1,4 +1,4 @@
-import { $, esc, ico, modal, announce } from './core.js?v=b3fa500e7b';
+import { $, esc, ico, modal, announce } from './core.js?v=fb3755c056';
 let X;                                         // {api, MSG, img, gcls, GRADE, nf, curated, CLS_KEY} que pasa personaje.js
 export const init = ctx => { X = ctx; };
 const SK = (() => { try { return JSON.parse(document.getElementById('page-data')?.textContent || '{}'); } catch { return {}; } })();

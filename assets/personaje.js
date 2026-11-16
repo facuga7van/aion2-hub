@@ -1,8 +1,8 @@
 import {
 $, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, setTitle, myChars, gname, galt, gclass, gameLang, on,
-} from './core.js?v=b3fa500e7b';
-import { GATES, gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=b3fa500e7b';
+} from './core.js?v=fb3755c056';
+import { GATES, gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=fb3755c056';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -418,7 +418,7 @@ return `<div class="pj-wait" role="status"><span class="pj-spin" aria-hidden="tr
 /* ---------- próximos pasos + camino ---------- */
 const gameIcon = (u, sz) => img(u, sz, 'st-ic');
 function stepsHtml() {
-const k = kindOf(cur), P = plan(cur.d, cur.x.items, cur.x.boards, k), st = stations(cur.d, cur.x.items, cur.x.boards), g = gateOf(P.path.il);
+const k = kindOf(cur), P = plan(cur.d, cur.x.items, cur.x.boards, k, new Map((curated(cur)?.top?.[k]?.skills || []).map(s => [String(s.id), s.lvl]))), st = stations(cur.d, cur.x.items, cur.x.boards), g = gateOf(P.path.il);
 const steps = P.steps.map((s, i) => `<li class="st" data-step="${s.id}">
 <span class="st-n">${i + 1}</span>
 ${s.icon ? gameIcon(s.icon, 48) : s.board ? icoGame('board_icon_unique_open', 48, 'st-ic') : ''}
@@ -478,14 +478,12 @@ ${img(s.icon, 40, 'sk-ic')}<span class="sk-n"><b>${esc(gname(nm))}</b>${galt(nm)
 <small class="sk-h">${[hint(s, x), tl && `los top: ${Math.round(tl)}`, !useful(s) && !stig && 'no la usás'].filter(Boolean).map(esc).join(' · ')}</small></li>`;
 };
 const act = sk.filter(s => s.category === 'Active'), pas = sk.filter(s => s.category === 'Passive'), sti = sk.filter(s => s.category === 'Dp' && s.level > 0);
-const stiRest = sk.filter(s => s.category === 'Dp' && !(s.level > 0) && s.acquired);
 const sorted = l => [...l.filter(useful), ...l.filter(s => !useful(s))];
 return `<section class="pj-sec" aria-labelledby="sk-h"><h3 id="sk-h" class="pj-h">Skills <small>Nivel por fuente contra el tope normal (${NORMAL_CAP})</small></h3>
 <ul class="sk-k"><li class="s-ba"><i></i>Base, con puntos (hasta ${BASE_CAP})</li><li class="s-da"><i></i>Daevanion (hasta 4)</li><li class="s-eq"><i></i>Equipo</li><li class="s-ar"><i></i>Arcanas</li><li class="s-cap"><i></i>Tope normal ${NORMAL_CAP}</li></ul>
 <h4 class="pj-h4">Activas</h4><ul class="sk-l">${sorted(act).map(row).join('')}</ul>
 <h4 class="pj-h4">Pasivas</h4><ul class="sk-l">${pas.map(row).join('')}</ul>
 ${sti.length ? `<h4 class="pj-h4">Estigmas <small>solo con Fragmentos de Estigma, tope ${STIG_CAP}</small></h4><ul class="sk-l sk-sti">${sti.sort((a, b) => b.level - a.level).map(row).join('')}</ul>` : ''}
-${stiRest.length ? `<p class="pj-note sk-rest">Otras estigmas que tenés sin subir: ${stiRest.map(s => esc(gname(skName(s)))).join(', ')}.</p>` : ''}
 <p class="pj-note">Arriba de ${NORMAL_CAP} se sube con líneas de skill de Arcanas (hasta +4 por línea) y del equipo (+1 por línea). Atenuadas: activas que no están en tu barra.</p></section>`;
 }
 /* ---------- Daevanion: los tableros dibujados con los nodos del juego ---------- */
