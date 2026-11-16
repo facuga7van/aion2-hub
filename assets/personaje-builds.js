@@ -1,4 +1,4 @@
-import { $, esc, ico, modal, announce } from './core.js?v=797674b03b';
+import { $, esc, ico, modal, announce } from './core.js?v=41b7d4ef79';
 let X;                                         // {api, MSG, img, gcls, GRADE, nf, tab} que pasa personaje.js
 export const init = ctx => { X = ctx; };
 /* ---------- tablas ---------- */
