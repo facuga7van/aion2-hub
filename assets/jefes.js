@@ -2,7 +2,7 @@ import {
 $, esc, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, toast, announce, store, versioned, norm, profile, serverName,
 FACCION, serverFaccion, setFaccion, ROOT, SCHEDULE, maintWindows, bellButton, getBell, setTimers, registerPalette, registerKey, partsIn, wallToUtc, displayTz,
 HUB_API, LNA_MSG, lnaBlocked, gname, galt, gboth, gameLang, modal, DATA, MIN, HOUR, DAY,
-} from './core.js?v=40258e9f3e';
+} from './core.js?v=d624ec9232';
 const D = JSON.parse($('#page-data').textContent), WIN = D.windowMin * MIN, KEEP = 30 * MIN, TOL = 3 * MIN;
 const DR = D.drops, IT = DR.items;
 const BOSSES = D.bosses.map(b => ({ ...b, fac: b.faction === 'Elyos' ? 'elyos' : 'asmodian', cyc: b.respawnMin * MIN, world: b.respawnSource === 'oficial', tier: DR.bosses[b.id]?.t || 3, top: DR.bosses[b.id]?.t === 1, hay: norm(`${gboth(b)} ${gboth(b, 'teleport')}`) }));
@@ -234,8 +234,8 @@ paintDrops();
 await done;
 dpB = dpBox = null;
 }
-function row(b, tm, now, { lv = false } = {}) {
-const s = tm ? state(tm, now) : 'none', ap = tm?.src === 'com' ? '≈ ' : '';
+function row(b, tm, now, { lv = false, wait = false } = {}) {
+const s = tm ? state(tm, now) : wait ? 'wait' : 'none', ap = tm?.src === 'com' ? '≈ ' : '';
 const at = tm && ap + fmtClock(tm.start, { now }), win = tm && ap + span(tm.start, tm.end, now);   // Questlog da la hora; tu kill, la ventana
 const src = tm?.src === 'vos' ? ' <em class="src vos" title="Tu “Lo maté” es más nuevo que el dato en vivo">Vos</em>'
 : tm?.src === 'com' ? ` <em class="src com" title="Lo reportan otros jugadores de ${esc(serverName(srv()))} (confianza ${(CONF[tm.c.confidence] || tm.c.confidence).toLowerCase()}). No es un horario oficial.">≈ Estimado</em>` : '';
@@ -246,6 +246,7 @@ window: ['<b class="jf-big">Puede estar</b>', `cierra en <span class="cd" data-l
 spawns: [`<span class="jf-l">Sale en</span> <b class="jf-big cd" data-left="${tm?.start}"></b>`, `<i class="jf-sep">· </i>${at}`, tm?.src === 'ql' ? `Sale ${at}` : `Sale entre ${win}`],
 stale: [`<s class="jf-big">${at}</s>`, 'Sin confirmar', 'Hubo mantenimiento después de este dato: puede no valer'],
 none: ['<b class="jf-big">Sin datos</b>', '', 'Sin dato en vivo de este jefe en tu server'],
+wait: ['<b class="jf-big">Buscando…</b>', '', 'Buscando el dato en vivo de tu server'],
 }[s];
 const denyBtn = tm?.src === 'com' && s !== 'stale' && com() === 'compartir'
 ? '<button type="button" class="btn ghost jf-deny" data-deny title="Fuiste y no estaba muerto, o el reporte no cierra: le resta confianza">No estaba</button>' : '';
@@ -261,7 +262,6 @@ ${b.top ? pic(b, 192, 96) : pic(b, 80, 40)}
 <span class="jf-cy"><i style="--p:${cyc(tm, b, now).toFixed(4)}"></i></span>` : `<button type="button" class="jf-mb" data-menu aria-haspopup="dialog" aria-label="Más: ver drops, fijar u ocultar ${esc(gname(b))}" title="Ver drops, fijar arriba u ocultar"><svg aria-hidden="true"><use href="#i-more"/></svg></button>`}</li>`;
 }
 function paint() {
-if (held) return;
 const now = Date.now(), f = viewFac(), q = norm($('#jf-q').value).trim(), hit = b => !q || b.hay.includes(q), K = KILLS.get().k;
 const fe = document.activeElement, fb = fe?.closest?.('[data-boss]')?.dataset.boss, fgt = fe?.matches?.('[data-gt]') ? '[data-gt]' : fe?.matches?.('[data-hid]') ? '[data-hid]' : null;
 const fsel = !fb ? null : fe.matches('[data-kill]') ? '[data-kill]' : fe.matches('.bell') ? '.bell' : fe.matches('[data-deny]') ? '[data-deny]' : fe.matches('[data-menu]') ? '[data-menu]'
@@ -274,7 +274,14 @@ const tm = timer(b, now, K);
 if (tm) for (const x of [tm.start - SOON, tm.start, tm.end, tm.end + KEEP, tm.maint]) if (x > now && x < nextChange) nextChange = x;
 if (b.fac === f) (b.top ? world : rest).push([b, tm]);
 }
-const rk = ([, tm]) => tm ? RANK[state(tm, now)] : RANK.none;
+const why = () => { $('#jf-world-why').innerHTML = `sueltan equipo ${grade('Unique')}, el mejor de campo`; };
+if (held) {
+$('#jf-world').hidden = false; why();
+$('#jf-world-l').innerHTML = world.map(([b, tm]) => row(b, tm, now, { wait: true })).join('');
+bindRows();
+return;
+}
+const rk =([, tm]) => tm ? RANK[state(tm, now)] : RANK.none;
 rest.sort((a, c) => rk(a) - rk(c) || ((a[1]?.start || 0) - (c[1]?.start || 0)) * (rk(a) === RANK.alive ? -1 : 1));
 publish(now, K);
 const o = ord(), fv = favs(), oc = ocultos(), all = rest.filter(([b]) => hit(b));
@@ -296,22 +303,25 @@ hidOpen && hid.length && grp('hid', 'Ocultos', hid)].filter(Boolean).join('');
 $('#jf-world').hidden = $('#jf-all').hidden = false;   // ocultas hasta el primer pintado: así nada visible se corre (CLS 0)
 $('#jf-world-l').innerHTML = world.map(([b, tm]) => row(b, tm, now)).join('');
 $('#jf-all-h').innerHTML = `De campo <small>${shown.length}</small> <span class="jf-hs">set ${grade('Legend')} o ${grade('Rare')}, a veces una pet</span>`;
-$('#jf-world-why').innerHTML = `sueltan equipo ${grade('Unique')}, el mejor de campo`;
+why();
 $('#jf-ord').value = o;
 $('#jf-all-l').innerHTML = (html || (q ? `<p class="jf-empty">Ningún jefe ${FACCION[f]} con “${esc($('#jf-q').value)}”.</p>` : ''))
 + (hid.length ? `<p class="jf-hidf"><button type="button" class="linkbtn" data-hid aria-expanded="${hidOpen}">${hid.length} ${hid.length > 1 ? 'ocultos' : 'oculto'} · ${hidOpen ? 'Esconder' : 'Mostrar'}</button></p>` : '');
-for (const li of $('#jf-main').querySelectorAll('[data-boss]')) {
-const b = BY.get(+li.dataset.boss), l = $('[data-left]', li), a = $('[data-ago]', li);
-if (l) { const t = +l.dataset.left; bind(l, n => jLeft(t - n, n)); }
-if (a) bind(a, ago(+a.dataset.ago));
-$('.jf-b', li).append(bellButton(bellId(b), gname(b), /s-(none|stale)/.test(li.className) ? { hint: 'Suena cuando haya timer.' } : {}));
-}
+bindRows();
 nextCyc = now + MIN;
 const rv = $(`#b-${roveId}`);
 (rv?.checkVisibility() ? rv : visRows()[0])?.setAttribute('tabindex', '0');   // una fila alcanzable con Tab; ↑↓ recorre
 if (fb) ($(`#b-${fb} ${fsel || ''}`.trim()) || null)?.focus();
 else if (fgt) $(fgt)?.focus();
 if (km && KM.matches(':popover-open')) placeKm();
+}
+function bindRows() {
+for (const li of $('#jf-main').querySelectorAll('[data-boss]')) {
+const b = BY.get(+li.dataset.boss), l = $('[data-left]', li), a = $('[data-ago]', li);
+if (l) { const t = +l.dataset.left; bind(l, n => jLeft(t - n, n)); }
+if (a) bind(a, ago(+a.dataset.ago));
+$('.jf-b', li).append(bellButton(bellId(b), gname(b), /s-(none|wait|stale)/.test(li.className) ? { hint: 'Suena cuando haya timer.' } : {}));
+}
 }
 const visRows = () => [...$('#jf-main').querySelectorAll('[data-boss]')].filter(li => li.checkVisibility());
 let nextCyc = 0;

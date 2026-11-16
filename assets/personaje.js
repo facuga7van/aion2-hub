@@ -1,8 +1,8 @@
 import {
 $, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, setTitle, myChars, gname, galt, gclass, gameLang, on,
-} from './core.js?v=40258e9f3e';
-import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=40258e9f3e';
+} from './core.js?v=d624ec9232';
+import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=d624ec9232';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -98,6 +98,8 @@ if (r.status === 404) throw new ApiError('notfound', body.error);
 throw new ApiError('server', body.error || `El servidor respondió ${r.status}.`);
 } finally { clearTimeout(slow); }
 }
+const quick = (path, params) => fetch(API + path + '?' + new URLSearchParams(params), { cache: 'force-cache', signal: AbortSignal.timeout(300) })
+.then(r => r.ok ? r.json() : null).catch(() => null);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 async function pool(tasks, onProg) {
 const res = new Array(tasks.length);
@@ -301,12 +303,13 @@ openChar(p);
 }
 addEventListener('hashchange', route);
 async function openChar(p, fresh = false) {
-const seq = ++req, k = keyOf(p.r, p.s, p.n), where = `${serverName(p.s)} (${regName(p.r)})`;
+const seq = ++req, k = keyOf(p.r, p.s, p.n), where = `${serverName(p.s)} (${regName(p.r)})`, known = ids.get(k.toLowerCase());
 retry = () => openChar(p, fresh);
 if (!fresh) busy(true, `Abriendo a <b>${esc(p.n)}</b> en ${esc(where)}…`);
 else { const rb = $('#pj-ref'); rb.disabled = true; rb.textContent = 'Refrescando…'; }
-try {
-let id = ids.get(k.toLowerCase()), d;
+const early = !fresh && known ? quick('/api/character', { id: known, server: p.s, region: p.r }) : null;
+const net = (async () => {
+let id = known, d;
 for (let tries = 0; !d; tries++) {
 if (!id) {
 const res = await api('/api/search', { q: p.n, region: p.r, server: p.s });
@@ -317,21 +320,34 @@ id = hit.characterId;
 try { d = await api('/api/character', { id, server: p.s, region: p.r, ...(fresh && { fresh: 1 }) }); }
 catch (e) { if (e.kind !== 'notfound' || tries) throw e; ids.delete(k.toLowerCase()); id = null; }   // id guardado viejo: buscar de nuevo
 }
-if (seq !== req) return;
+return [d, id];
+})();
+net.catch(() => {});
+const prev = cur;
+let shown = null;
+const show = (d, id) => {
 const pr = d.profile, ref = { k: keyOf(p.r, p.s, pr.name), r: p.r, s: p.s, n: pr.name, id, c: pr.class, l: pr.level, f: fac(pr.raceId), i: pr.image };
 ids.set(ref.k.toLowerCase(), id);
-const prev = cur;
-cur = { ref, d, x: prev && same(prev.ref, ref) && prev.d.cachedAt === d.cachedAt ? prev.x : null };
+const was = cur;
+cur = { ref, d, x: was && same(was.ref, ref) && was.d.cachedAt === d.cachedAt ? was.x : null };
 if (hashOf(ref.k) !== location.hash) history.replaceState(null, '', hashOf(ref.k));
 remember(ref);
 paintChar();
 loadDetail(cur);
 loadCurated(cur);
-if (fresh) toast(prev && prev.d.cachedAt === d.cachedAt ? 'La ficha oficial todavía no deja refrescar este personaje. Probá en unos minutos.' : `Ficha de <b>${esc(pr.name)}</b> actualizada.`);
-else { scrollTo({ top: 0 }); announce(`Ficha de ${pr.name}`); }
+if (!shown && !fresh) { scrollTo({ top: 0 }); announce(`Ficha de ${pr.name}`); }
+shown = d;
+};
+try {
+const hit = early && await early;
+if (hit?.profile && seq === req) show(hit, known);
+const [d, id] = await net;
+if (seq !== req) return;
+if (!shown || d.cachedAt !== shown.cachedAt) show(d, id);
+if (fresh) toast(prev && prev.d.cachedAt === d.cachedAt ? 'La ficha oficial todavía no deja refrescar este personaje. Probá en unos minutos.' : `Ficha de <b>${esc(d.profile.name)}</b> actualizada.`);
 } catch (e) {
 if (seq !== req) return;
-if (fresh && cur) { toast(esc((MSG[e.kind] || MSG.server)(e)[0]) + '. La ficha que ves es la de antes.'); return; }
+if ((fresh || shown) && cur) { toast(esc((MSG[e.kind] || MSG.server)(e)[0]) + '. La ficha que ves es la de antes.'); return; }
 paintError(e, [`No encontré a ${p.n} en ${where}`, 'Puede que haya cambiado de nombre o de server, o que el enlace tenga un error. Buscalo arriba.']);
 }
 }
@@ -343,7 +359,9 @@ if (c.x) return;
 let x = detailCache.get(key);
 if (!x) {
 c.prog = [0, 1];
-try { x = await api('/api/sheet', q, 60000); } catch (e) {
+const hit = await quick('/api/sheet', q);                // guardado y del mismo momento que la ficha: sirve tal cual
+if (hit?.cachedAt === c.d.cachedAt) x = hit;
+else try { x = await api('/api/sheet', q, 60000); } catch (e) {
 if (e.kind !== 'notfound') { c.err = e; if (cur === c) paintPanel(); return; }
 const eq = c.d.equipment || [], bd = c.d.daevanion || [];
 const order = [...bd.slice(0, 4).map(b => ['b', b]), ...eq.filter(e => e.slot <= 14 || isArcana(e.slot)).map(e => ['i', e]),
@@ -366,8 +384,14 @@ async function loadCurated(c) {
 const cls = CLS_KEY[c.d.profile.class];
 if (!cls || CUR.has(cls)) return;
 CUR.set(cls, null);
-try { CUR.set(cls, await api('/api/curated', { class: cls })); } catch { CUR.delete(cls); return; }
-if (cur === c) { paintBuild(); if (TAB === 'daevanion') paintPanel(); }
+const paint = () => { if (cur === c) { paintBuild(); if (TAB === 'daevanion') paintPanel(); } };
+const hit = quick('/api/curated', { class: cls }), net = api('/api/curated', { class: cls });   // lo guardado ya; la de ahora (ETag) si cambió
+net.catch(() => {});
+const h = await hit;
+if (h) { CUR.set(cls, h); paint(); }
+let v; try { v = await net; } catch { if (!h) CUR.delete(cls); return; }
+if (h && JSON.stringify(v) === JSON.stringify(h)) return;
+CUR.set(cls, v); paint();
 }
 const curated = c => CUR.get(CLS_KEY[c.d.profile.class]) || null;
 const topSkills = (c, k) => topLevels(curated(c)?.top, k);
