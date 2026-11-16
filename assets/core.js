@@ -1101,6 +1101,11 @@ else if (e.target.closest('#hub-warn [data-x]')) $('#hub-warn').hidden = true;
 startClock();
 tick();
 if (!store.get('hub-onboarded', 0) && !html.classList.contains('mini') && !store.get('hub-server', null)) openSettings({ welcome: true });
+else if (!store.get('hub-cuenta', null) && !store.get('hub-cuenta-ofrecida', 0) && !html.classList.contains('mini')) {
+store.set('hub-cuenta-ofrecida', 1);
+const oc = () => { if (!$('dialog[open]')) loadCuenta().then(m => m.open('crear', true), () => {}); };
+document.readyState === 'complete' ? oc() : addEventListener('load', oc, { once: true });
+}
 if (store.get('hub-cuenta', null)) { const lc = () => loadCuenta().catch(() => {}); document.readyState === 'complete' ? lc() : addEventListener('load', lc, { once: true }); } // con sesión: sync
 if ('serviceWorker' in navigator && location.protocol.startsWith('http') && !DATA.noSW)
 addEventListener('load', () => setTimeout(() => navigator.serviceWorker.register(ROOT + 'sw.js').catch(() => {}), 3000), { once: true });

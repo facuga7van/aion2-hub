@@ -1,4 +1,4 @@
-import { $, $$, esc, store, on, emit, modal, toast, bind, myChars, HUB_API, lnaBlocked, LNA_MSG, PAGE } from './core.js?v=42655a9e86';
+import { $, $$, esc, store, on, emit, modal, toast, bind, myChars, HUB_API, lnaBlocked, LNA_MSG, PAGE } from './core.js?v=b3fa500e7b';
 const VQ = new URL(import.meta.url).search;
 const NO_SYNC = new Set(['hub-cuenta', 'hub-sync', 'hub-live', 'hub-api', 'hub-pj-api', 'hub-alertas-log', 'hub-cid', 'hub-ahora-tl',
 'pets-backup', 'pets-bak-t', 'pets-dirty', 'pets-fx', 'pets-questlog-char', 'pets-questlog-sync']);
@@ -383,22 +383,22 @@ $('[data-go]', p.el)?.click();
 return;
 }
 }, true);
-export function mount(host) {
+export function mount(host, view = 'entrar') {
 css();
 const el = document.createElement('div');
 el.className = 'cuenta';
 host.append(el);
-const p = { el, view: session() ? 'home' : 'entrar', msg: '' };
+const p = { el, view: session() ? 'home' : view, msg: '' };
 panels.add(p);
 el.addEventListener('click', e => onClick(p, e));
 el.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.matches('input')) { e.preventDefault(); $('[data-go]', el)?.click(); } });
 el.addEventListener('change', e => { if (e.target.name === 'qsel') { const o = $('.cu-otra', el); o.hidden = !!e.target.value; if (!o.hidden) $('input', o).focus(); } });
 paint(p);
 }
-export function open() {
+export function open(view, offer = false) {
 const box = document.createElement('div');
-const done = modal({ title: 'Cuenta', node: box, cls: 'cuenta-m', actions: [{ label: 'Cerrar', value: 'ok' }] });
-mount(box);
+const done = modal({ title: 'Cuenta', node: box, cls: 'cuenta-m', actions: [{ label: offer ? 'Ahora no' : 'Cerrar', value: 'ok' }] });
+mount(box, view);
 $('input', box)?.focus();
 return done;
 }
