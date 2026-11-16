@@ -1,7 +1,7 @@
 import {
 $, esc, ico, on, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal,
 characters, taskList, taskDone, setTaskDone, PJ, TK, profile, serverName, registerKey, prefs,
-} from './core.js?v=d8fdc4f8e6';
+} from './core.js?v=3417f65631';
 const PER = { daily: { t: 'Diarias', when: 'reset diario' }, weekly: { t: 'Semanales', when: 'reset del miércoles' } };
 let editing = false;
 const uid = () => Math.random().toString(36).slice(2, 9);

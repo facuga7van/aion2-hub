@@ -61,6 +61,11 @@ for (const k of ['region', 'server', 'faccion']) if (k in p) store.set('hub-' + 
 CACHE = null;
 emit('profile', profile());
 }
+export const HUB_API = (v => /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/.test(v) ? v : 'https://mora-server.tail3b8ec1.ts.net:8443')(String(store.get('hub-api', '') || '').replace(/\/$/, ''));
+export const LNA_MSG = 'Chrome bloqueó la conexión con el servidor de la Bitácora. Si te preguntó por "dispositivos de tu red local", tocá Permitir (pasa si usás Tailscale).';
+export async function lnaBlocked() {
+try { return ['denied', 'prompt'].includes((await navigator.permissions.query({ name: 'local-network-access' })).state); } catch { return false; }
+}
 export const serverList = (r = region()) => (SERVERS.regions[r] || []).map(([id, name]) => ({ id, name, faccion: String(id)[0] === '1' ? 'elyos' : 'asmodian' }));
 export function serverName(id) {
 for (const r in SERVERS.regions) for (const [sid, n] of SERVERS.regions[r]) if (sid === +id) return n;
@@ -446,6 +451,7 @@ return best;
 }
 export const storedTimers = (now = Date.now()) => (store.get('hub-timers', []) || []).filter(t => now < t.end && !(t.until && now >= t.until));
 export function setTimers(list) { store.set('hub-timers', list); syncTimers(); }
+const timerText = t => n => n < t.start ? [fmtLeft(t.start - n), n + leftNext(t.start - n)] : [t.liveText || 'ya puede estar', 0];
 function syncTimers() {
 const now = Date.now();
 for (const [id, it] of ITEMS) if (it.stored) ITEMS.delete(id);
@@ -477,12 +483,13 @@ if (l) l.href = dot ? DATA.favicon.dot : DATA.favicon.base;
 }
 /* ---------- campana (componente) ---------- */
 const leadTxt = l => l ? `${l} min antes` : 'al inicio';
-export function bellButton(id, label = alertable(id)?.label || id) {
+export function bellButton(id, label = alertable(id)?.label || id, { hint = '' } = {}) {
 const b = document.createElement('button');
 b.type = 'button';
 b.className = 'bell';
 b.dataset.bell = id;
 b.dataset.label = label;
+if (hint) b.dataset.hint = hint;
 b.setAttribute('aria-haspopup', 'dialog');
 paintBell(b);
 return b;
@@ -525,6 +532,7 @@ function paintMenu(m, id) {
 const L = getBell(id) || [], perm = window.Notification?.permission;
 m.innerHTML = `<p class="bm-t">Avisarme · <b>${esc(bmAnchor?.dataset.label || id)}</b></p>
 <div class="bm-leads" role="group" aria-label="Antelación">${LEADS.map(l => `<button type="button" data-lead="${l}" aria-pressed="${L.includes(l)}">${l ? l + ' min' : 'Al inicio'}</button>`).join('')}</div>
+${bmAnchor?.dataset.hint ? `<p class="bm-n">${esc(bmAnchor.dataset.hint)}</p>` : ''}
 ${perm === 'denied' ? '<p class="bm-n">El navegador bloqueó las notificaciones: te aviso en la página' + (A.sound ? ' y con sonido' : '') + '.</p>' : ''}
 ${isSilenced() ? '<p class="bm-n">Ahora estás en silencio: el aviso aparece solo en la página.</p>' : ''}
 <div class="bm-f"><button type="button" class="linkbtn" data-test>Probar</button><button type="button" class="linkbtn danger" data-off>Sacar aviso</button></div>`;
@@ -554,7 +562,19 @@ const draw = () => {
 const now = Date.now(), L = upcoming(now, { count, minor });
 const ol = doc.createElement('ol');
 ol.className = 'up';
-for (const o of L) {
+const k = (live, start) => live ? 0 : start;
+const rows = [...L.map(o => [k(isLive(o, now), o.start), o]), ...storedTimers(now).filter(t => t.up).map(t => [k(now >= t.start, t.start), null, t])].sort((a, b) => a[0] - b[0]);
+for (const [, o, t] of rows) {
+if (t) {
+const li = doc.createElement('li'), live = now >= t.start;
+li.className = 'up-r up-tm' + (live ? ' live' : '');
+li.dataset.tm = t.id;
+li.innerHTML = `${ico('i-boss', 'up-i')}<span class="up-n"><span class="up-nt">${t.approx ? '≈ ' : ''}${esc(t.short || t.label)}</span>${t.src ? `<small class="up-st">${esc(t.src)}</small>` : ''}</span><time class="up-t" datetime="${new Date(t.start).toISOString()}">${live ? 'desde ' + fmtClock(t.start, { now, day: false }) : fmtClock(t.start, { now })}</time><span class="up-c cd"></span>`;
+if (bells) li.append(bellButton(t.id, t.label));
+bind($('.up-c', li), timerText(t));
+ol.append(li);
+continue;
+}
 const li = doc.createElement('li'), live = isLive(o, now), portal = live && o.entry > now;
 li.className = 'up-r' + (live ? ' live' : '') + (o.maint === 'quizas' ? ' quizas' : '');
 li.dataset.ev = o.id;
@@ -598,13 +618,13 @@ lab.textContent = 'Ahora';
 box.append(lab);
 if (live) box.append(stripItem(live, now, 'st-live'));
 next.forEach((o, i) => box.append(stripItem(o, now, 'st-next' + (i ? ' st-2' : ''))));
-const tm = storedTimers(now).sort((a, b) => a.start - b.start)[0];   // el timer suelto más cercano (Jefes)
+const tm = storedTimers(now).sort((a, b) => (a.start <= now) - (b.start <= now) || a.start - b.start)[0];
 if (tm) {
 const a = document.createElement('a');
 a.className = 'st-i st-timer';
 a.href = tm.href || ROOT;
 a.innerHTML = `<b>${tm.approx ? '≈ ' : ''}${esc(tm.short || tm.label)}</b><span class="cd"></span><small>${fmtClock(tm.start, { now })}</small>`;
-bind($('.cd', a), n => n < tm.start ? [fmtLeft(tm.start - n), n + leftNext(tm.start - n)] : ['ya puede estar', 0]);
+bind($('.cd', a), timerText(tm));
 box.append(a);
 }
 const rd =nextReset('daily', now), rs = document.createElement('a');

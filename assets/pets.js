@@ -1,4 +1,4 @@
-import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, setProfile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton } from './core.js?v=d8fdc4f8e6';
+import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, setProfile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton } from './core.js?v=3417f65631';
 const VQ = new URL(import.meta.url).search;  // ?v=<hash>: los módulos lazy van con la misma versión
 const D = JSON.parse($('#pets-data').textContent);
 const ALL = D.pets, BY = new Map(ALL.map(p => [p.id, p]));
@@ -20,7 +20,12 @@ const toast = (html, ms = 3600, fn, label = 'Deshacer') => hubToast(html, { ms, 
 const facOf = () => profile().faccion === 'asmodian' ? 'asmodian' : 'elyos';
 let FAC = facOf();
 const inF = p => p.f.includes(D.fac[FAC].k);
-const PETS = ALL.filter(inF);  // se reemplaza en el lugar al cambiar de facción (coleccion.js guarda la referencia)
+const SK = 'hub-pets-sin-especiales';
+let SIN = !!ls.get(SK, false);
+if (SIN && new URLSearchParams(location.search).get('genus') === 'especial') { SIN = false; ls.set(SK, false); }
+const isSp = p => SIN && p.genusKey === 'special';
+const vis = p => inF(p) && !isSp(p);
+const PETS = ALL.filter(vis);  // se reemplaza en el lugar al cambiar de facción o el toggle (coleccion.js guarda la referencia)
 let N = PETS.length;
 const catLabel = c => c.label.replace('{zona}', D.fac[FAC].riftName);
 const FNAME = { elyos: 'Elyos', asmodian: 'Asmodian', abismo: 'Abismo' };
@@ -60,7 +65,7 @@ const rank = p => p.nm.startsWith(F.q) ? 0 : TOK.every(t => p.nm.includes(t)) ? 
 const today = (() => { const t = new Date(); return Date.UTC(t.getFullYear(), t.getMonth(), t.getDate()); })();
 const daysTo = iso => { const [y, m, d] = iso.split('-').map(Number); return Math.round((Date.UTC(y, m - 1, d) - today) / 864e5); };
 $$('.fu .shop[data-until],.pcard[data-until]').forEach(li => li.classList.toggle('exp', daysTo(li.dataset.until) < 0));
-const dead = p => !p.chests.length && p.routes.length === 1 && p.routes[0].kind === 'shop' && (p.routes[0].unconfirmed || p.routes[0].paid || (p.routes[0].until && daysTo(p.routes[0].until) < 0));
+const dead = p => !p.routes.some(r => r.kind !== 'shop');
 /* ---------- filtros ---------- */
 const U = new URLSearchParams(location.search);
 const F = { q: '', qRaw: U.get('q') || '', ver: U.get('ver') || '', genus: U.get('genus') || '', cat: U.get('cat') || '', group: U.get('agrupar') || '', vista: U.get('vista') || '' };
@@ -71,6 +76,7 @@ qIn.value = F.qRaw; selG.value = F.genus; selC.value = F.cat; selGr.value = F.gr
 F.genus = selG.value; F.cat = selC.value; F.group = selGr.value;
 function match(p) {
 if (!inF(p)) return false;
+if (isSp(p)) return false;
 if (F.cat && p.cat !== F.cat) return false;
 if (F.genus && GSLUG[p.genusKey] !== F.genus) return false;
 const o = owned.has(p.id), m = isMax(p.id);
@@ -188,13 +194,13 @@ function counts() {
 const own = ownN(), mx = PETS.filter(p => isMax(p.id)).length;
 $('#hOwn').textContent = own; $('#hMax').textContent = mx;
 for (const s of SECTIONS.values()) {
-const ids = s._ids.filter(id => inF(BY.get(id))), o = ids.filter(id => owned.has(id)).length;
-$('.cap-x b', s).textContent = o;
+const ids = s._ids.filter(id => vis(BY.get(id))), o = ids.filter(id => owned.has(id)).length;
+$('.cap-x', s).innerHTML = `<b>${o}</b>/${ids.length}`;
 $('.bar i', s).style.setProperty('--w', (ids.length ? o / ids.length * 100 : 0) + '%');
 $('.cap-p', s).hidden = !ids.length;
 }
 const opt = (sel, key, label, ids) => { const o = sel.querySelector(`option[value="${key}"]`); if (o) o.textContent = `${label} ${ids.filter(id => owned.has(id)).length}/${ids.length}`; };
-for (const g of D.genusOrder) opt(selG, GSLUG[g], G[g].label, PETS.filter(p => p.genusKey === g).map(p => p.id));
+for (const g of D.genusOrder) opt(selG, GSLUG[g], G[g].label, ALL.filter(p => inF(p) && p.genusKey === g).map(p => p.id));  // Especial cuenta aunque esté oculta
 const chip = Object.fromEntries([...selC.options].map(o => [o.value, o.textContent.replace(/ \d+\/\d+$/, '')]));
 for (const c of D.cats) opt(selC, c.key, chip[c.key], PETS.filter(p => p.cat === c.key).map(p => p.id));
 $('#exBars').innerHTML = D.cats.map(c => {
@@ -244,7 +250,7 @@ const v = $$('.pcard:not([hidden])', album);
 if (v.length === 1 && TOK.length) openPet(v[0].dataset.id);
 } else if (e.key === 'ArrowDown' && first()) { e.preventDefault(); $('h3 a', first()).focus(); }
 });
-selG.addEventListener('change', () => { F.genus = selG.value; apply(); });
+selG.addEventListener('change', () => { F.genus = selG.value; if (F.genus === 'especial' && SIN) setSin(false); else apply(); });
 selC.addEventListener('change', () => { F.cat = selC.value; apply(); });
 selGr.addEventListener('change', () => { F.group = selGr.value; regroup(); apply(); });
 $('#ver').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { F.ver = b.dataset.v; apply(); } });
@@ -279,11 +285,16 @@ const copy = (text, msg, field) => (navigator.clipboard ? navigator.clipboard.wr
 .then(() => (msg && toast(msg), true), () => { field?.select?.(); toast(`No pude copiar. Copialo a mano: <code>${esc(text)}</code>`, 12000); return false; });
 /* ---------- próxima presa + plumaje ---------- */
 const presaVit = $('#presaVit'), presaImg = $('#presaImg');
-let presaId = null;
+let presaId = null, bag = [];
+const meta = p => !dead(p) && (!owned.has(p.id) || !isMax(p.id));
 function pickPresa() {
-const not = p => p.id !== presaId && !dead(p);
-for (const pool of [PETS.filter(p => !owned.has(p.id) && not(p)), PETS.filter(p => owned.has(p.id) && !isMax(p.id) && not(p)), PETS.filter(not)])
-if (pool.length) return pool[Math.random() * pool.length | 0];
+for (let i = 0; i < 2; i++) {
+while (bag.length) { const p = bag.pop(); if (p.id !== presaId && vis(p) && meta(p)) return p; }
+bag = PETS.filter(meta);
+for (let j = bag.length - 1; j > 0; j--) { const k = Math.random() * (j + 1) | 0; [bag[j], bag[k]] = [bag[k], bag[j]]; }
+}
+const all = PETS.filter(p => !dead(p) && p.id !== presaId);
+return all[Math.random() * all.length | 0] || BY.get(presaId) || PETS[0];
 }
 function presaLabel() {
 if (!presaId) return;
@@ -629,17 +640,27 @@ function facUI() {
 document.documentElement.dataset.pf = FAC;
 for (const b of $$('#pf button')) b.setAttribute('aria-pressed', b.dataset.pf === FAC);
 }
+function relist() {
+PETS.splice(0, PETS.length, ...ALL.filter(vis)); N = PETS.length;
+if (F.group) regroup();
+refreshAll(); apply();
+if (!presaId || !vis(BY.get(presaId))) showPresa(pickPresa(), true);
+colM?.facChanged?.();
+}
 function setFac(f) {
 if (f === FAC) return;
 FAC = f;
-PETS.splice(0, PETS.length, ...ALL.filter(inF)); N = PETS.length;
-facUI();
-if (F.group) regroup();
-refreshAll(); apply();
-if (!presaId || !inF(BY.get(presaId))) showPresa(pickPresa(), true);
-colM?.facChanged?.();
+facUI(); relist();
 if (planOn) mountPlan();
 }
+function sinUI() { document.documentElement.toggleAttribute('data-sinesp', SIN); $('#sinEsp').setAttribute('aria-pressed', SIN); }
+function setSin(on) {
+SIN = on; ls.set(SK, on);
+if (on && F.genus === 'especial') { F.genus = ''; selG.value = ''; }
+sinUI(); relist();
+}
+$('#sinEsp').addEventListener('click', () => setSin(!SIN));
+$('#espShow').addEventListener('click', () => setSin(false));
 $('#pf').addEventListener('click', e => {
 const b = e.target.closest('[data-pf]'); if (!b) return;
 setProfile({ faccion: b.dataset.pf });  // emite 'profile' → setFac
@@ -647,11 +668,11 @@ setProfile({ faccion: b.dataset.pf });  // emite 'profile' → setFac
 on('profile', () => setFac(facOf()));
 /* ---------- arranque ---------- */
 new ResizeObserver(([e]) => document.documentElement.style.setProperty('--barh', Math.round(e.borderBoxSize?.[0]?.blockSize ?? e.target.offsetHeight) + 'px')).observe($('#barra'));
-facUI();
+facUI(); sinUI();
 if (F.group) regroup();
 refreshAll();
 apply();
-{ const ip = BY.get(presaImg.dataset.id); showPresa(ip && inF(ip) && !dead(ip) ? ip : pickPresa(), false); }
+{ const ip = BY.get(presaImg.dataset.id); showPresa(ip && vis(ip) && !dead(ip) ? ip : pickPresa(), false); }
 fxUI();
 $('#hSync').hidden = !ls.get('pets-questlog-sync', 0);
 if (owned.size) nudge();

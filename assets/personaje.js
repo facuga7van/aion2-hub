@@ -1,7 +1,7 @@
 import {
 $, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION,
-PJ, TK, ROOT, toast, modal, announce, registerKey,
-} from './core.js?v=d8fdc4f8e6';
+PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, $$,
+} from './core.js?v=3417f65631';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -28,12 +28,14 @@ async function api(path, params) {
 const ctl = new AbortController(), slow = setTimeout(() => ctl.abort(), 15000);
 const main = fetch(API + path + '?' + new URLSearchParams(params), { signal: ctl.signal });
 main.catch(() => {});
+let net = false;                                       // TypeError = no hubo conexión (red, o Chrome bloqueó la red local)
+const down = e => { net ||= e?.name === 'TypeError'; return false; };
 try {
 const up = await Promise.race([
-main.then(() => true, () => false),
-fetch(API + '/health', { signal: AbortSignal.timeout(3000), cache: 'no-store' }).then(r => r.ok, () => false),
+main.then(() => true, down),
+fetch(API + '/health', { signal: AbortSignal.timeout(3000), cache: 'no-store' }).then(r => r.ok, down),
 ]);
-if (!up) { ctl.abort(); throw new ApiError('offline'); }
+if (!up) { ctl.abort(); throw new ApiError('offline', '', { lna: net && await lnaBlocked() }); }
 let r;
 try { r = await main; } catch { throw new ApiError(ctl.signal.aborted ? 'slow' : 'offline'); }
 if (r.ok) return await r.json();
@@ -91,7 +93,7 @@ out.setAttribute('aria-busy', String(on));
 if (on) out.innerHTML = `<div class="pj-load" role="status"><span class="pj-spin" aria-hidden="true"></span>${html}</div>`;
 }
 const MSG = {
-offline: () => ['Sin conexión con el servidor', 'No pude hablar con el servidor de la Bitácora en 3 segundos. Los horarios, avisos y tareas siguen andando; los personajes necesitan conexión.'],
+offline: e => ['Sin conexión con el servidor', e.lna ? LNA_MSG : 'No pude hablar con el servidor de la Bitácora en 3 segundos. Los horarios, avisos y tareas siguen andando; los personajes necesitan conexión.'],
 slow: () => ['El servidor tardó demasiado', 'PLAYNC está lento o saturado. Probá de nuevo en un rato.'],
 limit: e => ['Muchas consultas seguidas', `El servidor limita las búsquedas para no saturar a PLAYNC. Probá de nuevo en ${e.wait} segundos.`],
 server: e => ['PLAYNC no respondió bien', e.message || 'Probá de nuevo en un rato.'],
@@ -149,6 +151,8 @@ ${mio?.k ? `<section aria-labelledby="pj-h-mio"><div class="pj-sh"><h2 id="pj-h-
 ${favs.length ? `<ul class="pj-list">${favs.map(x => card(x, true)).join('')}</ul>` : `<p class="pj-empty">Tocá ${ico('i-star')} en una ficha y queda acá, y en la búsqueda (<kbd>/</kbd>) desde cualquier sección.</p>`}</section>
 <section aria-labelledby="pj-h-rec"><div class="pj-sh"><h2 id="pj-h-rec">Recientes</h2>${rec.length ? '<button type="button" class="linkbtn" id="pj-clear">Borrar recientes</button>' : ''}</div>
 ${rec.length ? `<ul class="pj-list">${rec.map(x => card(x)).join('')}</ul>` : '<p class="pj-empty">Las últimas 8 fichas que abras quedan acá.</p>'}</section>
+<section aria-labelledby="pj-h-bl"><div class="pj-sh"><h2 id="pj-h-bl">Builds de la comunidad</h2></div>
+<p class="pj-empty"><a href="#builds">Ver las builds más votadas por clase y tipo</a> (PvE, PvP, healer…), armadas por jugadores en questlog.gg.</p></section>
 ${mio?.k ? '' : '<p class="pj-tip0">Escribí el nombre arriba y Enter. Busca en la región elegida; si hay homónimos, elegís por server. Con <b>Es mi personaje</b> la Bitácora queda en tu región, server y facción.</p>'}
 </div>`;
 }
@@ -163,6 +167,14 @@ return srv && NAME.test(parts[2]) ? { r, s: srv.id, n: parts[2] } : null;
 function route() {
 if (tip.matches(':popover-open')) tip.hidePopover();
 if (!location.hash || location.hash === '#') { req++; cur = null; last ? paintResults() : paintHome(); return; }
+const bl = location.hash.match(/^#builds(?:\/([a-z]+))?$/);
+if (bl) {                                              // builds de la comunidad sin personaje: #builds[/<clase de questlog>]
+req++; cur = null;
+out.setAttribute('aria-busy', 'false');
+out.innerHTML = '<div class="pj-x"></div>';
+mod().then(m => { if (location.hash === bl[0]) m.view('builds', $('.pj-x', out), null, { cls: bl[1] || m.clsOf(store.get(MIO, null)?.c) }); });
+return;
+}
 const p = parseHash();
 if (!p) {
 req++;
@@ -268,7 +280,9 @@ ${mioBtn(ref)}
 </div>
 <p class="pj-upd"><span id="pj-ago" class="cd"></span><button type="button" class="linkbtn" id="pj-ref"></button><a href="${esc(kisk)}" target="_blank" rel="noopener noreferrer">Ver puntaje en kisk${ico('i-ext')}</a></p>
 </header>
-<div class="pj-grid">
+<nav class="seg pj-tabs" aria-label="Vistas de la ficha">${[['ficha', 'Ficha'], ['builds', 'Builds'], ['comparar', 'Comparar con build'], ['calidad', 'Calidad del equipo']].map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${k === 'ficha'}">${l}</button>`).join('')}</nav>
+<div class="pj-x" id="pj-x" hidden></div>
+<div class="pj-grid" id="pj-grid">
 <section class="card pj-sec pj-eq" aria-labelledby="pj-h-eq"><h2 id="pj-h-eq">Equipo <small>Tocá una pieza para ver sus stats</small></h2>${equipHtml(d.equipment || [])}</section>
 <div class="pj-side">
 <section class="card pj-sec" aria-labelledby="pj-h-dae"><h2 id="pj-h-dae">Daevanion <small>Tocá un tablero</small></h2>
@@ -338,7 +352,23 @@ toast(`Sumé a <b>${esc(ref.n)}</b> a Tareas.`, { action: { label: 'Ir a Tareas'
 } else if (e.target.closest('#pj-ref')) openChar({ r: ref.r, s: ref.s, n: ref.n }, true);
 else if (e.target.closest('[data-slot]')) showItem(e.target.closest('[data-slot]'));
 else if (e.target.closest('[data-board]')) showBoard(d.daevanion[+e.target.closest('[data-board]').dataset.board]);
+else if (e.target.closest('[data-tab]')) tab(e.target.closest('[data-tab]').dataset.tab);
 });
+/* ---------- builds, comparar y calidad (lazy: personaje-builds.js) ---------- */
+const VQ = new URL(import.meta.url).search;              // ?v=<hash>: el módulo lazy va con la misma versión
+let modP = null;
+const mod = () => modP ||= import('./personaje-builds.js' + VQ).then(m => { m.init({ api, MSG, img, gcls, GRADE, nf, tab }); return m; }, e => { modP = null; throw e; });
+async function tab(t, opt) {
+if (!cur || !$('#pj-x')) return;
+for (const b of $$('.pj-tabs button')) b.setAttribute('aria-pressed', String(b.dataset.tab === t));
+const x = $('#pj-x'), c = cur;
+$('#pj-grid').hidden = t !== 'ficha';
+x.hidden = t === 'ficha';
+if (t === 'ficha') return;
+x.innerHTML = '<p class="pj-load"><span class="pj-spin" aria-hidden="true"></span>Cargando…</p>';
+try { const m = await mod(); if (cur === c && !x.hidden) m.view(t, x, c, opt); }
+catch { x.innerHTML = '<p class="tip-err">No pude cargar esta vista. Revisá la conexión y recargá la página.</p>'; }
+}
 /* ---------- tooltip de ítem (lazy, /api/item) ---------- */
 const tip = Object.assign(document.createElement('div'), { id: 'pj-tip', className: 'pj-tip', tabIndex: -1 });
 tip.setAttribute('popover', 'auto');
