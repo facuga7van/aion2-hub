@@ -1,7 +1,7 @@
 import {
 $, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, $$, setTitle,
-} from './core.js?v=41b7d4ef79';
+} from './core.js?v=2185373a11';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -161,8 +161,8 @@ ${mio?.k ? `<section aria-labelledby="pj-h-mio"><div class="pj-sh"><h2 id="pj-h-
 ${favs.length ? `<ul class="pj-list">${favs.map(x => card(x, true)).join('')}</ul>` : `<p class="pj-empty">Tocá ${ico('i-star')} en una ficha y queda acá, y en la búsqueda (<kbd>/</kbd>) desde cualquier sección.</p>`}</section>
 <section aria-labelledby="pj-h-rec"><div class="pj-sh"><h2 id="pj-h-rec">Recientes</h2>${rec.length ? '<button type="button" class="linkbtn" id="pj-clear">Borrar recientes</button>' : ''}</div>
 ${rec.length ? `<ul class="pj-list">${rec.map(x => card(x)).join('')}</ul>` : '<p class="pj-empty">Las últimas 8 fichas que abras quedan acá.</p>'}</section>
-<section aria-labelledby="pj-h-bl"><div class="pj-sh"><h2 id="pj-h-bl">Builds de la comunidad</h2></div>
-<p class="pj-empty"><a href="#builds">Ver las builds más votadas por clase y tipo</a> (PvE, PvP, healer…), armadas por jugadores en questlog.gg.</p></section>
+<section aria-labelledby="pj-h-bl"><div class="pj-sh"><h2 id="pj-h-bl">Builds</h2></div>
+<p class="pj-empty"><a href="#builds">Ver lo que usan los top y las builds recomendadas</a> por clase y tipo (PvE, PvP, Support), más las de la comunidad.</p></section>
 ${mio?.k ? '' : '<p class="pj-tip0">Escribí el nombre arriba y Enter. Busca en la región elegida; si hay homónimos, elegís por server. Con <b>Es mi personaje</b> la Bitácora queda en tu región, server y facción.</p>'}
 </div>`;
 }
