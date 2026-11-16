@@ -1,6 +1,6 @@
-import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js?v=8f51688881';
-import { useful, skillParts } from './personaje-calc.js?v=8f51688881';
-let X;                                         // {api, MSG, img, gcls, GRADE, nf, curated, CLS_KEY} que pasa personaje.js
+import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js?v=c002377763';
+import { useful, skillParts } from './personaje-calc.js?v=c002377763';
+let X;                                         // {api, MSG, img, gcls, GRADE, nf, curated, CLS_KEY, gl} que pasa personaje.js
 export const init = ctx => { X = ctx; };
 const VQ = new URL(import.meta.url).search;   // ?v=<hash>: assets/pj-items.json con la misma versión
 const SK = (() => { try { return JSON.parse(document.getElementById('page-data')?.textContent || '{}'); } catch { return {}; } })();
@@ -112,11 +112,11 @@ return tile({ pic: gi(arcIco(c, a.set), 48), name: gname({ name: lb, nameEn: ARC
 return `<h3 class="pj-h">Lo que usan los mejores ${esc(CLS_ES[cls] || '')} <small>${KIND_ES[k]} · ${T.n} de los ${all} con más poder de combate de Global · semana del ${C.v.slice(8, 10)}/${C.v.slice(5, 7)}</small></h3>
 <div class="cu-top">
 <div class="cu-g">
-${card('cu-stc', `Estigmas <small>${cur ? 'tilde = ya la tenés subida' : 'atenuadas = solo algunos'}</small>`, `<ul class="cu-is cu-stig">${stig}</ul>`)}
-${arc ? card('cu-arcc', 'Arcanas <small>el set de cada carta</small>', `<ul class="cu-is cu-arc">${arc}</ul>`) : ''}
-${skills ? card('cu-skc', `Skills que más suben <small>nivel de los top${cur ? ' y el tuyo' : ''}</small>`, `<ul class="cu-is cu-sk">${skills}</ul>`) : ''}
+${card('cu-stc', `Estigmas${X.gl('stig')} <small>${cur ? 'tilde = ya la tenés subida' : 'atenuadas = solo algunos'}</small>`, `<ul class="cu-is cu-stig">${stig}</ul>`)}
+${arc ? card('cu-arcc', `Arcanas${X.gl('arc')} <small>el set de cada carta</small>`, `<ul class="cu-is cu-arc">${arc}</ul>`) : ''}
+${skills ? card('cu-skc', `Skills que más suben${X.gl('skills')} <small>nivel de los top${cur ? ' y el tuyo' : ''}</small>`, `<ul class="cu-is cu-sk">${skills}</ul>`) : ''}
 </div>
-<h4 class="pj-h4 cu-eh">Qué buscar en cada pieza <small>las líneas que llevan casi todos${cur?.x ? ' · tilde = ya la tenés' : ''}</small></h4>
+<h4 class="pj-h4 cu-eh">Qué buscar en cada pieza${X.gl('lineas')} <small>las líneas que llevan casi todos${cur?.x ? ' · tilde = ya la tenés' : ''}</small></h4>
 <ul class="cu-eq">${slots.map(piece).join('')}</ul>
 <details class="cu-more"><summary>Todas las líneas, pieza por pieza <small>también las que usan algunos</small></summary><ul class="cu-st">${rows}</ul></details>
 </div>`;

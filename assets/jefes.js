@@ -2,7 +2,7 @@ import {
 $, esc, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, toast, announce, store, versioned, norm, profile, serverName,
 FACCION, serverFaccion, setFaccion, ROOT, SCHEDULE, maintWindows, bellButton, getBell, setTimers, registerPalette, registerKey, partsIn, wallToUtc, displayTz,
 HUB_API, LNA_MSG, lnaBlocked, gname, galt, gboth, gameLang, modal, DATA, MIN, HOUR, DAY,
-} from './core.js?v=8f51688881';
+} from './core.js?v=c002377763';
 const D = JSON.parse($('#page-data').textContent), WIN = D.windowMin * MIN, KEEP = 30 * MIN, TOL = 3 * MIN;
 const DR = D.drops, IT = DR.items;
 const BOSSES = D.bosses.map(b => ({ ...b, fac: b.faction === 'Elyos' ? 'elyos' : 'asmodian', cyc: b.respawnMin * MIN, world: b.respawnSource === 'oficial', tier: DR.bosses[b.id]?.t || 3, top: DR.bosses[b.id]?.t === 1, hay: norm(`${gboth(b)} ${gboth(b, 'teleport')}`) }));
@@ -140,6 +140,7 @@ const GEAR = { arma: 0, accesorio: 1, armadura: 2 };   // orden de la tira: arma
 const IC = ROOT + 'assets/ic/';
 const gradeTxt = g => (gameLang() === 'en' ? DR.gradeEn[g] : GRADE_ES[g]) || g;
 const qcls = g => 'q-' + String(g || 'common').toLowerCase();
+const grade = g => `<b class="jf-gq ${qcls(g)}">${esc(gradeTxt(g))}</b>`;   // el grado con su color, para los encabezados
 const pct = n => n < 0.01 ? '<0,01 %' : `${n.toLocaleString('es-AR', { maximumFractionDigits: n >= 10 ? 0 : n >= 1 ? 1 : 2 })} %`;
 const icImg = (it, px) => `<img src="${IC}${esc(it.icon)}.webp" width="${px}" height="${px}" alt="" loading="lazy" decoding="async">`;
 const dropsOf = b => DR.bosses[b.id] || { t: 3, d: [], p: [] };
@@ -166,10 +167,11 @@ return btn ? `<button type="button" class="${c}" data-it="${id}" data-ch="${ch}"
 : `<span class="${c}" data-it="${id}" data-ch="${ch}">${icImg(IT[id], px)}</span>`;
 };
 function rowDrops(b) {
-const S = souls(b), P = pieces(b).slice(0, S.length ? 2 : 3);
-return `<span class="jf-d">${S.map(s => s.falta
+const S = souls(b), x = pieces(b)[0], it = x && IT[x.id];
+const set = it ? `<span class="jf-set ${qcls(it.grade)}" data-it="${x.id}" data-ch="${x.ch}">${icImg(it, 24)}<b><i>Set </i>${esc(gradeTxt(it.grade))}</b></span>` : '';
+return `<span class="jf-d">${set}${S.map(s => s.falta
 ? `<span class="jf-pet" data-it="${s.id}" data-ch="100">${icImg(IT[s.id], 26)}<b class="l">Pet que te falta</b><b class="s">Te falta</b></span>`
-: icon(s.id, 100, 26)).join('')}${P.map(x => icon(x.id, x.ch, 26)).join('')}</span>`;
+: icon(s.id, 100, 26)).join('')}</span>`;
 }
 const cardDrops = b => `<span class="jf-d" role="group" aria-label="Equipo que suelta">${pieces(b).map(x => icon(x.id, x.ch, 30, true)).join('')}<button type="button" class="linkbtn jf-vd" data-drops>Ver drops</button></span>`;
 const TIP = document.createElement('div');
@@ -293,7 +295,8 @@ const html = [pins.length && grp('fav', 'Fijados', pins),
 hidOpen && hid.length && grp('hid', 'Ocultos', hid)].filter(Boolean).join('');
 $('#jf-world').hidden = $('#jf-all').hidden = false;   // ocultas hasta el primer pintado: así nada visible se corre (CLS 0)
 $('#jf-world-l').innerHTML = world.map(([b, tm]) => row(b, tm, now)).join('');
-$('#jf-all-h').innerHTML = `De campo <small>${shown.length}</small>`;
+$('#jf-all-h').innerHTML = `De campo <small>${shown.length}</small> <span class="jf-hs">set ${grade('Legend')} o ${grade('Rare')}, a veces una pet</span>`;
+$('#jf-world-why').innerHTML = `sueltan equipo ${grade('Unique')}, el mejor de campo`;
 $('#jf-ord').value = o;
 $('#jf-all-l').innerHTML = (html || (q ? `<p class="jf-empty">Ningún jefe ${FACCION[f]} con “${esc($('#jf-q').value)}”.</p>` : ''))
 + (hid.length ? `<p class="jf-hidf"><button type="button" class="linkbtn" data-hid aria-expanded="${hidOpen}">${hid.length} ${hid.length > 1 ? 'ocultos' : 'oculto'} · ${hidOpen ? 'Esconder' : 'Mostrar'}</button></p>` : '');

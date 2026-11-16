@@ -1,4 +1,4 @@
-import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=8f51688881';
+import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=c002377763';
 const VQ = new URL(import.meta.url).search;  // ?v=<hash>: los módulos lazy van con la misma versión
 const D = JSON.parse($('#pets-data').textContent);
 const ALL = D.pets, BY = new Map(ALL.map(p => [p.id, p]));
@@ -221,7 +221,8 @@ return ids.length ? `<div style="color:var(--c-${c.key})" title="${esc(catLabel(
 }).join('');
 colM?.syncExport();
 const co = $('#cOwn'); if (co) co.textContent = own;
-$('#hLoad').hidden = !!own || !WIN; $('#hQuick').hidden = !!own; $('#hBak').hidden = !own;
+document.documentElement.toggleAttribute('data-pnew', !owned.size);  // primer paso (el HTML lo pone antes de pintar, sin saltos)
+$('#hBak').hidden = !own;
 dirtyUI();
 plan?.refresh();
 }
@@ -312,7 +313,8 @@ return all[Math.random() * all.length | 0] || BY.get(presaId) || PETS[0];
 function presaLabel() {
 if (!presaId) return;
 $('#presaLbl').textContent = !owned.has(presaId) ? 'Tu próxima presa' : !isMax(presaId) ? 'Para subir a nivel 3' : 'Daeva completo · de tu colección';
-$('#presaRt').textContent = ftxt($('.rt', CARD.get(presaId)));
+const rift = D.fac[FAC].riftName, rt = ftxt($('.rt', CARD.get(presaId)));
+$('#presaRt').textContent = BY.get(presaId).cat.startsWith(D.fac[FAC].rc) && rt.startsWith(rift) ? rt.replace(rift, rift + ' (Grieta)') : rt;
 $('#presaName').textContent = presaImg.alt = PN(BY.get(presaId));
 }
 function showPresa(p, anim) {
@@ -323,7 +325,7 @@ const url = imgUrl(p.id);
 if (anim && almaOn(presaVit)) A.morph(url, owned.has(p.id));
 else if (anim) { presaVit.classList.remove('swap'); void presaVit.offsetWidth; presaVit.classList.add('swap'); }
 presaImg.src = url;
-$('#presaName').href = '#pet-' + p.id;
+$('#presaName').href = $('#presaGo').href = '#pet-' + p.id;
 presaLabel();
 }
 $('#otra').addEventListener('click', () => showPresa(pickPresa(), true));
@@ -693,6 +695,7 @@ refreshAll(); apply(); colM?.facChanged?.();
 /* ---------- arranque ---------- */
 new ResizeObserver(([e]) => document.documentElement.style.setProperty('--barh', Math.round(e.borderBoxSize?.[0]?.blockSize ?? e.target.offsetHeight) + 'px')).observe($('#barra'));
 facUI(); sinUI();
+document.documentElement.toggleAttribute('data-pwin', WIN);  // la app de DPS es solo para Windows (el HTML ya lo puso; acá con la misma regla que la colección)
 if (F.group) regroup();
 refreshAll();
 apply();

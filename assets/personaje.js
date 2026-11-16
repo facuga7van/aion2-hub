@@ -1,8 +1,8 @@
 import {
 $, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, setTitle, myChars, gname, galt, gclass, gameLang, on,
-} from './core.js?v=8f51688881';
-import { GATES, gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=8f51688881';
+} from './core.js?v=c002377763';
+import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=c002377763';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -35,6 +35,45 @@ const b = base(src), local = /^(ICON_|Icon_|UT_Class_)/.test(b) && !/^Icon_Wing/
 return `<img class="${cls}" src="${esc(local ? IC + b + '.webp' : src)}"${local ? ` data-fb="${esc(src)}"` : ''} width="${sz}" height="${sz}" loading="lazy" decoding="async" alt="${esc(alt)}" referrerpolicy="no-referrer">`;
 }
 const icoGame = (name, sz, cls = '') => `<img class="${cls}" src="${IC}${name}.webp" width="${sz}" height="${sz}" loading="lazy" decoding="async" alt="">`;
+/* ---------- «¿Qué es?»: una línea por término del juego, en un popover (top layer: no mueve nada) ---------- */
+const GL = {
+il: ['Nivel de objeto', 'La suma de todo lo que llevás: el nivel de cada pieza y sus mejoras, las Arcanas y los nodos de Daevanion. Es lo que mira el juego para dejarte entrar a cada mazmorra.'],
+cp: ['Poder de combate', 'Un número general de fuerza que calcula el juego con tus stats. Sirve para compararte con otros; para entrar a una mazmorra manda el nivel de objeto.'],
+build: ['Build', 'Cómo armás el personaje según lo que hacés: Estándar para pegar en mazmorras, Healer para curar al grupo o PvP para pelear contra jugadores. Cambia los pasos, los nodos marcados y lo que te mostramos de los mejores.'],
+equipo: ['Equipo', 'Qué tan buenas son tus piezas, por su nivel base. El mejor equipo de hoy llega a 102. Para subirlo hay que conseguir piezas mejores.'],
+enc: ['Encantamiento', 'El «+» de cada pieza (+10, +15). Cada nivel suma nivel de objeto y stats a la pieza. Cada pieza tiene su tope.'],
+amp: ['Amplificación', 'Una mejora extra de cada pieza, de +1 a +5, con piedras de amplificación. Cada nivel suma 5 de nivel de objeto; en el arma y los accesorios también suma daño, en la armadura solo defensa.'],
+arc: ['Arcanas', 'Cinco cartas (Cáliz, Pergamino, Brújula, Campana y Espejo) que suben niveles de tus skills. Se encantan hasta +5 y cada nivel suma +1 a una de sus skills.'],
+dae: ['Daevanion', 'Tableros de nodos que abrís con cristales de Daevanion: salen de subir de nivel y de las mazmorras selladas. Cada nodo da stats o +1 a una skill. Los 4 primeros son los tableros base.'],
+spec: ['Especialización', 'Cuando una skill activa llega a 8, 12 y 16, se abre una mejora nueva que elegís en la ventana de skills. Es el salto más grande que da subir una skill.'],
+pts: ['Puntos de skill', 'Cada skill sube hasta 10 con puntos de skill. La ficha oficial no muestra cuántos te quedan sin usar.'],
+skills: ['Nivel de skill', 'Se arma con puntos (hasta 10), nodos de Daevanion (hasta +4) y líneas de skill del equipo y de las Arcanas. 14 es el tope normal; de ahí para arriba, solo con líneas.'],
+stig: ['Estigmas', 'Skills especiales que van en 4 espacios aparte. Suben solo con Fragmentos de Estigma, hasta 20.'],
+ariel: ['Ariel', 'El quinto tablero de Daevanion: da daño contra jefes. Sus nodos se abren con Fragmentos de Ariel de Expedición difícil (100 fragmentos = 1 cristal, hasta 30 por personaje).'],
+lineas: ['Líneas', 'Los stats extra de cada pieza, que salen al azar. Los mejores buscan ciertas líneas en cada pieza. En Equipo, tocá una pieza para ver qué tan alto te salió cada una.'],
+};
+const STEP_GL = { 'amp-arma': 'amp', 'amp-acc': 'amp', 'amp-arm': 'amp', enc: 'enc', arc: 'arc', dae: 'dae', pts: 'pts', ariel: 'ariel' };
+const gl = k => GL[k] ? `<button type="button" class="gl" data-que="${k}" aria-label="¿Qué es ${esc(GL[k][0].toLowerCase())}?" aria-expanded="false" aria-controls="pj-gl"></button>` : '';
+const glTip = Object.assign(document.createElement('div'), { id: 'pj-gl', className: 'pj-gl' });
+glTip.setAttribute('popover', 'auto');
+document.body.append(glTip);
+let glFrom = null, glClosed = 0;
+glTip.addEventListener('toggle', e => { if (e.newState === 'closed') { glClosed = Date.now(); glFrom?.setAttribute('aria-expanded', 'false'); } });
+function showGl(btn) {
+if (glFrom === btn && Date.now() - glClosed < 300) return;          // el toque que lo cerró (light dismiss) no lo reabre
+const [t, d] = GL[btn.dataset.que];
+glFrom = btn;
+glTip.innerHTML = `<b>${esc(t)}</b><p>${esc(d)}</p>`;
+if (!glTip.matches(':popover-open')) glTip.showPopover();
+const r = btn.getBoundingClientRect(), W = Math.min(320, innerWidth - 16), H = glTip.offsetHeight;
+glTip.style.width = W + 'px';
+glTip.style.left = Math.max(8, Math.min(r.left + r.width / 2 - W / 2, innerWidth - W - 8)) + 'px';
+glTip.style.top = (r.bottom + 4 + H > innerHeight - 8 ? Math.max(8, r.top - H - 4) : r.bottom + 4) + 'px';
+btn.setAttribute('aria-expanded', 'true');
+announce(`${t}: ${d}`);
+}
+addEventListener('click', e => { const b = e.target.closest?.('[data-que]'); if (b) showGl(b); });
+addEventListener('scroll', () => { if (glTip.matches(':popover-open')) glTip.hidePopover(); }, { passive: true });
 addEventListener('error', e => { const i = e.target; if (i?.tagName === 'IMG' && i.dataset.fb) { const u = i.dataset.fb; delete i.dataset.fb; i.src = u; } }, true);
 /* ---------- red ---------- */
 class ApiError extends Error { constructor(kind, msg = '', extra = {}) { super(msg); Object.assign(this, { kind }, extra); } }
@@ -204,17 +243,20 @@ out.innerHTML = `<section class="pj-res" aria-labelledby="pj-res-h"><div class="
 <ul class="pj-list">${last.list.map(x => card(x)).join('')}</ul></section>`;
 announce(`${n} resultado${n > 1 ? 's' : ''}`);
 }
+const HOW = [['title_icon_attack', 'Cómo está', 'Tu nivel de objeto y a qué mazmorras te deja entrar'], ['Icon_Item_Enchant_Amplify_A_001', 'Qué hacer ahora', 'Las mejoras que más rinden, en orden'], ['board_icon_legend_open', 'Qué usan los mejores', 'Estigmas, Arcanas y equipo de los top de tu clase']];
 function paintHome() {
 out.setAttribute('aria-busy', 'false');
 const mine = myChars(), favs = refs(FAV).filter(x => !mine.some(m => same(m.pj, x))), rec = refs(REC).filter(x => !mine.some(m => same(m.pj, x)));
 out.innerHTML = `<div class="pj-home">
+${mine.length ? '' : `<ol class="pj-how" aria-label="Qué vas a ver">${HOW.map(([ic, t, d]) => `<li>${icoGame(ic, 44)}<span><b>${t}</b><small>${d}</small></span></li>`).join('')}</ol>`}
 <section aria-labelledby="pj-h-mio"><div class="pj-sh"><h2 id="pj-h-mio">Mis personajes</h2></div>
 ${mine.length ? `<ul class="pj-list pj-mios">${mine.map(c => card(c.pj, c.main ? '<em class="tag gold">principal</em>' : '')).join('')}</ul>`
-: '<p class="pj-empty">Buscá tu personaje y tocá <b>Es mi personaje</b>: queda acá, en Tareas, y la Bitácora toma su región, server y facción. Podés sumar todos los que juegues.</p>'}</section>
+: '<p class="pj-empty">Buscá tu personaje arriba y tocá <b>Es mi personaje</b>: queda acá y en Tareas. Podés sumar todos los que juegues.</p>'}</section>
 ${favs.length ? `<section aria-labelledby="pj-h-fav"><div class="pj-sh"><h2 id="pj-h-fav">Favoritos</h2></div><ul class="pj-list">${favs.map(x => card(x)).join('')}</ul></section>` : ''}
-<section aria-labelledby="pj-h-rec"><div class="pj-sh"><h2 id="pj-h-rec">Recientes</h2>${rec.length ? '<button type="button" class="linkbtn" id="pj-clear">Borrar recientes</button>' : ''}</div>
-${rec.length ? `<ul class="pj-list">${rec.map(x => card(x)).join('')}</ul>` : '<p class="pj-empty">Las últimas 8 fichas que abras quedan acá.</p>'}</section>
-<p class="pj-empty pj-tobl"><a href="#builds">Ver qué usan los mejores de cada clase</a>: equipo, estigmas y builds recomendadas.</p>
+${rec.length ? `<section aria-labelledby="pj-h-rec"><div class="pj-sh"><h2 id="pj-h-rec">Recientes</h2><button type="button" class="linkbtn" id="pj-clear">Borrar recientes</button></div>
+<ul class="pj-list">${rec.map(x => card(x)).join('')}</ul></section>` : ''}
+<section class="pj-tobl" aria-labelledby="pj-h-top"><div class="pj-sh"><h2 id="pj-h-top">Qué usan los mejores</h2><span>equipo, estigmas y builds de cada clase</span></div>
+<ul class="pj-cls">${Object.entries(CLS_FILE).map(([es, en]) => `<li><a href="#builds/${en.toLowerCase()}">${icoGame('UT_Class_' + en + '_Large', 32)}<span>${esc(gclass(es))}</span></a></li>`).join('')}</ul></section>
 </div>`;
 }
 /* ---------- ruta ---------- */
@@ -227,6 +269,7 @@ return srv && NAME.test(parts[2]) ? { r, s: srv.id, n: parts[2] } : null;
 }
 function route() {
 if (tip.matches(':popover-open')) tip.hidePopover();
+if (glTip.matches(':popover-open')) glTip.hidePopover();
 document.documentElement.classList.toggle('pj-char', !!parseHash());   // en una ficha: sin título ni buscador (vuelve con «Personajes» o F)
 setTitle();
 if (!location.hash || location.hash === '#') { req++; cur = null; paintHome(); return; }
@@ -337,9 +380,9 @@ function paintBuild() {
 const box = $('#pj-bld');
 if (!box || !cur) return;
 const g = guess(cur), k = kindOf(cur), st = okKind(cur, kindStored(cur.ref));
-box.innerHTML = `<span class="pj-bl-l" id="pj-bl-l">Build que sigue</span>
+box.innerHTML = `<span class="pj-bl-l"><span id="pj-bl-l">Build</span>${gl('build')}</span>
 <div class="seg" role="group" aria-labelledby="pj-bl-l">${kindsOf(cur).map(([v, l]) => `<button type="button" data-kind="${v}" aria-pressed="${v === k}">${l}${v === g.kind ? ' <small>sugerida</small>' : ''}</button>`).join('')}</div>
-<small class="pj-bl-why">${st ? 'La elegiste vos.' : `Sugerida por lo que tiene puesto${g.sig.length ? esc(': ' + g.sig.join(', ')) : ''}.`} Cambia los pasos, los nodos y las builds de abajo.</small>`;
+<small class="pj-bl-why"${g.sig.length && !st ? ` title="${esc(g.sig.join(', '))}"` : ''}>${st ? 'La elegiste vos.' : 'Sugerida por lo que tenés puesto.'}</small>`;
 }
 /* ---------- ficha ---------- */
 function paintChar() {
@@ -355,7 +398,7 @@ ${img(p.image, 72, 'pj-pt pj-pt-l', '')}
 <h2 id="pj-nm" class="pj-nm">${esc(p.name)}</h2>
 <p class="pj-meta">${clsIco(p.class)}<span>${esc(gclass(p.class))} · Nv ${p.level}</span><span>${esc(p.server || serverName(ref.s))}</span><span class="fac-${ref.f}">${FACCION[ref.f]}</span>${p.legion ? `<span>Legión ${esc(p.legion)}</span>` : ''}</p>
 </div>
-<dl class="pj-big"><div><dt>Poder de combate</dt><dd>${nf(p.combatPower)}</dd></div><div><dt>Nivel de objeto</dt><dd id="pj-il">${nf(p.itemLevel)}</dd></div></dl>
+<dl class="pj-big"><div><dt>Poder de combate${gl('cp')}</dt><dd>${nf(p.combatPower)}</dd></div><div><dt>Nivel de objeto${gl('il')}</dt><dd id="pj-il">${nf(p.itemLevel)}</dd></div></dl>
 <div class="pj-acts">
 <button type="button" class="iconbtn" id="pj-fav" aria-pressed="${fav}" aria-label="Favorito" title="Favorito (G)">${ico(fav ? 'i-star-on' : 'i-star')}</button>
 <span id="pj-mio-slot">${mioBtn(ref)}</span>
@@ -407,32 +450,48 @@ function waitHtml() {
 if (cur.err) return `<div class="pj-msg bad" role="alert"><h3>${esc((MSG[cur.err.kind] || MSG.server)(cur.err)[0])}</h3><p>Sin el detalle de las piezas y los tableros no puedo calcular esto. El resto de la ficha sigue andando.</p><button type="button" class="btn" id="pj-xretry">${ico('i-reset')}Reintentar</button></div>`;
 const [n, of, wait] = cur.prog || [0, 1];
 const t = wait ? `El servidor pide esperar ${wait} s para no saturar la ficha oficial (${n} de ${of})…` : of > 1 ? `Leyendo tus piezas y tableros: ${n} de ${of}…` : 'Leyendo tus piezas y tableros…';
-return `<div class="pj-wait" role="status"><span class="pj-spin" aria-hidden="true"></span>${t}</div>${TAB === 'pasos' ? '<ol class="st-l st-sk">' + '<li class="st"></li>'.repeat(5) + '</ol>' : ''}`;
+return `<div class="pj-wait" role="status"><span class="pj-spin" aria-hidden="true"></span>${t}</div>${TAB === 'pasos' ? '<div class="st-w st-sk"><div class="wh"></div><ol class="st-l st-m">' + '<li class="st"></li>'.repeat(5) + '</ol></div>' : ''}`;
 }
-/* ---------- próximos pasos + camino ---------- */
+/* ---------- próximos pasos: dónde estás, qué hacer y cómo vas ---------- */
 const gameIcon = (u, sz) => img(u, sz, 'st-ic');
+const WAY = { Amplificación: 'amp', Encantamiento: 'enc', Arcanas: 'arc' };
+const ST_TXT = { equipo: 'Qué tan buenas son tus piezas', enc: 'El «+» de cada pieza', amp: 'La mejora extra, con piedras', arc: 'Las 5 cartas que suben skills', dae: 'Los 4 tableros base' };
+function whereHtml(P) {
+const il = P.path.il, roof = P.path.roof, W = P.path.ways, g = gateOf(il), nx = g.next;
+const lo = g.cur?.il ?? Math.max(0, il - 200), hi = Math.max(roof, nx?.il ?? roof, il + 1), at = x => ((x - lo) / (hi - lo) * 100).toFixed(2) + '%';
+const name = x => esc(x.short || x.name);
+const txt = !nx ? 'Ya entrás a todo el contenido que pide nivel de objeto.'
+: `Para <b>${name(nx)}</b> te faltan <b>${nf(g.need)}</b>. ${roof >= nx.il ? `Mejorando lo que ya tenés llegás a <b>${nf(roof)}</b>: te alcanza.` : `Mejorando lo que tenés llegás a ${nf(roof)}: para eso vas a necesitar mejor equipo.`}`;
+return `<section class="wh" aria-labelledby="wh-h"><h3 class="wh-h" id="wh-h">Dónde estás${gl('il')}</h3>
+<p class="wh-n"><b>${nf(il)}</b><span>de nivel de objeto</span></p>
+<div class="wh-bar" role="img" aria-label="${esc(`Nivel de objeto ${nf(il)}${nx ? `; ${nx.short || nx.name} pide ${nf(nx.il)}` : ''}; mejorando lo que tenés llegás a ${nf(roof)}`)}">
+<i class="wh-now" style="--w:${at(il)}"></i>${W.map(w => `<i class="w-${WAY[w[0]] || 'dae'}" style="--w:${(w[1] / (hi - lo) * 100).toFixed(2)}%"></i>`).join('')}
+${nx ? `<b class="wh-g" style="--x:${at(nx.il)}"><span>${nf(nx.il)}</span></b>` : ''}</div>
+<p class="wh-t">${txt}</p>
+${W.length ? `<ul class="rt-k" aria-label="Lo que suma cada mejora al nivel de objeto">${W.map(w => `<li class="w-${WAY[w[0]] || 'dae'}"><i></i>${esc(w[0])} <b>+${nf(w[1])}</b></li>`).join('')}</ul>` : ''}</section>`;
+}
 function stepsHtml() {
-const k = kindOf(cur), P = plan(cur.d, cur.x.items, cur.x.boards, k, topSkills(cur, k)), st = stations(cur.d, cur.x.items, cur.x.boards), g = gateOf(P.path.il);
+const k = kindOf(cur), P = plan(cur.d, cur.x.items, cur.x.boards, k, topSkills(cur, k)), st = stations(cur.d, cur.x.items, cur.x.boards);
+const by = new Map((cur.d.equipment || []).map(e => [e.slot, e]));
 const steps = P.steps.map((s, i) => `<li class="st" data-step="${s.id}">
 <span class="st-n">${i + 1}</span>
 ${s.icon ? gameIcon(s.icon, 48) : s.board ? icoGame('board_icon_unique_open', 48, 'st-ic') : ''}
-<div class="st-b"><b class="st-t">${esc(s.title)}</b>
+<div class="st-b"><p class="st-th"><b class="st-t">${esc(s.title)}</b>${gl(s.T ? 'spec' : STEP_GL[s.id])}</p>
 <ul class="st-g">${s.gain.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
 ${s.skills ? `<ul class="st-sk2">${s.skills.map(x => `<li>${img(x.icon, 24)}<span>${esc(x.name)} <b>+${x.n}</b>${x.T ? ` <em>llega a ${x.T}</em>` : ''}</span></li>`).join('')}</ul>` : ''}
-<small class="st-c">${esc(s.cost)}</small></div>
-<em class="st-s ${s.sure === 'seguro' ? 'ok' : ''}" title="${s.sure === 'seguro' ? 'Lo que ganás sale de las tablas del juego' : 'Depende de cosas que la ficha no muestra o de promedios'}">${s.sure}</em></li>`).join('');
-const W = P.path.ways, roof = P.path.roof, span = Math.max(1, roof - P.path.il);
-const WAY = { Amplificación: 'amp', Encantamiento: 'enc', Arcanas: 'arc' };
-const gates = GATES.filter(x => x.il > P.path.il && x.il <= roof);
-const route = st.map(s => { const q = s.of ? Math.min(1, s.v / s.of) : 0; return `<li class="rt rt-${s.k}"${s.tip ? ` title="${esc(s.tip)}"` : ''}><span class="rt-r" style="--q:${Math.round(q * 100)}"><b>${Math.round(q * 100)}%</b></span><span class="rt-t"><b>${s.t}</b><small>${s.txt ? esc(s.txt) : `${nf(s.v)} de ${nf(s.of)}`}</small></span></li>`; }).join('');
-return `<section class="pj-sec st-w" aria-labelledby="st-h"><h3 id="st-h" class="pj-h">Tus próximos pasos <small>para tu build ${esc(KIND_ES[k])} · sugerencia: el orden es nuestro</small></h3>
-${P.steps.length ? `<ol class="st-l">${steps}</ol>` : '<p class="pj-empty">No veo pasos con lo que muestra la ficha: equipo, amplificación, Arcanas y Daevanion están al tope. Lo que sigue es cambiar de equipo.</p>'}
-<details class="rt-w" open><summary><b>Camino de prioridad</b> <small>cuánto llevás de cada cosa que se sube sin cambiar de equipo</small></summary>
-<ol class="rt-l">${route}</ol>
-${W.length ? `<p class="rt-h">Con todo eso tu nivel de objeto llega a <b>${nf(roof)}</b>${g.next ? (roof >= g.next.il ? `: alcanza para <b>${esc(g.next.short || g.next.name)}</b>` : `: no alcanza para ${esc(g.next.short || g.next.name)}; para eso hace falta mejor equipo`) : ''}.</p>
-<div class="rt-bar" role="img" aria-label="${esc(W.map(w => `${w[0]} +${w[1]}`).join(', '))}">${W.map(w => `<i class="w-${WAY[w[0]] || 'dae'}" style="--w:${(w[1] / span * 100).toFixed(2)}%"></i>`).join('')}${gates.map(x => `<b class="rt-g" style="--x:${((x.il - P.path.il) / span * 100).toFixed(2)}%" title="${esc(x.name)}">${nf(x.il)}</b>`).join('')}</div>
-<ul class="rt-k">${W.map(w => `<li class="w-${WAY[w[0]] || 'dae'}"><i></i>${esc(w[0])} <b>+${nf(w[1])}</b></li>`).join('')}</ul>` : ''}
-</details></section>`;
+<small class="st-c">${esc(s.cost)}${s.sure === 'seguro' ? '' : ' <em class="st-s" title="Depende de cosas que la ficha no muestra o de promedios">aprox.</em>'}</small></div></li>`).join('');
+const pic = { equipo: by.get(5)?.icon || by.get(1)?.icon, enc: by.get(1)?.icon, arc: by.get(41)?.icon };
+const sIco = s => s.k === 'amp' ? icoGame('Icon_Item_Enchant_Amplify_A_001', 36, 'rt-i') : s.k === 'dae' ? icoGame('board_icon_legend_open', 36, 'rt-i') : img(pic[s.k], 36, 'rt-i');
+const route = st.map(s => { const q = s.of ? Math.min(1, s.v / s.of) : 0; return `<li class="rt rt-${s.k}"${s.tip ? ` title="${esc(s.tip)}"` : ''}>${sIco(s)}
+<span class="rt-t"><b>${s.t}</b>${gl(s.k)}<small>${ST_TXT[s.k] || ''}</small></span>
+<span class="rt-v"><b>${Math.round(q * 100)} %</b><small>${s.k === 'equipo' ? `nivel ${nf(s.v)} de ${nf(s.of)}` : s.k === 'dae' ? `${nf(s.v)} de ${nf(s.of)} puntos` : `${nf(s.v)} de ${nf(s.of)}`}</small></span>
+<span class="rt-r" style="--q:${Math.round(q * 100)}%"><i></i></span></li>`; }).join('');
+return `<div class="st-w">
+${whereHtml(P)}
+<section class="pj-sec st-m" aria-labelledby="st-h"><h3 id="st-h" class="pj-h">Qué hacer ahora <small>para tu build ${esc(KIND_ES[k])}, de lo que más rinde a lo que menos</small></h3>
+${P.steps.length ? `<ol class="st-l">${steps}</ol>` : '<p class="pj-empty">No veo pasos con lo que muestra la ficha: equipo, amplificación, Arcanas y Daevanion están al tope. Lo que sigue es cambiar de equipo.</p>'}</section>
+<section class="rt-w" aria-labelledby="rt-h"><h3 class="wh-h" id="rt-h">Cómo vas <small>lo que se sube sin cambiar de equipo</small></h3><ol class="rt-l">${route}</ol></section>
+</div>`;
 }
 /* ---------- equipo ---------- */
 const SLOTS = [
@@ -446,7 +505,8 @@ const groups = SLOTS.map(([t, l]) => [t, l.map(([s, lb]) => [s, lb, by.get(s)])]
 const extra = eq.filter(e => !known.has(e.slot)).map(e => [e.slot, e.slotName, e]);    // un slot nuevo de la ficha no se pierde
 if (extra.length) groups[2][1].push(...extra);
 const pips = (e) => { const m = it[e.slot]?.maxExceedEnchantLevel; return m ? `<span class="eq-amp" aria-label="Amplificación +${e.exceed || 0} de ${m}">${Array.from({ length: m }, (_, i) => `<i${i < (e.exceed || 0) ? ' class="on"' : ''}></i>`).join('')}</span>` : (e.exceed ? `<span class="eq-amp" aria-label="Amplificación +${e.exceed}"><i class="on"></i>+${e.exceed}</span>` : ''); };
-return `<section class="pj-sec" aria-labelledby="eq-h"><h3 id="eq-h" class="pj-h">Equipo <small>Tocá una pieza: líneas, calidad y qué usan los top</small></h3>
+return `<section class="pj-sec" aria-labelledby="eq-h"><h3 id="eq-h" class="pj-h">Equipo <small>tocá una pieza para ver sus líneas y qué buscan los mejores</small></h3>
+<ul class="eq-k" aria-label="Cómo leer cada pieza"><li><span class="eq-kn">+15</span>encantamiento${gl('enc')}</li><li><span class="eq-amp" aria-hidden="true"><i class="on"></i><i class="on"></i><i></i></span>amplificación${gl('amp')}</li><li><span class="eq-kl">nivel 86</span>calidad de la pieza${gl('equipo')}</li><li>líneas${gl('lineas')}</li></ul>
 ${groups.map(([t, l]) => `<h4 class="pj-h4">${t}</h4><ul class="eq-g">${l.map(([s, lb, e]) => !e
 ? `<li class="eq empty"><span class="eq-i"></span><span class="eq-t"><small>${esc(lb)}</small><span class="eq-n">Vacío</span></span></li>`
 : `<li><button type="button" class="eq ${gcls(e.grade)}" data-slot="${s}" aria-haspopup="dialog"><span class="eq-i">${img(e.icon, 44)}${e.enchant ? `<b class="eq-en">+${e.enchant}</b>` : ''}</span>
@@ -467,24 +527,24 @@ const desc = stig ? `Nivel ${s.level}` : `Nivel ${s.level}: base ${x.base}, Daev
 const tl = top.get(String(s.id));
 return `<li class="sk${use(s) || stig ? '' : ' off'}" data-sk="${s.id}">
 ${img(s.icon, 40, 'sk-ic')}<span class="sk-n"><b>${esc(gname(nm))}</b>${galt(nm) ? `<small lang="${gameLang() === 'en' ? 'es' : 'en'}">${esc(galt(nm))}</small>` : ''}</span>
-<span class="sk-bar" role="img" aria-label="${esc(desc)}" data-parts="${stig ? s.level : [x.base, x.dae, x.gear, x.arc].join(',')}">${seg}<b class="sk-cap" style="--x:${w(stig ? STIG_CAP : NORMAL_CAP)}" title="${stig ? 'Tope de las estigmas' : 'Tope normal: 10 con puntos + 4 de Daevanion'}"></b></span>
+<span class="sk-bar" role="img" aria-label="${esc(desc)}" data-parts="${stig ? s.level : [x.base, x.dae, x.gear, x.arc].join(',')}">${seg}<b class="sk-cap" style="--x:${w(stig ? STIG_CAP : NORMAL_CAP)}" title="${stig ? 'Tope de las estigmas' : 'Tope normal: 10 con puntos + 4 de Daevanion'}"></b>${tl && !stig ? `<b class="sk-tl" style="--x:${w(Math.min(tl, max))}" title="Los mejores la tienen en ${Math.round(tl)}"></b>` : ''}</span>
 <b class="sk-lv">${s.level || '—'}</b>
 <small class="sk-h">${[hint(s, x), tl && `los top: ${Math.round(tl)}`, !use(s) && !stig && 'no la usás'].filter(Boolean).map(esc).join(' · ')}</small></li>`;
 };
 const act = sk.filter(s => s.category === 'Active'), pas = sk.filter(s => s.category === 'Passive'), sti = sk.filter(s => s.category === 'Dp' && s.level > 0);
 const sorted = l => [...l.filter(use), ...l.filter(s => !use(s))];
-return `<section class="pj-sec" aria-labelledby="sk-h"><h3 id="sk-h" class="pj-h">Skills <small>Nivel por fuente contra el tope normal (${NORMAL_CAP})</small></h3>
-<ul class="sk-k"><li class="s-ba"><i></i>Base, con puntos (hasta ${BASE_CAP})</li><li class="s-da"><i></i>Daevanion (hasta 4)</li><li class="s-eq"><i></i>Equipo</li><li class="s-ar"><i></i>Arcanas</li><li class="s-cap"><i></i>Tope normal ${NORMAL_CAP}</li></ul>
+return `<section class="pj-sec" aria-labelledby="sk-h"><h3 id="sk-h" class="pj-h">Skills${gl('skills')} <small>de dónde sale el nivel de cada una y hasta dónde la suben los mejores</small></h3>
+<ul class="sk-k"><li class="s-ba"><i></i>Base, con puntos (hasta ${BASE_CAP})</li><li class="s-da"><i></i>Daevanion (hasta 4)</li><li class="s-eq"><i></i>Equipo</li><li class="s-ar"><i></i>Arcanas</li><li class="s-cap"><i></i>Tope normal ${NORMAL_CAP}</li>${top.size ? '<li class="s-tl"><i></i>Los mejores</li>' : ''}</ul>
 <h4 class="pj-h4">Activas</h4><ul class="sk-l">${sorted(act).map(row).join('')}</ul>
 <h4 class="pj-h4">Pasivas</h4><ul class="sk-l">${pas.map(row).join('')}</ul>
-${sti.length ? `<h4 class="pj-h4">Estigmas <small>solo con Fragmentos de Estigma, tope ${STIG_CAP}</small></h4><ul class="sk-l sk-sti">${sti.sort((a, b) => b.level - a.level).map(row).join('')}</ul>` : ''}
+${sti.length ? `<h4 class="pj-h4">Estigmas${gl('stig')} <small>solo con Fragmentos de Estigma, tope ${STIG_CAP}</small></h4><ul class="sk-l sk-sti">${sti.sort((a, b) => b.level - a.level).map(row).join('')}</ul>` : ''}
 <p class="pj-note">Arriba de ${NORMAL_CAP} se sube con líneas de skill de Arcanas (hasta +4 por línea) y del equipo (+1 por línea). Atenuadas: activas que no están en tu barra o que no subiste con puntos.</p></section>`;
 }
 /* ---------- Daevanion: los tableros dibujados con los nodos del juego ---------- */
 let BOARD = 0;
 function daeHtml() {
 const bd = cur.d.daevanion || [];
-return `<section class="pj-sec" aria-labelledby="dae-h"><h3 id="dae-h" class="pj-h">Daevanion <small>Tocá un nodo para ver qué da</small></h3>
+return `<section class="pj-sec" aria-labelledby="dae-h"><h3 id="dae-h" class="pj-h">Daevanion${gl('dae')} <small>tocá un nodo para ver qué da</small></h3>
 <div class="dae-tabs" role="group" aria-label="Tableros">${bd.map((b, i) => `<button type="button" data-board="${i}" aria-pressed="${i === BOARD}"><b>${esc(gname(b))}</b><span class="bar" aria-hidden="true"><i style="--w:${Math.min(100, +b.percent || 0)}%"></i></span><small>${b.open} de ${b.total}</small></button>`).join('')}</div>
 <div class="dae-w"><div class="dae-g" id="dae-g"></div><aside class="dae-s" id="dae-s"></aside></div></section>`;
 }
@@ -575,7 +635,7 @@ toast(on ? `<b>${esc(ref.n)}</b> quedó en favoritos.` : `Saqué a <b>${esc(ref.
 /* ---------- builds de los top (lazy: personaje-builds.js) ---------- */
 const VQ = new URL(import.meta.url).search;              // ?v=<hash>: el módulo lazy va con la misma versión
 let modP = null;
-const mod = () => modP ||= import('./personaje-builds.js' + VQ).then(m => { m.init({ api, MSG, img, gcls, GRADE, nf, curated: c => c && curated(c), CLS_KEY }); return m; }, e => { modP = null; throw e; });
+const mod = () => modP ||= import('./personaje-builds.js' + VQ).then(m => { m.init({ api, MSG, img, gcls, GRADE, nf, curated: c => c && curated(c), CLS_KEY, gl }); return m; }, e => { modP = null; throw e; });
 let lgP = null;
 const lgMod = () => lgP ||= import('./personaje-logros.js' + VQ).then(m => { m.init({ nf, IC }); return m; }, e => { lgP = null; throw e; });
 addEventListener('storage', e => { if (cur && TAB === 'logros' && String(e.key).startsWith('hub-logros-')) paintPanel(); });

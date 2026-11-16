@@ -1,8 +1,8 @@
 import {
 $, $$, esc, ico, on, onTick, onStore, bind, countdown, fmtClock, fmtLeft, leftNext, schedule, upcoming, nextReset, renderUpcoming,
 nextBelled, bellButton, getBell, EVENTS, isLive, isVisible, catIcon, tzSentence, versioned, characters, taskList, taskDone, taskProgress,
-setTaskDone, toast, prefs, setPrefs, partsIn, displayTz, store, confTag, clockLeft, gname, galt, alertName, HOUR, MIN,
-} from './core.js?v=8f51688881';
+setTaskDone, toast, prefs, setPrefs, partsIn, displayTz, store, confTag, clockLeft, gname, galt, alertName, nextOcc, currentOcc, HOUR, MIN,
+} from './core.js?v=c002377763';
 const html = document.documentElement;
 /* ---------- resets y mantenimiento ---------- */
 function paintResets() {
@@ -26,6 +26,7 @@ const now = Date.now(), nb = nextBelled(now), box = $('#hero');
 const occ = upcoming(now, { count: 20, minor: false }).find(o => o.start > now || o.entry > now);
 if (!occ) { box.innerHTML = '<p class="hero-hint">No hay eventos visibles. Activalos en Ajustes.</p>'; return; }
 const ev = occ.ev, name = gname(ev), live = isLive(occ, now), portal = live && occ.entry > now;
+const cur = upcoming(now, { count: 20, minor: false }).find(o => isLive(o, now) && o !== occ && o.id !== ev.id);
 const lbl = !live ? 'empieza en' : portal ? `${ev.entryLabel || 'entrada abierta'} · cierra en` : 'termina en';
 const target = !live ? occ.start : portal ? occ.entry : occ.end;
 const bits = [ev.entry ? `${ev.entryLabel} ${ev.entry} min` : '', ev.duration ? `dura ${ev.duration >= 60 ? ev.duration / 60 + ' h' : ev.duration + ' min'}` : '', occ.maint === 'quizas' ? 'puede caer en el mantenimiento' : ''].filter(Boolean);
@@ -34,7 +35,8 @@ const nbName = nb && (nb.occ.ev ? gname(nb.occ.ev, 'short') || gname(nb.occ.ev) 
 const hint = mine ? `${ico('i-bell-on')} <span>Te aviso ${leadsTxt(mine)}.${nb && !same ? ` Con campana: <b>${esc(nbName)}</b> <span class="cd" id="hero-nb"></span>` : ''}</span>`
 : nb ? `${ico('i-bell-on')} <span>Con campana: <b>${esc(nbName)}</b> <span class="cd" id="hero-nb"></span></span>`
 : `${ico('i-bell')} <span>Tocá la campana y te aviso antes. El permiso se pide recién ahí.</span>`;
-box.innerHTML = `<div class="hero-main"><p class="hero-n"${galt(ev) ? ` title="${esc(galt(ev))}"` : ''}>${esc(name)}</p><p class="hero-l">${lbl}</p><p class="hero-c cd" id="hero-c"></p>
+box.innerHTML = `${cur ? `<p class="hero-now"><i class="st-dot" aria-hidden="true"></i>En curso: <b>${esc(gname(cur.ev, 'short') || gname(cur.ev))}</b> <span>hasta ${fmtClock(cur.end, { now, day: false })}</span></p>` : ''}
+<div class="hero-main"><p class="hero-k2">${ico(catIcon(ev))}${CAT[ev.category] || 'Evento'}</p><p class="hero-n"${galt(ev) ? ` title="${esc(galt(ev))}"` : ''}>${esc(name)}</p>${ev.what ? `<p class="hero-q">${esc(gname(ev, 'what'))}</p>` : ''}<p class="hero-l">${lbl}</p><p class="hero-c cd" id="hero-c"></p>
 <p class="hero-s"><time>${fmtClock(live ? occ.end : occ.start, { now })}${live ? ' fin' : ''}</time>${bits.map(b => `<span>${esc(b)}</span>`).join('')}${confTag(ev)}</p></div>
 <div class="hero-side"></div>
 <p class="hero-hint">${hint}</p>`;
@@ -43,24 +45,30 @@ bind($('#hero-c'), n => [fmtLeft(target - n), n + leftNext(target - n)]);
 const hn = $('#hero-nb');
 if (hn) bind(hn, nb.live ? () => 'ya empezó' : clockLeft(nb.occ.start));
 }
+const CAT = { pvp: 'PvP', boss: 'Jefe', evento: 'Evento' };
 const leadsTxt = L => { const t = L.map(l => l ? `${l} min` : 'al inicio'); return (t.length > 1 ? t.slice(0, -1).join(', ') + ' y ' + t.at(-1) : t[0]) + (L.some(l => l) ? (L.includes(0) && L.length > 1 ? '' : ' antes') : ''); };
-/* ---------- tareas de hoy: se marcan acá mismo ---------- */
+/* ---------- tu día: las diarias y, si hoy toca, las semanales con horario (Asedio, Nahma…); se marcan acá mismo ---------- */
 function paintTk() {
 const now = Date.now(), { list, activo } = characters(), ch = list.find(c => c.id === activo);
-const pr = taskProgress(activo, now), d = taskDone(activo, 'daily', now);
+const pr = taskProgress(activo, now), done = { daily: taskDone(activo, 'daily', now), weekly: taskDone(activo, 'weekly', now) };
 const daily = taskList().filter(t => t.period === 'daily' && !t.optional);
+const rd = nextReset('daily', now), occ = {};
+const today = taskList().filter(t => t.period === 'weekly' && t.event && !t.optional)
+.filter(t => { const o = currentOcc(t.event, now) || nextOcc(t.event, now); return o && o.start < rd && (occ[t.id] = o); });
 const pct = pr.daily.total ? Math.round(pr.daily.done / pr.daily.total * 100) : 0;
-const row = t => { const v = d[t.id] || 0, max = t.count || 1, ok = v >= max, id = 'ah-t-' + t.id;
-return max > 1 ? `<li class="tk-i${ok ? ' ok' : ''}"><a href="tareas/#t-${esc(t.id)}"><span class="tk-nm">${esc(gname(t))} <b>${v}/${max}</b></span>${t.detail ? `<small>${esc(gname(t, 'detail'))}</small>` : ''}</a></li>`
-: `<li class="tk-i${ok ? ' ok' : ''}"><input type="checkbox" id="${id}" data-tk="${esc(t.id)}"${ok ? ' checked' : ''}><label for="${id}"><span class="tk-nm">${esc(gname(t))}</span>${t.detail ? `<small>${esc(gname(t, 'detail'))}</small>` : ''}</label></li>`; };
-$('#tk').innerHTML = `<div class="tk-p"><span><b>${pr.daily.done}</b>/${pr.daily.total} diarias</span><span><b>${pr.weekly.done}</b>/${pr.weekly.total} semanales</span><span class="tk-c">${esc(ch.name)}</span></div>
+const row = t => { const per = t.period, v = done[per][t.id] || 0, max = t.count || 1, ok = v >= max, id = 'ah-t-' + t.id;
+const sub = per === 'weekly' ? `Semanal · <span class="cd" id="ah-ev-${esc(t.id)}"></span>` : t.detail ? esc(gname(t, 'detail')) : '';
+return max > 1 ? `<li class="tk-i${ok ? ' ok' : ''}"><a href="tareas/#t-${esc(t.id)}"><span class="tk-nm">${esc(gname(t))} <b>${v}/${max}</b></span>${sub ? `<small>${sub}</small>` : ''}</a></li>`
+: `<li class="tk-i${ok ? ' ok' : ''}"><input type="checkbox" id="${id}" data-tk="${esc(t.id)}" data-per="${per}"${ok ? ' checked' : ''}><label for="${id}"><span class="tk-nm">${esc(gname(t))}</span>${sub ? `<small>${sub}</small>` : ''}</label></li>`; };
+$('#tk').innerHTML = `<div class="tk-p"><span class="tk-c">${esc(ch.name)}</span><span><b>${pr.daily.done}</b>/${pr.daily.total} diarias</span><span><b>${pr.weekly.done}</b>/${pr.weekly.total} semanales</span></div>
 <div class="bar" role="img" aria-label="${pct}% de las diarias"><i style="--w:${pct}%"></i></div>
-<ul class="tk-l">${daily.slice(0, 6).map(row).join('')}</ul>${pr.daily.total && pr.daily.done >= pr.daily.total ? '<p class="tk-ok">Diarias listas hasta el reset.</p>' : ''}`;
+<ul class="tk-l">${daily.slice(0, 6).map(row).join('')}${today.length ? `<li class="tk-sep">Hoy también</li>${today.map(row).join('')}` : ''}</ul>${pr.daily.total && pr.daily.done >= pr.daily.total ? '<p class="tk-ok">Diarias listas hasta el reset.</p>' : ''}`;
+for (const t of today) { const o = occ[t.id], el = $('#ah-ev-' + CSS.escape(t.id)), cl = clockLeft(o.start); bind(el, n => isLive(o, n) ? ['en curso ahora', o.end] : cl(n)); }
 }
 $('#tk').addEventListener('change', e => {
 const c = e.target.closest('[data-tk]');
 if (!c) return;
-setTaskDone(characters().activo, 'daily', c.dataset.tk, c.checked ? 1 : 0);
+setTaskDone(characters().activo, c.dataset.per, c.dataset.tk, c.checked ? 1 : 0);
 paintTk();
 document.getElementById(c.id)?.focus();
 });
@@ -86,7 +94,7 @@ const tip = `${gname(ev)} · ${fmtClock(o.start, { now, day: false })}${w ? '–
 const portal = o.entry && w ? `<b style="width:${(o.entry - o.start) / w * 100}%"></b>` : '';
 return `<i class="${cls}" style="left:${pct(o.start)};width:${w ? `calc(${pct(o.end)} - ${pct(o.start)})` : '0'}" title="${esc(tip)}">${portal}</i>`;
 }).join('');
-return `<div class="tl-row" id="tl-${ev.id}"><span class="tl-l">${ico(catIcon(ev))}<span>${esc((PH.matches && gname(ev, 'tiny')) || gname(ev, 'short') || gname(ev))}</span></span><div class="tl-tr">${bl}</div></div>`;
+return `<div class="tl-row" id="tl-${ev.id}"><button type="button" class="tl-l" data-what="${esc(ev.id)}">${ico(catIcon(ev))}<span class="tl-nm">${esc((PH.matches && gname(ev, 'tiny')) || gname(ev, 'short') || gname(ev))}</span>${ev.what ? `<small>${esc(gname(ev, 'what'))}</small>` : ''}</button><div class="tl-tr">${bl}</div></div>`;
 }).join('');
 const resets = c.list.filter((o, i, L) => o.ev.category === 'reset' && o.start > t0 && o.start < t1 && !(o.id === 'reset-diario' && L.some(w => w.id === 'reset-semanal' && w.start === o.start)))
 .map(o => `<i class="tl-rs${o.id === 'reset-semanal' ? ' wk' : ''}" style="left:${pct(o.start)}"><span>${o.id === 'reset-semanal' ? 'Reset semanal' : 'Reset'}</span></i>`).join('');
@@ -181,7 +189,7 @@ renderUpcoming($('#up'), { count: 10 });
 paintAll();
 paintTk();
 paintPins();
-on('structure', () => { paintResets(); paintHero(); paintTl(); });
+on('structure', () => { paintResets(); paintHero(); paintTl(); paintTk(); });
 on('prefs', paintAll);
 on('profile', paintAll);
 on('bells', paintHero);
@@ -192,6 +200,13 @@ onStore('hub-personajes', paintTk);
 onStore('hub-ahora', paintPins);
 document.addEventListener('visibilitychange', () => { if (!document.hidden) paintTk(); });
 onTick(moveNow);
+$('#tl').addEventListener('click', e => {
+const b = e.target.closest('[data-what]'), ev = b && EVENTS.get(b.dataset.what);
+if (!ev) return;
+const now = Date.now(), o = currentOcc(ev.id, now) || nextOcc(ev.id, now);
+const when = !o ? '' : isLive(o, now) ? ` En curso, hasta ${fmtClock(o.end, { now, day: false })}.` : ` Próximo: ${fmtClock(o.start, { now })}, en ${fmtLeft(o.start - now)}.`;
+toast(`<b>${esc(gname(ev))}</b> · ${CAT[ev.category] || 'Evento'}. ${esc(gname(ev, 'what'))}${when}`, { ms: 6000 });
+});
 $('.tl-seg').addEventListener('click', e => {
 const b = e.target.closest('[data-span]');
 if (!b) return;

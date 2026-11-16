@@ -605,13 +605,19 @@ $('[data-lead]', m)?.focus();
 }
 /* ---------- confianza: un solo vocabulario en todo el sitio (revisión UX P1) ---------- */
 export const CONF_TXT = {
-oficial: ['Oficial', 'Sale de notas o avisos oficiales de PLAYNC.'],
+oficial: ['Oficial', 'Sale de notas o avisos oficiales del juego.'],
 comunidad: ['Medido por la comunidad', 'No hay aviso oficial: lo midieron jugadores y coinciden varias fuentes (detalle en Fuentes y créditos, en el pie).'],
 sin: ['Sin confirmar', 'Una sola fuente, o un dato que todavía no pudimos cruzar. Tomalo como aproximado.'],
 };
 export const confOf = x => x.confidence === 'baja' ? 'sin' : (x.basis ? x.basis === 'oficial' : x.confidence === 'alta') ? 'oficial' : 'comunidad';
-export const cleanSrc = s => String(s || '').replace(/\s*\((?:ver )?(?:docs\/)?data-sources[^)]*\)/g, '')
+const SITES = /questlog|shugo|aion2timers|aion2data|kisk|aion2hub/gi;
+export function cleanSrc(s) {
+const t = String(s || '').replace(/\s*\((?:ver )?(?:docs\/)?data-sources[^)]*\)/g, '')
 .replace(/[,;]?\s*(?:citada en |ver )?(?:docs\/)?data-sources(?:\.md)?\s*§?\s*[\d.]*\d/g, '').replace(/el dueño[^.;]*/g, 'confirmado en el juego').trim();
+const n = new Set((t.match(SITES) || []).map(x => x.toLowerCase())).size;
+if (n) return n > 1 ? 'Varias fuentes de la comunidad coinciden (detalle en Fuentes y créditos).' : 'Una fuente de la comunidad (detalle en Fuentes y créditos).';
+return /plaync|ncsoft/i.test(t) ? 'Avisos oficiales del juego.' : t;
+}
 export function confTag(x, { lv = confOf(x), note = '', label = '' } = {}) {
 return `<button type="button" class="tag conf c-${lv}" data-conf="${lv}" data-src="${esc(cleanSrc(x.source))}"${note ? ` data-note="${esc(note)}"` : ''} aria-haspopup="dialog">${esc(label || CONF_TXT[lv][0])}</button>`;
 }
@@ -852,7 +858,7 @@ export function openSettings({ welcome = false } = {}) {
 const pr = profile(), now = Date.now();
 const regOpts = Object.entries(REG).map(([k, r]) => `<option value="${k}"${k === pr.region ? ' selected' : ''}>${esc(r.name)}</option>`).join('');
 const evRows = EVS.filter(e => e.category !== 'reset').map(e => `<label class="chk"><input type="checkbox" data-vis="${e.id}"${isVisible(e) ? ' checked' : ''}> <span data-evn="${e.id}">${esc(gname(e))}</span>${confOf(e) === 'sin' ? ' ' + confTag(e) : ''}</label>`).join('');
-const html = `${welcome ? '<p class="lead">Elegí dónde jugás y la Bitácora te muestra los horarios de tu server. Después lo cambiás en Ajustes (o lo fija tu personaje).</p><p class="hint">¿Ya la usás en otro dispositivo? <button type="button" class="linkbtn" data-hub="cuenta">Entrá con tu cuenta</button> y trae todo.</p>' : ''}
+const html = `${welcome ? '<p class="lead">Elegí dónde jugás y la Bitácora te muestra los horarios de tu server. Después lo cambiás en Ajustes.</p><p class="hint">¿Ya la usás en otro dispositivo? <button type="button" class="linkbtn" data-hub="cuenta">Entrá con tu cuenta</button> y trae todo.</p>' : ''}
 <fieldset><legend>Dónde jugás</legend>
 <div class="f2"><label>Región<span class="sel"><select id="s-reg">${regOpts}</select></span></label>
 <label>Servidor<span class="sel"><select id="s-srv"></select></span></label></div>
@@ -1060,8 +1066,9 @@ if (!box) return;
 for (const b of $$('[data-gfac]', box)) b.setAttribute('aria-pressed', String(b.dataset.gfac === f));
 box.classList.toggle('off', !!n);
 box.title = n || '';
-$('.fac-n', box).innerHTML = !p.server ? 'Sin server elegido' : n ? `Tu server es <b>${esc(serverName(p.server))}</b> (${FACCION[serverFaccion(p.server)]})` : `Tu server: <b>${esc(serverName(p.server))}</b>`;
+$('.fac-n', box).innerHTML = !p.server ? `Mostrando <b>${esc(REG[p.region]?.name || '')}</b>` : n ? `Tu server es <b>${esc(serverName(p.server))}</b> (${FACCION[serverFaccion(p.server)]})` : `Tu server: <b>${esc(serverName(p.server))}</b>`;
 }
+const hasData = () => PJ.get().list.length > 0 || Object.keys(TK.get().done || {}).length > 0 || Object.keys(A.bells || {}).length > 0 || (store.get('pets-owned', []) || []).length > 0;
 function boot() {
 setMini();
 registerBuiltins();
@@ -1101,7 +1108,7 @@ else if (e.target.closest('#hub-warn [data-x]')) $('#hub-warn').hidden = true;
 startClock();
 tick();
 if (!store.get('hub-onboarded', 0) && !html.classList.contains('mini') && !store.get('hub-server', null)) openSettings({ welcome: true });
-else if (!store.get('hub-cuenta', null) && !store.get('hub-cuenta-ofrecida', 0) && !html.classList.contains('mini')) {
+else if (!store.get('hub-cuenta', null) && !store.get('hub-cuenta-ofrecida', 0) && !html.classList.contains('mini') && hasData()) {
 store.set('hub-cuenta-ofrecida', 1);
 const oc = () => { if (!$('dialog[open]')) loadCuenta().then(m => m.open('crear', true), () => {}); };
 document.readyState === 'complete' ? oc() : addEventListener('load', oc, { once: true });
