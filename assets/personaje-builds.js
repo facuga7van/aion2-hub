@@ -1,4 +1,4 @@
-import { $, esc, ico, modal, announce } from './core.js?v=d8efdfc19c';
+import { $, esc, ico, modal, announce } from './core.js?v=42655a9e86';
 let X;                                         // {api, MSG, img, gcls, GRADE, nf, curated, CLS_KEY} que pasa personaje.js
 export const init = ctx => { X = ctx; };
 const SK = (() => { try { return JSON.parse(document.getElementById('page-data')?.textContent || '{}'); } catch { return {}; } })();
@@ -62,7 +62,8 @@ const [t, d] = e.kind === 'notfound' ? [`No encontré ${what}`, e.message || 'Pu
 return `<div class="pj-msg bad" role="alert" data-kind="${esc(e.kind || 'server')}"><h3>${esc(t)}</h3><p>${esc(d)}</p><button type="button" class="btn" data-retry>${ico('i-reset')}Reintentar</button></div>`;
 }
 /* ---------- vista: lo que usan los top ---------- */
-const kindSeg = (C, k) => `<div class="seg cu-k" role="group" aria-label="Tipo de build" id="cu-kd">${KINDS.map(([v, l]) => `<button type="button" data-ck="${v}" aria-pressed="${v === k}">${l} <small>${C.kinds?.[v] ?? 0}</small></button>`).join('')}</div>`;
+const HEAL = new Set(['cleric', 'chanter']);   // Healer solo para las clases que curan
+const kindSeg = (C, k, cls) => `<div class="seg cu-k" role="group" aria-label="Tipo de build" id="cu-kd">${KINDS.filter(([v]) => v !== 'support' || HEAL.has(cls)).map(([v, l]) => `<button type="button" data-ck="${v}" aria-pressed="${v === k}">${l} <small>${C.kinds?.[v] ?? 0}</small></button>`).join('')}</div>`;
 const whyP = t => `<p class="pj-empty cu-why" role="status">${esc(t)}</p>`;
 function topHtml(C, k, cls, cur) {
 const T = C.top?.[k], all = C.top?.all?.n;
@@ -112,8 +113,9 @@ el.innerHTML = `<section class="pj-sec bl" aria-labelledby="bl-h">
 const cuEl = $('.cu', el), more = $('#bl-more', el), outEl = $('.bl-out', el);
 let seq = 0, cseq = 0, list = [], listFor = null, C = null, R = [];
 const paintCur = () => {
+if (K === 'support' && !HEAL.has(cls)) K = 'pve';
 R = [...(C.recommended?.[K] || []), ...(C.recommended?.progresion || [])];
-cuEl.innerHTML = `${cur ? '' : kindSeg(C, K)}${topHtml(C, K, cls, cur)}${recHtml(C, K)}<p class="pj-note">Se recalcula cada semana. No son datos oficiales. <button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button></p>`;
+cuEl.innerHTML = `${cur ? '' : kindSeg(C, K, cls)}${topHtml(C, K, cls, cur)}${recHtml(C, K)}<p class="pj-note">Se recalcula cada semana. No son datos oficiales. <button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button></p>`;
 };
 async function loadCur() {
 const s = ++cseq;

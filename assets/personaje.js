@@ -1,8 +1,8 @@
 import {
 $, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, setTitle, myChars, gname, galt, gclass, gameLang, on,
-} from './core.js?v=d8efdfc19c';
-import { GATES, gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=d8efdfc19c';
+} from './core.js?v=42655a9e86';
+import { GATES, gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=42655a9e86';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -22,6 +22,8 @@ const GRADE = { Common: 'Común', Rare: 'Raro', Legend: 'Legendario', Unique: '�
 const gcls = g => 'g-' + String(g || 'common').toLowerCase().replace(/[^a-z]/g, '');
 const KINDS = [['pve', 'Estándar'], ['support', 'Healer'], ['pvp', 'PvP']];
 const KIND_ES = Object.fromEntries(KINDS);
+const HEALS = new Set(['Clérigo', 'Cantor']);
+const kindsOf = c => HEALS.has(c.d.profile.class) ? KINDS : KINDS.filter(([v]) => v !== 'support');
 const CLS_FILE = { Gladiador: 'Gladiator', Templario: 'Templar', Arquero: 'Ranger', Asesino: 'Assassin', Hechicero: 'Sorcerer', Espiritualista: 'Elementalist', Clérigo: 'Cleric', Cantor: 'Chanter' };
 const CLS_KEY = Object.fromEntries(Object.entries(CLS_FILE).map(([es, en]) => [es, en.toLowerCase()]));
 const IMG_OK = /^https:\/\/([a-z0-9-]+\.)*(playnccdn|plaync)\.com\//;
@@ -36,8 +38,8 @@ const icoGame = (name, sz, cls = '') => `<img class="${cls}" src="${IC}${name}.w
 addEventListener('error', e => { const i = e.target; if (i?.tagName === 'IMG' && i.dataset.fb) { const u = i.dataset.fb; delete i.dataset.fb; i.src = u; } }, true);
 /* ---------- red ---------- */
 class ApiError extends Error { constructor(kind, msg = '', extra = {}) { super(msg); Object.assign(this, { kind }, extra); } }
-async function api(path, params) {
-const ctl = new AbortController(), slow = setTimeout(() => ctl.abort(), 25000);
+async function api(path, params, ms = 25000) {
+const ctl = new AbortController(), slow = setTimeout(() => ctl.abort(), ms);
 const main = fetch(API + path + '?' + new URLSearchParams(params), { signal: ctl.signal });
 main.catch(() => {});
 let net = false;                                       // TypeError = no hubo conexión (red, o Chrome bloqueó la red local)
@@ -296,7 +298,7 @@ if (c.x) return;
 let x = detailCache.get(key);
 if (!x) {
 c.prog = [0, 1];
-try { x = await api('/api/sheet', q); } catch (e) {
+try { x = await api('/api/sheet', q, 60000); } catch (e) {
 if (e.kind !== 'notfound') { c.err = e; if (cur === c) paintPanel(); return; }
 const eq = c.d.equipment || [], bd = c.d.daevanion || [];
 const order = [...bd.slice(0, 4).map(b => ['b', b]), ...eq.filter(e => e.slot <= 14 || isArcana(e.slot)).map(e => ['i', e]),
@@ -325,14 +327,15 @@ if (cur === c) { paintBuild(); if (TAB === 'daevanion') paintPanel(); }
 const curated = c => CUR.get(CLS_KEY[c.d.profile.class]) || null;
 /* ---------- build que sigue (Estándar / Healer / PvP), guardada por personaje ---------- */
 const kindStored = ref => store.get(BLD, {})[ref.k.toLowerCase()] || null;
-const kindOf = c => kindStored(c.ref) || guess(c).kind;
-const guess = c => kindGuess(c.d, c.x?.items, curated(c)?.method?.kindSets);
+const okKind = (c, k) => kindsOf(c).some(([v]) => v === k) ? k : null;
+const kindOf = c => okKind(c, kindStored(c.ref)) || guess(c).kind;
+const guess = c => { const g = kindGuess(c.d, c.x?.items, curated(c)?.method?.kindSets); return okKind(c, g.kind) ? g : { kind: 'pve', sig: [] }; };
 function paintBuild() {
 const box = $('#pj-bld');
 if (!box || !cur) return;
-const g = guess(cur), k = kindOf(cur), st = kindStored(cur.ref);
+const g = guess(cur), k = kindOf(cur), st = okKind(cur, kindStored(cur.ref));
 box.innerHTML = `<span class="pj-bl-l" id="pj-bl-l">Build que sigue</span>
-<div class="seg" role="group" aria-labelledby="pj-bl-l">${KINDS.map(([v, l]) => `<button type="button" data-kind="${v}" aria-pressed="${v === k}">${l}${v === g.kind ? ' <small>sugerida</small>' : ''}</button>`).join('')}</div>
+<div class="seg" role="group" aria-labelledby="pj-bl-l">${kindsOf(cur).map(([v, l]) => `<button type="button" data-kind="${v}" aria-pressed="${v === k}">${l}${v === g.kind ? ' <small>sugerida</small>' : ''}</button>`).join('')}</div>
 <small class="pj-bl-why">${st ? 'La elegiste vos.' : `Sugerida por lo que tiene puesto${g.sig.length ? esc(': ' + g.sig.join(', ')) : ''}.`} Cambia los pasos, los nodos y las builds de abajo.</small>`;
 }
 /* ---------- ficha ---------- */
