@@ -1,4 +1,4 @@
-import { $, $$, esc, store, on, emit, modal, toast, bind, myChars, HUB_API, lnaBlocked, LNA_MSG, PAGE } from './core.js?v=42acf93068';
+import { $, $$, esc, store, on, emit, modal, toast, bind, myChars, HUB_API, lnaBlocked, LNA_MSG, PAGE } from './core.js?v=d8efdfc19c';
 const VQ = new URL(import.meta.url).search;
 const NO_SYNC = new Set(['hub-cuenta', 'hub-sync', 'hub-live', 'hub-api', 'hub-pj-api', 'hub-alertas-log', 'hub-cid', 'hub-ahora-tl',
 'pets-backup', 'pets-bak-t', 'pets-dirty', 'pets-fx', 'pets-questlog-char', 'pets-questlog-sync']);
@@ -373,6 +373,16 @@ const msg = await ACTIONS[g.dataset.go](p, n => $(`[name=${n}]`, p.el)?.value ??
 if (typeof msg === 'string' && err?.isConnected) err.textContent = msg;
 } finally { g.disabled = false; }
 }
+document.addEventListener('click', e => {
+const b = e.target.closest?.('dialog .modal-act button');
+if (!b) return;
+for (const p of panels) {
+if (!p.el.isConnected || !b.closest('dialog').contains(p.el) || !OUT.includes(p.view) || !$$('input', p.el).some(i => i.value.trim())) continue;
+e.preventDefault();
+$('[data-go]', p.el)?.click();
+return;
+}
+}, true);
 export function mount(host) {
 css();
 const el = document.createElement('div');
@@ -387,7 +397,7 @@ paint(p);
 }
 export function open() {
 const box = document.createElement('div');
-const done = modal({ title: 'Cuenta', node: box, cls: 'cuenta-m', actions: [{ label: 'Listo', value: 'ok', primary: true }] });
+const done = modal({ title: 'Cuenta', node: box, cls: 'cuenta-m', actions: [{ label: 'Cerrar', value: 'ok' }] });
 mount(box);
 $('input', box)?.focus();
 return done;
