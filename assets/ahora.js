@@ -1,0 +1,189 @@
+import {
+$, $$, esc, ico, on, onTick, onStore, bind, countdown, fmtClock, fmtLeft, leftNext, schedule, upcoming, nextReset, renderUpcoming,
+nextBelled, bellButton, getBell, EVENTS, isLive, isVisible, catIcon, tzSentence, versioned, characters, taskList, taskDone, taskProgress,
+toast, prefs, setPrefs, partsIn, displayTz, store, HOUR, MIN,
+} from './core.js?v=d8fdc4f8e6';
+const html = document.documentElement;
+/* ---------- resets y mantenimiento ---------- */
+function paintResets() {
+const now = Date.now();
+for (const [sel, per] of [['#rs-d', 'daily'], ['#rs-w', 'weekly']]) {
+const t = nextReset(per, now), el = $(sel);
+countdown($('.rs-c', el), t);
+$('.rs-t', el).textContent = fmtClock(t, { now });
+}
+const el = $('#rs-m'), mw = schedule(now).mw.find(x => x.maxEnd > now);
+el.hidden = !mw;
+if (!mw) return;
+const range = mw.announced ? `${fmtClock(mw.start, { now })} – ${fmtClock(mw.maxEnd, { now, day: false })}` : `${fmtClock(mw.start, { now })} – ~${fmtClock(mw.maxEnd, { now, day: false })}`;
+bind($('.rs-c', el), n => n < mw.start ? [fmtLeft(mw.start - n), n + leftNext(mw.start - n)] : ['en curso', 0]);
+$('.rs-t', el).innerHTML = `${esc(range)} <em class="tag${mw.announced ? ' gold' : ''}" title="${mw.announced ? esc(mw.source) : 'Visto los miércoles 4 y 11 de noviembre; dura entre 3 h y 4 h 30. Sin aviso oficial cargado todavía.'}">${mw.announced ? 'anunciado' : 'estimado'}</em>`;
+}
+/* ---------- lo próximo (con campana, o lo próximo importante) ---------- */
+function paintHero() {
+const now = Date.now(), nb = nextBelled(now), box = $('#hero');
+let occ = nb?.occ, name = nb ? (occ.ev?.name || nb.item.label) : '';
+if (!nb) {
+occ = upcoming(now, { count: 20, minor: false }).find(o => o.start > now || o.entry > now);
+name = occ?.ev.name || '';
+}
+$('#hero-k').textContent = nb ? 'Próximo con campana' : 'Lo próximo';
+if (!occ) { box.innerHTML = '<p class="hero-hint">No hay eventos visibles. Activalos en Ajustes.</p>'; return; }
+const ev = occ.ev, live = isLive(occ, now), portal = live && occ.entry > now;
+const lbl = !live ? 'empieza en' : portal ? `${ev?.entryLabel || 'entrada abierta'} · cierra en` : 'termina en';
+const target = !live ? occ.start : portal ? occ.entry : occ.end;
+const bits = [ev?.entry ? `${ev.entryLabel} ${ev.entry} min` : '', ev?.duration ? `dura ${ev.duration >= 60 ? ev.duration / 60 + ' h' : ev.duration + ' min'}` : '', occ.maint === 'quizas' ? 'puede caer en el mantenimiento' : ''].filter(Boolean);
+const conf = ev ? { alta: 'Confianza alta', media: 'Confianza media', baja: 'Sin verificar' }[ev.confidence] : '';
+box.innerHTML = `<div class="hero-main"><p class="hero-n">${esc(name)}</p><p class="hero-l">${lbl}</p><p class="hero-c cd" id="hero-c"></p>
+<p class="hero-s"><time>${fmtClock(live ? occ.end : occ.start, { now })}${live ? ' fin' : ''}</time>${bits.map(b => `<span>${esc(b)}</span>`).join('')}</p></div>
+<div class="hero-side">${ev ? `<em class="tag${ev.confidence === 'alta' ? ' gold' : ''}" title="${esc(ev.source || '')}">${conf}</em>` : ''}</div>
+<p class="hero-hint">${nb ? `${ico('i-bell-on')} Te aviso ${leadsTxt(getBell(nb.item.id))}.` : `${ico('i-bell')} Tocá la campana y te aviso antes. El permiso se pide recién ahí.`}</p>`;
+if (ev) $('.hero-side', box).prepend(bellButton(ev.id, ev.name));
+bind($('#hero-c'), n => [fmtLeft(target - n), n + leftNext(target - n)]);
+}
+const leadsTxt = L => { const t = L.map(l => l ? `${l} min` : 'al inicio'); return (t.length > 1 ? t.slice(0, -1).join(', ') + ' y ' + t.at(-1) : t[0]) + (L.some(l => l) ? (L.includes(0) && L.length > 1 ? '' : ' antes') : ''); };
+/* ---------- tareas de hoy ---------- */
+function paintTk() {
+const now = Date.now(), { list, activo } = characters(), ch = list.find(c => c.id === activo);
+const pr = taskProgress(activo, now), d = taskDone(activo, 'daily', now);
+const pend = taskList().filter(t => t.period === 'daily' && !t.optional && (d[t.id] || 0) < (t.count || 1));
+const pct = pr.daily.total ? Math.round(pr.daily.done / pr.daily.total * 100) : 0;
+$('#tk').innerHTML = `<div class="tk-p"><span><b>${pr.daily.done}</b>/${pr.daily.total} diarias</span><span><b>${pr.weekly.done}</b>/${pr.weekly.total} semanales</span><span class="tk-c">${esc(ch.name)}</span></div>
+<div class="bar" role="img" aria-label="${pct}% de las diarias"><i style="--w:${pct}%"></i></div>
+<ul class="tk-l">${pend.slice(0, 4).map(t => `<li><a href="tareas/#t-${esc(t.id)}">${esc(t.name)}</a>${t.detail ? `<small>${esc(t.detail)}</small>` : ''}</li>`).join('') || '<li class="ok">Diarias listas hasta el reset.</li>'}</ul>`;
+}
+/* ---------- línea de tiempo (12/24 h, estilo shugo) ---------- */
+const PH = matchMedia('(max-width: 640px)');
+let span = store.get('hub-ahora-tl', null) || (PH.matches ? 12 : 24);
+let tlNow = null, tlT0 = 0, tlMin = -1;
+function paintTl() {
+const now = Date.now(), H = span * HOUR, t0 = Math.floor(now / HOUR) * HOUR - (span === 24 ? 2 : 1) * HOUR, t1 = t0 + H, tz = displayTz();
+tlT0 = t0;
+const pct = t => ((Math.min(Math.max(t, t0), t1) - t0) / H * 100).toFixed(3) + '%';
+const c = schedule(now), evs = [...EVENTS.values()].filter(e => e.category !== 'reset' && isVisible(e));
+const step = span === 24 ? 3 : 1, axis = [];
+for (let t = t0; t <= t1; t += HOUR) {
+const p = partsIn(t, tz);
+if (p.h % step === 0 && t > t0 && t < t1) axis.push(`<span style="left:${pct(t)}"${p.h === 0 ? ' class="d0"' : ''}>${p.h === 0 ? ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'][p.wd] : fmtClock(t, { now, day: false })}</span>`);
+}
+const rows = evs.map(ev => {
+const bl = c.list.filter(o => o.id === ev.id && Math.max(o.end, o.start + 1) > t0 && o.start < t1).map(o => {
+const w = Math.max(o.end - o.start, 0), cls = ['tl-b', isLive(o, now) && 'live', o.maint === 'si' && 'skip', o.maint === 'quizas' && 'quizas', !w && 'pt'].filter(Boolean).join(' ');
+const tip = `${ev.name} · ${fmtClock(o.start, { now, day: false })}${w ? '–' + fmtClock(o.end, { now, day: false }) : ''}${o.maint === 'si' ? ' · no ocurre: mantenimiento' : o.maint === 'quizas' ? ' · puede caer en el mantenimiento' : ''}`;
+const portal = o.entry && w ? `<b style="width:${(o.entry - o.start) / w * 100}%"></b>` : '';
+return `<i class="${cls}" style="left:${pct(o.start)};width:${w ? `calc(${pct(o.end)} - ${pct(o.start)})` : '0'}" title="${esc(tip)}">${portal}</i>`;
+}).join('');
+return `<div class="tl-row" id="tl-${ev.id}"><span class="tl-l">${ico(catIcon(ev))}<span>${esc(ev.short || ev.name)}</span></span><div class="tl-tr">${bl}</div></div>`;
+}).join('');
+const resets = c.list.filter((o, i, L) => o.ev.category === 'reset' && o.start > t0 && o.start < t1 && !(o.id === 'reset-diario' && L.some(w => w.id === 'reset-semanal' && w.start === o.start)))
+.map(o => `<i class="tl-rs${o.id === 'reset-semanal' ? ' wk' : ''}" style="left:${pct(o.start)}"><span>${o.id === 'reset-semanal' ? 'Reset semanal' : 'Reset'}</span></i>`).join('');
+const maint = c.mw.filter(m => m.maxEnd > t0 && m.start < t1).map(m => `<i class="tl-mt" style="left:${pct(m.start)};width:calc(${pct(m.maxEnd)} - ${pct(m.start)})" title="Mantenimiento ${m.announced ? 'anunciado' : 'estimado'}"><span>Mantenimiento</span></i>`).join('');
+$('#tl').innerHTML = `<div class="tl" style="--rows:${evs.length}"><div class="tl-axis">${axis.join('')}</div><div class="tl-body">${rows}<div class="tl-ov">${maint}${resets}<i class="tl-now" id="tl-now"><span></span></i></div></div></div>`;
+tlNow = $('#tl-now');
+tlMin = -1;
+moveNow(now);
+$$('.tl-seg button').forEach(b => b.setAttribute('aria-pressed', String(+b.dataset.span === span)));
+}
+function moveNow(now) {
+const m = Math.floor(now / MIN);
+if (!tlNow || m === tlMin) return;
+tlMin = m;
+if (now >= tlT0 + (span === 24 ? 3 : 2) * HOUR) { paintTl(); return; }
+const x = (now - tlT0) / (span * HOUR) * 100;
+tlNow.style.left = x.toFixed(3) + '%';
+const w = tlNow.parentElement.clientWidth / 100;   // px por 1 %: la etiqueta "ahora" tapa ~46 px
+for (const s of $$('.tl-axis span')) s.classList.toggle('near', Math.abs(parseFloat(s.style.left) - x) * w < 46);
+tlNow.firstChild.textContent = fmtClock(now, { now, day: false });
+}
+/* ---------- widgets fijables (estrella) ---------- */
+const W = versioned('hub-ahora', 1, { pinned: [] });
+function paintPins() {
+const pins = W.get().pinned;
+for (const w of $$('.w')) {
+const i = pins.indexOf(w.dataset.w), st = $('.star', w);
+w.style.order = i < 0 ? '' : String(i - 20);
+w.classList.toggle('pinned', i >= 0);
+if (st) { st.setAttribute('aria-pressed', String(i >= 0)); st.innerHTML = ico(i >= 0 ? 'i-star-on' : 'i-star'); }
+}
+}
+for (const w of $$('.w')) {
+const name = $('h2', w).textContent, b = document.createElement('button');
+b.type = 'button';
+b.className = 'star iconbtn';
+b.setAttribute('aria-label', `Fijar arriba: ${name}`);
+b.title = 'Fijar arriba';
+b.onclick = () => {
+const s = W.get(), id = w.dataset.w;
+s.pinned = s.pinned.includes(id) ? s.pinned.filter(x => x !== id) : [...s.pinned, id];
+W.set(s);
+paintPins();
+toast(s.pinned.includes(id) ? `<b>${esc(name)}</b> queda arriba.` : `<b>${esc(name)}</b> vuelve a su lugar.`);
+};
+$('.w-h', w).append(b);
+}
+/* ---------- pantalla encendida (celu) ---------- */
+let lock = null, wantLock = false;
+const wakeBtn = $('#wake');
+async function getLock() {
+try {
+lock = await navigator.wakeLock.request('screen');
+lock.addEventListener('release', () => { lock = null; paintWake(); });
+} catch { lock = null; wantLock = false; toast('El navegador no dejó mantener la pantalla encendida (¿ahorro de batería?).'); }
+paintWake();
+}
+function paintWake() {
+const t = lock ? 'Pantalla encendida (tocá para soltar)' : 'Mantener la pantalla encendida';
+wakeBtn.setAttribute('aria-pressed', String(!!lock));
+wakeBtn.setAttribute('aria-label', t);
+wakeBtn.title = t;
+$('span', wakeBtn).textContent = lock ? 'Pantalla encendida' : 'Pantalla siempre encendida';
+}
+if ('wakeLock' in navigator) {
+wakeBtn.hidden = false;
+paintWake();
+wakeBtn.onclick = () => { if (lock) { wantLock = false; lock.release(); } else { wantLock = true; getLock(); } };
+document.addEventListener('visibilitychange', () => { if (!document.hidden && wantLock && !lock) getLock(); });
+}
+/* ---------- ir a un evento (#ev-id desde la tira o la paleta) ---------- */
+function focusHash() {
+const m = location.hash.match(/^#ev-(.+)$/);
+if (!m) return;
+const id = decodeURIComponent(m[1]), ev = EVENTS.get(id);
+if (!ev) return;
+if (!isVisible(ev)) toast(`<b>${esc(ev.name)}</b> está oculto.`, { action: { label: 'Mostrarlo', run: () => setPrefs({ vis: { ...prefs().vis, [id]: true } }) } });
+const el = $(`#up [data-ev="${CSS.escape(id)}"]`) || $(`#tl-${CSS.escape(id)}`) || (ev.category === 'reset' ? $('#resets') : null);
+if (!el) return;
+el.scrollIntoView({ block: 'center', behavior: html.classList.contains('rm') ? 'auto' : 'smooth' });
+el.classList.remove('flash');
+void el.offsetWidth;
+el.classList.add('flash');
+}
+/* ---------- arranque ---------- */
+function paintTz() {
+$('#tzline').innerHTML = `${esc(tzSentence())} <button type="button" class="linkbtn" data-hub="settings">Cambiar</button>`;
+$('#up-sub').textContent = prefs().clock === 'server' ? 'hora del server' : 'en tu reloj';
+}
+function paintAll() { paintResets(); paintHero(); paintTl(); paintTz(); }
+renderUpcoming($('#up'), { count: 10 });
+paintAll();
+paintTk();
+paintPins();
+on('structure', () => { paintResets(); paintHero(); paintTl(); });
+on('prefs', paintAll);
+on('profile', paintAll);
+on('bells', paintHero);
+on('reset', paintTk);
+onStore('hub-tareas', paintTk);
+onStore('hub-personajes', paintTk);
+onStore('hub-ahora', paintPins);
+document.addEventListener('visibilitychange', () => { if (!document.hidden) paintTk(); });
+onTick(moveNow);
+$('.tl-seg').addEventListener('click', e => {
+const b = e.target.closest('[data-span]');
+if (!b) return;
+span = +b.dataset.span;
+store.set('hub-ahora-tl', span);
+paintTl();
+});
+addEventListener('hashchange', focusHash);
+if (location.hash) setTimeout(focusHash, 60);
