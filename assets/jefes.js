@@ -2,7 +2,7 @@ import {
 $, esc, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, toast, announce, store, versioned, norm, profile, serverName,
 FACCION, serverFaccion, setFaccion, ROOT, SCHEDULE, maintWindows, bellButton, getBell, setTimers, registerPalette, registerKey, partsIn, wallToUtc, displayTz,
 HUB_API, LNA_MSG, lnaBlocked, gname, galt, gboth, gameLang, modal, DATA, MIN, HOUR, DAY,
-} from './core.js?v=f93b5aea8d';
+} from './core.js?v=731932d4c4';
 const D = JSON.parse($('#page-data').textContent), WIN = D.windowMin * MIN, KEEP = 30 * MIN, TOL = 3 * MIN;
 const DR = D.drops, IT = DR.items;
 const BOSSES = D.bosses.map(b => ({ ...b, fac: b.faction === 'Elyos' ? 'elyos' : 'asmodian', cyc: b.respawnMin * MIN, world: b.respawnSource === 'oficial', tier: DR.bosses[b.id]?.t || 3, top: DR.bosses[b.id]?.t === 1, hay: norm(`${gboth(b)} ${gboth(b, 'teleport')}`) }));
@@ -371,7 +371,7 @@ el.innerHTML = (live ? `${liveErr ? 'Último dato:' : 'En vivo · actualizado'} 
 : held || liveBusy ? `Buscando los timers de ${esc(serverName(s))}…` : down ? '' : 'Todavía no hay datos en vivo para tu server.')
 + (warn ? ` <span class="jf-warn">${esc(warn)}${down ? '<span id="jf-retry"></span>' : ''}</span>` : '');
 if (live) bind($('#jf-age'), ago(live.fetchedAt));
-if (down) bind($('#jf-retry'), n => [liveBusy || n >= nextLive ? 'Reintentando…' : `Reintento en ${fmtLeft(nextLive - n)}.`, n + 1000]);
+if (down) bind($('#jf-retry'), n => [liveBusy || n >= nextLive ? 'Reintentando…' : `Reintento en ${fmtLeft(nextLive - n)}.`, n + (liveBusy || n >= nextLive ? 1000 : leftNext(nextLive - n))]);
 }
 function paintCom() {
 const el = $('#jf-com-st'), c = com(), name = esc(serverName(srv()) || '');

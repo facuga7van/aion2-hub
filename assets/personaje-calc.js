@@ -69,9 +69,13 @@ if (x.dae < x.daeMax) return `${x.daeMax - x.dae} con Daevanion: ${[...new Set(x
 return 'Lo que sigue sale de líneas de Arcana y de equipo';
 }
 export const topLevels = (T, k) => {
-const src = T?.[k]?.skills?.length ? T[k] : k !== 'support' && T?.all;
+const own = T?.[k]?.skills?.length, src = own ? T[k] : T?.all;
 const m = new Map((src?.skills || []).map(s => [String(s.id), s.lvl]));
 m.amp = Object.fromEntries(Object.entries(CSLOT).map(([p, s]) => [p, src?.slots?.[s]?.exceed]).filter(x => x[1] != null));
+const st = own || k !== 'support' ? src?.stigmas || [] : [];
+m.stig = src?.stigmaAlt ? st : st.slice(0, 4); m.stigAlt = src?.stigmaAlt || st.slice(4);
+m.items = Object.fromEntries(Object.entries(CSLOT).map(([p, s]) => [p, src?.slots?.[s]?.items]).filter(x => x[1]?.length));
+m.il = src?.ilvlMedian || 0;
 return m;
 };
 export const CSLOT = { 1: 'weapon', 2: 'offhand', 3: 'helmet', 4: 'shoulder', 5: 'torso', 6: 'pants', 7: 'gloves', 8: 'boots', 19: 'cape', 10: 'necklace', 11: 'earring', 12: 'earring', 13: 'ring', 14: 'ring', 15: 'bracelet', 16: 'bracelet', 17: 'belt', 22: 'amulet', 23: 'rune', 24: 'rune' };
@@ -120,8 +124,9 @@ if (r) cand.push({ id: 'amp-arm', icon: r.at[0].icon, title: `Amplificá ${r.n >
 cost: `~${Math.round(r.st)} piedras de amplificación y ~${fmt(r.kn)} M de kinah`, il: 5 * r.n, dmg: 0, sure: 'seguro', past: r.past });
 const enc = eq.filter(e => !isArcana(e.slot) && items[e.slot]?.maxEnchantLevel > (e.enchant || 0));
 const encIl = enc.reduce((s, e) => s + items[e.slot].maxEnchantLevel - (e.enchant || 0), 0);
-if (enc.length) cand.push({ id: 'enc', icon: enc[0].icon, title: `Terminá de encantar ${names(enc.map(e => e.slot))}`, gain: [`+${encIl} de nivel de objeto`, 'más stats de la pieza'],
-cost: enc.map(e => `${LBL[e.slot]} +${e.enchant || 0} → +${items[e.slot].maxEnchantLevel}`).join(' · '), il: encIl, dmg: 0.2 / Math.max(1, encIl), sure: 'seguro', cheap: 1 });
+const encTo = new Set(enc.map(e => items[e.slot].maxEnchantLevel)), encLong = new Set(enc.map(e => LBL[e.slot])).size > 3, encD = enc.map(e => `${LBL[e.slot]} +${e.enchant || 0} → +${items[e.slot].maxEnchantLevel}`).join(' · ');
+if (enc.length) cand.push({ id: 'enc', icon: enc[0].icon, title: encLong ? `Terminá de encantar ${enc.length} piezas${encTo.size === 1 ? ` a +${[...encTo][0]}` : ''}` : `Terminá de encantar ${names(enc.map(e => e.slot))}`, gain: [`+${encIl} de nivel de objeto`, 'más stats de la pieza'],
+...(encLong ? { detail: encD } : { cost: encD }), il: encIl, dmg: 0.2 / Math.max(1, encIl), sure: 'seguro', cheap: 1 });
 const arc = eq.filter(e => isArcana(e.slot) && items[e.slot]?.maxEnchantLevel > (e.enchant || 0));
 const arcIl = arc.reduce((s, e) => s + items[e.slot].maxEnchantLevel - (e.enchant || 0), 0);
 if (arc.length) cand.push({ id: 'arc', icon: arc[0].icon, title: `Subí ${arc.length > 1 ? `tus ${arc.length} Arcanas` : 'la Arcana'} a +${items[arc[0].slot].maxEnchantLevel}`, gain: [`+${arcIl} de nivel de objeto`, `+${arcIl} niveles de skill`],
@@ -143,22 +148,53 @@ cand.push({ id: 'dae', icon: (key[0] || hd).s.icon, T: hd.T, title: hd.T ? `${hd
 gain: [`+${daeN.length} niveles de skill`, `+${pts} de nivel de objeto`], skills: key.length ? key.map(x => ({ icon: x.s.icon, name: x.s.name, n: x.l.length, T: x.T })) : undefined,
 cost: `${pts} puntos de Daevanion (cristales: subir de nivel y mazmorras selladas)`, il: pts, dmg: hd.T ? 0.9 : 0.05, sure: 'seguro', heal: 1 });
 }
-const low = (d.skills || []).filter(s => { const x = parts.get(String(s.id)); return s.category !== 'Dp' && inBar(s) && (x?.base ?? 10) < BASE_CAP
-&& (top.size ? (top.get(String(s.id)) ?? 0) >= BASE_CAP : useful(s, x)); });
-if (low.length) cand.push({ id: 'pts', icon: low[0].icon, title: `Subí ${low.length > 1 ? `${low.length} skills` : low[0].name} con puntos de skill`, gain: [`+${low.reduce((t, s) => t + BASE_CAP - parts.get(String(s.id)).base, 0)} niveles de skill`],
-skills: low.slice(0, 4).map(s => ({ icon: s.icon, name: s.name, n: BASE_CAP - parts.get(String(s.id)).base })), cost: 'Solo si te quedan puntos: la ficha oficial no muestra cuántos tenés', il: 0, dmg: 0.3, sure: 'estimado', heal: 1 });
+const goal = s => {
+const x = parts.get(String(s.id));
+if (!top.size) return useful(s, x) ? BASE_CAP : 0;
+const t = top.get(String(s.id));
+return t == null ? 0 : Math.max(1, Math.min(BASE_CAP, Math.round(t - Math.max(x?.dae || 0, x?.daeMax || 0) - (x?.gear || 0) - (x?.arc || 0))));
+};
+const low = (d.skills || []).filter(s => s.category !== 'Dp' && inBar(s) && (parts.get(String(s.id))?.base ?? BASE_CAP) < goal(s)).map(s => ({ s, n: goal(s) - parts.get(String(s.id)).base }));
+if (low.length) cand.push({ id: 'pts', icon: low[0].s.icon, title: `Subí ${low.length > 1 ? `${low.length} skills` : low[0].s.name} con puntos de skill`, gain: [`+${low.reduce((t, x) => t + x.n, 0)} niveles de skill`, ...(top.size ? ['hasta el nivel de los top'] : [])],
+skills: low.slice(0, 4).map(({ s, n }) => ({ icon: s.icon, name: s.name, n })), cost: 'Solo si te quedan puntos: la ficha oficial no muestra cuántos tenés', il: 0, dmg: 0.3, sure: 'estimado', heal: 1 });
 const ar = (d.daevanion || [])[4];
 if (ar && ar.open < ar.total && il >= 2600 && kind !== 'pvp') cand.push({ id: 'ariel', icon: null, board: 1, title: 'Juntá Fragmentos de Ariel en Expedición difícil', gain: ['daño a jefes y amplificación JcE', `${ar.total - ar.open} nodos por abrir`],
 cost: '100 fragmentos = 1 cristal de Ariel, hasta 30 por personaje', il: 0, dmg: 0.02, sure: 'estimado' });
-const P = kind === 'support'
-? { dae: 100, pts: 90, arc: 80, enc: 70, 'amp-acc': 60, 'amp-arma': 55, ariel: 40, 'amp-arm': 20 }
-: { 'amp-acc': 100, 'amp-arma': 100, dae: 80, enc: 70, arc: 60, pts: 50, ariel: 40, 'amp-arm': 10 };
-const score = c => P[c.id] + (c.id.startsWith('amp') ? c.dmg * 100 : 0) - (c.id === 'dae' && !c.T ? 40 : 0) - (c.past ? 70 : 0);
-const steps = cand.sort((x, y) => score(y) - score(x)).slice(0, 5);
+const sMain = new Map((top.stig || []).map(x => [String(x.id), x]));
+const stg = (d.skills || []).filter(s => s.category === 'Dp' && s.equipped && s.level >= 15 && s.level < STIG_CAP && (sMain.get(String(s.id))?.lvl ?? 0) >= STIG_CAP);
+if (stg.length) cand.push({ id: 'stig', icon: stg[0].icon, T: STIG_CAP, title: stg.length > 1 ? `Subí ${stg.length} estigmas a ${STIG_CAP}` : `${stg[0].name} a ${STIG_CAP}: nueva especialización`,
+gain: [`+${stg.reduce((t, s) => t + STIG_CAP - s.level, 0)} niveles de estigma`, `los top: ${STIG_CAP}`], skills: stg.slice(0, 4).map(s => ({ icon: s.icon, name: s.name, n: STIG_CAP - s.level, T: STIG_CAP })),
+cost: 'Fragmentos de Estigma', il: 0, dmg: 0.5, sure: 'seguro', heal: 1 });
+const myStg = (d.skills || []).filter(s => s.category === 'Dp' && s.equipped && s.level > 0), myIds = new Set(myStg.map(s => String(s.id)));
+const main = top.stig || [], tieK = main[3]?.k, tie = main.length === 4 ? (top.stigAlt || []).filter(x => x.k === tieK) : [];
+const miss = main.find((x, i) => x.share >= 0.5 && !myIds.has(String(x.id)) && !(i === 3 && tie.some(t => myIds.has(String(t.id)))));
+const altOf = new Map((top.stigAlt || []).map(x => [String(x.id), x])), mine = myStg.filter(s => !sMain.has(String(s.id))).sort((a, b) => (altOf.get(String(a.id))?.share || 0) - (altOf.get(String(b.id))?.share || 0));
+const out = mine[0], outA = out ? altOf.get(String(out.id)) : null, outS = outA?.share || 0, missS = (d.skills || []).find(s => String(s.id) === String(miss?.id));
+const of = miss?.of ? ` de ${miss.of} top` : ' % de los top', cnt = x => miss.of ? x?.k ?? 0 : Math.round((x?.share || 0) * 100);
+if (miss && missS && !(out && outS >= miss.share - 0.25)) cand.push({ id: 'stig-swap', icon: missS.icon, title: missS.equipped ? `Subí ${missS.name} (la tenés en ${missS.level || 0})` : out ? `Cambiá ${out.name} por ${missS.name}` : `Poné ${missS.name} en tus estigmas`,
+gain: [`${missS.name}: la suben ${cnt(miss)}${of}`, ...(out ? [`${out.name}: ${cnt(outA)}${miss.of ? ` de ${miss.of}` : " %"}`] : [])],
+cost: `Fragmentos de Estigma para subirla (los top la llevan a ${Math.round(miss.lvl || STIG_CAP)}; la tenés en ${missS.level || 0})`, il: 0, dmg: 0.4, sure: 'seguro', heal: 1 });
 const ampAll = eq.reduce((s, e) => s + 5 * Math.max(0, (items[e.slot]?.maxExceedEnchantLevel || 0) - (e.exceed || 0)), 0);
 const daeAll = (d.daevanion || []).slice(0, 4).reduce((s, b) => s + nodesOf(boards[b.id]).filter(n => !n.open).reduce((t, n) => t + (NODE_COST[n.grade] || 0), 0), 0);
 const ways = [['Amplificación', ampAll], ['Encantamiento', encIl], ['Arcanas', arcIl], ['Daevanion (tableros base)', daeAll]].filter(x => x[1] > 0);
-return { steps, path: { il, ways, roof: il + ways.reduce((s, x) => s + x[1], 0) } };
+const roof = il + ways.reduce((s, x) => s + x[1], 0);
+const swap = [], swapCs = new Set(), isTop = (e, L) => L.some(i => i.share >= 0.25 && [i.id, ...(i.ids || [])].map(String).includes(String(e.id)));
+const swapN = eq.filter(e => top.items?.[e.slot] && !isTop(e, top.items[e.slot])).length;
+for (const e of eq) {
+const L = top.items?.[e.slot], cs = CSLOT[e.slot];
+if (!L || swapCs.has(cs) || isTop(e, L)) continue;
+swapCs.add(cs); swap.push({ e, it: L[0] });
+}
+if (swap.length && top.il) cand.push({ id: 'gear', icon: swap[0].e.icon, title: `Tu techo con este equipo: ${fmt(roof)} de nivel de objeto`,
+gain: [`los top: ${fmt(top.il)}`, swap.length > 4 ? `${swapN} de tus piezas no son de las que llevan los top` : `${list(swap.map(x => PL[LBL[x.e.slot]] || LBL[x.e.slot])).replace(/^./, c => c.toUpperCase())}: los top usan otras piezas`],
+cost: 'Es lo que sigue cuando ya mejoraste lo que tenés', detail: `Los top usan ${list(swap.map(x => `${x.it.name} (${Math.round(x.it.share * 100)} %)`))}`, il: 0, dmg: 0, sure: 'seguro' });
+const P = kind === 'support'
+? { dae: 100, pts: 90, stig: 85, arc: 80, 'stig-swap': 75, enc: 70, 'amp-acc': 60, 'amp-arma': 55, ariel: 40, 'amp-arm': 20 }
+: { 'amp-acc': 100, 'amp-arma': 100, stig: 85, dae: 80, 'stig-swap': 75, enc: 70, arc: 60, pts: 50, ariel: 40, 'amp-arm': 10 };
+const score = c => P[c.id] + (c.id.startsWith('amp') ? c.dmg * 100 : 0) - (c.id === 'dae' && !c.T ? 40 : 0) - (c.past ? 70 : 0);
+const ord = cand.filter(c => c.id !== 'gear').sort((x, y) => score(y) - score(x)), gear = cand.find(c => c.id === 'gear');
+const steps = gear ? [...ord.slice(0, 4), gear] : ord.slice(0, 5);
+return { steps, path: { il, ways, roof } };
 }
 export function stations(d, items, boards) {
 const eq = (d.equipment || []).filter(e => items[e.slot]), sum = f => eq.reduce((s, e) => s + f(e), 0);

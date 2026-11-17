@@ -1,8 +1,8 @@
 import {
 $, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, setTitle, myChars, gname, galt, gclass, gameLang, on,
-} from './core.js?v=f93b5aea8d';
-import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=f93b5aea8d';
+} from './core.js?v=731932d4c4';
+import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=731932d4c4';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -53,7 +53,7 @@ stig: ['Estigmas', 'Skills especiales que van en 4 espacios aparte. Suben solo c
 ariel: ['Ariel', 'El quinto tablero de Daevanion: da daño contra jefes. Sus nodos se abren con Fragmentos de Ariel de Expedición difícil (100 fragmentos = 1 cristal, hasta 30 por personaje).'],
 lineas: ['Líneas', 'Los stats extra de cada pieza, que salen al azar. Los mejores buscan ciertas líneas en cada pieza. En Equipo, tocá una pieza para ver qué tan alto te salió cada una.'],
 };
-const STEP_GL = { 'amp-arma': 'amp', 'amp-acc': 'amp', 'amp-arm': 'amp', enc: 'enc', arc: 'arc', dae: 'dae', pts: 'pts', ariel: 'ariel' };
+const STEP_GL = { 'amp-arma': 'amp', 'amp-acc': 'amp', 'amp-arm': 'amp', enc: 'enc', arc: 'arc', dae: 'dae', pts: 'pts', ariel: 'ariel', gear: 'il' };
 const gl = k => GL[k] ? `<button type="button" class="gl" data-que="${k}" aria-label="¿Qué es ${esc(GL[k][0].toLowerCase())}?" aria-expanded="false" aria-controls="pj-gl"></button>` : '';
 const glTip = Object.assign(document.createElement('div'), { id: 'pj-gl', className: 'pj-gl' });
 glTip.setAttribute('popover', 'auto');
@@ -498,14 +498,17 @@ ${W.length ? `<ul class="rt-k" aria-label="Lo que suma cada mejora al nivel de o
 }
 function stepsHtml() {
 const k = kindOf(cur), P = plan(cur.d, cur.x.items, cur.x.boards, k, topSkills(cur, k)), st = stations(cur.d, cur.x.items, cur.x.boards);
+const C = curated(cur), noTop = C?.top && !C.top[k]?.slots;
+const note = !noTop ? '' : k === 'support' ? `Sin top ${KIND_ES[k]} esta semana: te comparamos con los top de toda la clase, que pegan y no curan. Tomalo como orientación.` : `Sin top ${KIND_ES[k]} esta semana: te comparamos con los top de toda la clase.`;
 const by = new Map((cur.d.equipment || []).map(e => [e.slot, e]));
 const steps = P.steps.map((s, i) => `<li class="st" data-step="${s.id}">
 <span class="st-n">${i + 1}</span>
 ${s.icon ? gameIcon(s.icon, 48) : s.board ? icoGame('board_icon_unique_open', 48, 'st-ic') : ''}
-<div class="st-b"><p class="st-th"><b class="st-t">${esc(s.title)}</b>${gl(s.T ? 'spec' : STEP_GL[s.id])}</p>
+<div class="st-b"><p class="st-th"><b class="st-t">${esc(s.title)}</b>${gl(s.id.startsWith('stig') ? 'stig' : s.T ? 'spec' : STEP_GL[s.id])}</p>
 <ul class="st-g">${s.gain.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
 ${s.skills ? `<ul class="st-sk2">${s.skills.map(x => `<li>${img(x.icon, 24)}<span>${esc(x.name)} <b>+${x.n}</b>${x.T ? ` <em>llega a ${x.T}</em>` : ''}</span></li>`).join('')}</ul>` : ''}
-<small class="st-c">${esc(s.cost)}${s.sure === 'seguro' ? '' : ' <em class="st-s" title="Depende de cosas que la ficha no muestra o de promedios">aprox.</em>'}</small></div></li>`).join('');
+${s.cost || s.sure !== 'seguro' ? `<small class="st-c">${esc(s.cost || '')}${s.sure === 'seguro' ? '' : ' <em class="st-s" title="Depende de cosas que la ficha no muestra o de promedios">aprox.</em>'}</small>` : ''}
+${s.detail ? `<details class="st-d"><summary>Ver el detalle</summary><small>${esc(s.detail)}</small></details>` : ''}</div></li>`).join('');
 const pic = { equipo: by.get(5)?.icon || by.get(1)?.icon, enc: by.get(1)?.icon, arc: by.get(41)?.icon };
 const sIco = s => s.k === 'amp' ? icoGame('Icon_Item_Enchant_Amplify_A_001', 36, 'rt-i') : s.k === 'dae' ? icoGame('board_icon_legend_open', 36, 'rt-i') : img(pic[s.k], 36, 'rt-i');
 const route = st.map(s => { const q = s.of ? Math.min(1, s.v / s.of) : 0; return `<li class="rt rt-${s.k}"${s.tip ? ` title="${esc(s.tip)}"` : ''}>${sIco(s)}
@@ -515,6 +518,7 @@ const route = st.map(s => { const q = s.of ? Math.min(1, s.v / s.of) : 0; return
 return `<div class="st-w">
 ${whereHtml(P)}
 <section class="pj-sec st-m" aria-labelledby="st-h"><h3 id="st-h" class="pj-h">Qué hacer ahora <small>para tu build ${esc(KIND_ES[k])}, de lo que más rinde a lo que menos</small></h3>
+${note ? `<p class="st-note" role="note">${esc(note)}</p>` : ''}
 ${P.steps.length ? `<ol class="st-l">${steps}</ol>` : '<p class="pj-empty">No veo pasos con lo que muestra la ficha: equipo, amplificación, Arcanas y Daevanion están al tope. Lo que sigue es cambiar de equipo.</p>'}</section>
 <section class="rt-w" aria-labelledby="rt-h"><h3 class="wh-h" id="rt-h">Cómo vas <small>lo que se sube sin cambiar de equipo</small></h3><ol class="rt-l">${route}</ol></section>
 </div>`;
