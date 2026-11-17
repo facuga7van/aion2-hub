@@ -263,6 +263,16 @@ if (t !== b.last) { node.textContent = t; b.last = t; }
 b.due = due || 0;
 }
 let pipWin = null;
+function retryImg(i) {
+if (i?.tagName !== 'IMG' || i.dataset.fb || i.dataset.rt || i.classList.contains('cu-avi') || !i.currentSrc && !i.src) return;
+const was = i.currentSrc || i.src, u = new URL(was, location.href);
+if (u.origin !== location.origin) return;
+i.dataset.rt = '1';
+u.searchParams.set('rt', '1');
+setTimeout(() => { if ((i.currentSrc || i.src) !== was) return; if (i.srcset) i.removeAttribute('srcset'); i.src = u.href; }, 1500);
+}
+addEventListener('error', e => retryImg(e.target), true);
+for (const i of document.images) if (i.complete && !i.naturalWidth && (i.currentSrc || i.src)) retryImg(i);
 const active = () => !document.hidden || !!pipWin;
 let lastNow = 0, nextB = 0, prevDaily = 0, prevWeekly = 0, staleS = false;
 function tick() {
