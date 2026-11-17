@@ -553,6 +553,11 @@ b.setAttribute('aria-label', t);
 b.title = t;
 }
 let bmAnchor = null, askedOnce = false;     // el permiso se pide en la primera campana, una sola vez
+let bmHost = null;
+function relink() {
+if (bmAnchor && !bmAnchor.isConnected) bmAnchor = (bmHost?.isConnected ? bmHost : document).querySelector(`.bell[data-bell="${CSS.escape(bmAnchor.dataset.bell)}"]`) || bmAnchor;
+return bmAnchor;
+}
 function bellMenu() {
 let m = $('#hub-bellmenu');
 if (m) return m;
@@ -571,8 +576,9 @@ if (lb) {
 const cur = new Set(getBell(id) || []), l = +lb.dataset.lead;
 cur.has(l) ? cur.delete(l) : cur.add(l);
 setBell(id, [...cur]);
+relink();
 paintMenu(m, id);
-} else if (e.target.closest('[data-off]')) { setBell(id, null); m.hidePopover(); bmAnchor?.focus(); }
+} else if (e.target.closest('[data-off]')) { setBell(id, null); m.hidePopover(); relink()?.focus(); }
 else if (e.target.closest('[data-test]')) testAlert();
 });
 m.addEventListener('toggle', e => { if (e.newState === 'closed') bmAnchor = null; });
@@ -590,12 +596,14 @@ ${isSilenced() ? '<p class="bm-n">Ahora estás en silencio: el aviso aparece sol
 function openBellMenu(b) {
 const id = b.dataset.bell, m = bellMenu();
 if (bmAnchor === b && m.matches(':popover-open')) { m.hidePopover(); return; }
+bmAnchor = b;
+bmHost = b.parentElement?.closest('[id]') || null;
 if (!getBell(id)) {
 setBell(id, [5]);                                // un clic = campana puesta con el default (5 min)
 audio();                                         // desbloquea el sonido dentro del gesto
-if (!askedOnce) { askedOnce = true; askPermission().then(() => bmAnchor === b && paintMenu(m, id)); }
+if (!askedOnce) { askedOnce = true; askPermission().then(() => bmAnchor?.dataset.bell === id && paintMenu(m, id)); }
 }
-bmAnchor = b;
+b = relink();                                      // medir el botón que está en pantalla, no el que se re-pintó
 paintMenu(m, id);
 m.showPopover();
 const r = b.getBoundingClientRect(), w = m.offsetWidth, h = m.offsetHeight;
