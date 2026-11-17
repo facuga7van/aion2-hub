@@ -1,8 +1,8 @@
 import {
-$, esc, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, toast, announce, store, versioned, norm, profile, serverName,
+$, esc, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, toast, announce, store, versioned, norm, profile, setProfile, serverName, serverList,
 FACCION, serverFaccion, setFaccion, ROOT, SCHEDULE, maintWindows, bellButton, getBell, setTimers, registerPalette, registerKey, partsIn, wallToUtc, displayTz,
 HUB_API, LNA_MSG, lnaBlocked, gname, galt, gboth, gameLang, modal, DATA, MIN, HOUR, DAY,
-} from './core.js?v=731932d4c4';
+} from './core.js?v=11af44b380';
 const D = JSON.parse($('#page-data').textContent), WIN = D.windowMin * MIN, KEEP = 30 * MIN, TOL = 3 * MIN;
 const DR = D.drops, IT = DR.items;
 const BOSSES = D.bosses.map(b => ({ ...b, fac: b.faction === 'Elyos' ? 'elyos' : 'asmodian', cyc: b.respawnMin * MIN, world: b.respawnSource === 'oficial', tier: DR.bosses[b.id]?.t || 3, top: DR.bosses[b.id]?.t === 1, hay: norm(`${gboth(b)} ${gboth(b, 'teleport')}`) }));
@@ -206,7 +206,7 @@ const dli = (it, id, ch, px) => `<li class="${qcls(it.grade)}${teSirve(id) ? ' i
 function dropsHtml(b) {
 const x = dropsOf(b), own = x.d.filter(d => !d[2]);
 const sec = (h, L, cls = '') => L.length ? `<section class="jf-ds${cls}"><h3>${h}</h3><ul class="jf-dl">${L.map(([id, ch]) => dli(IT[id], id, ch, 36)).join('')}</ul></section>` : '';
-return `<div class="jf-dh">${pic(b, b.top ? 192 : 80, 56)}<span>${galt(b) ? `<b>${esc(galt(b))}</b>` : ''}<small>Nivel ${b.level}</small></span></div>`
+return `<div class="jf-dh">${pic(b, b.top ? 192 : 80, 56)}<span><small>Nivel ${b.level}</small></span></div>`
 + souls(b).filter(s => s.falta).map(s => `<p class="jf-dpet">${icImg(IT[s.id], 40)}<span><b>Pet que te falta</b><small>${esc(petName(s))} · 100 %</small></span></p>`).join('')
 + sec('Equipo exclusivo', own.filter(([id]) => IT[id].kind in GEAR))
 + own.filter(([id]) => IT[id].kind === 'cofre').map(([cid, cch]) => sec(`${icImg(IT[cid], 28)} ${esc(gname(IT[cid]))} <small>${pct(cch)}</small>`, x.d.filter(d => d[2] === cid), ' jf-dcof')).join('')
@@ -253,14 +253,15 @@ due: ['<b class="jf-big">Debería estar</b>', `<span data-ago="${tm?.start}"></s
 window: ['<b class="jf-big">Puede estar</b>', `cierra en <span class="cd" data-left="${tm?.end}"></span>`, `Puede salir entre ${win}`],
 spawns: [`<span class="jf-l">Sale en</span> <b class="jf-big cd" data-left="${tm?.start}"></b>`, `<i class="jf-sep">· </i>${at}`, tm?.src === 'ql' ? `Sale ${at}` : `Sale entre ${win}`],
 stale: [`<s class="jf-big">${at}</s>`, 'Sin confirmar', 'Hubo mantenimiento después de este dato: puede no valer'],
-none: ['<b class="jf-big">Sin datos</b>', '', 'Sin dato en vivo de este jefe en tu server'],
+none: srv() ? ['<b class="jf-big">Sin datos</b>', '', 'Sin dato en vivo de este jefe en tu server']
+: [`<span class="jf-l">Sale cada</span> <b class="jf-cyc">${cycTxt(b.respawnMin)}</b>`, '', 'Elegí tu server arriba para ver cuándo sale'],
 wait: ['<b class="jf-big">Buscando…</b>', '', 'Buscando el dato en vivo de tu server'],
 }[s];
 const denyBtn = tm?.src === 'com' && s !== 'stale' && com() === 'compartir'
 ? '<button type="button" class="btn ghost jf-deny" data-deny title="Fuiste y no estaba muerto, o el reporte no cierra: le resta confianza">No estaba</button>' : '';
 const fix = tm?.src === 'vos';                         // con tu timer, el botón corrige (nunca lo pisa sin preguntar)
 const soon = s === 'spawns' && tm.start - now <= SOON ? ' is-soon' : '';
-const meta = [lv && `Nivel ${b.level}`, tpTxt(gname(b, 'teleport')), b.top && `cada ${cycTxt(b.respawnMin)}`].filter(Boolean).map(esc).join(' · ');
+const meta = [lv && `Nivel ${b.level}`, tpTxt(gname(b, 'teleport')), b.top && (tm || srv()) && `cada ${cycTxt(b.respawnMin)}`].filter(Boolean).map(esc).join(' · ');
 const info = `${galt(b) ? esc(galt(b)) + ' · ' : ''}Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)} (${b.respawnSource === 'oficial' ? 'oficial, parche Global' : 'medido por la comunidad'})`;
 return `<li class="jf-r s-${s}${tm ? ' src-' + tm.src : ''}${soon}${b.top ? ' jf-wc' : ''}" id="b-${b.id}" data-boss="${b.id}" data-lv="${b.level}" data-tier="${b.tier}" tabindex="-1">
 ${b.top ? pic(b, 192, 96) : pic(b, 80, 40)}
@@ -301,6 +302,7 @@ const fold = by.none.length < loose.length, open = noneOpen || !!q, lv = o === '
 const grp = (g, label, L, { tog = false, sub = '' } = {}) => {
 const h = tog ? `<button type="button" class="jf-gt" data-gt aria-expanded="${open}" aria-controls="jf-g-${g}">${label} <small>${L.length}</small><svg aria-hidden="true"><use href="#i-r"/></svg></button>`
 : `${label} <small>${L.length}</small>${sub ? ` <span class="jf-gs">· ${sub}</span>` : ''}`;
+if (g === 'none' && !srv() && !fold) return `<section class="jf-grp g-${g}" aria-label="Todos"><ul class="jf-list" id="jf-g-${g}">${L.map(([b, tm]) => row(b, tm, now, { lv })).join('')}</ul></section>`;
 return `<section class="jf-grp g-${g}" aria-label="${label}"><h3 class="jf-gh">${h}</h3><ul class="jf-list" id="jf-g-${g}"${tog && !open ? ' hidden' : ''}>${L.map(([b, tm]) => row(b, tm, now, { lv })).join('')}</ul></section>`;
 };
 const html = [pins.length && grp('fav', 'Fijados', pins),
@@ -363,7 +365,8 @@ if (s !== JSON.stringify(store.get('hub-timers', []))) setTimers(list);
 }
 function paintSt() {
 const el = $('#jf-st'), s = srv();
-if (!s) { el.innerHTML = 'Para ver los timers en vivo, elegí tu server en <button type="button" class="linkbtn" data-hub="settings">Ajustes</button>. Mientras, anotá tus kills con <b>Lo maté</b>.'; return; }
+el.classList.toggle('jf-nosrv', !s);
+if (!s) { el.innerHTML = 'y te digo cuándo salen.'; return; }
 const down = liveErr === 'lna' || liveErr === 'down';
 const warn = liveErr === 'lna' ? LNA_MSG + ' ' : liveErr === 'down' ? 'Sin conexión. ' : liveErr === 'stale' ? 'La fuente en vivo no responde: es lo último que hubo.' : '';
 el.classList.toggle('on', !!live && !liveErr);          // punto encendido: dato fresco
@@ -389,7 +392,12 @@ bind($('#jf-com-age'), ago(feedAt));
 function paintBar() {
 const f = viewFac(), pr = profile(), sf = serverFaccion(pr.server), q = $('#jf-q').value.trim();
 $('#jf-fbtn-t').textContent = q ? `“${q}”` : 'Filtrar';
-$('#jf-lead').innerHTML = `${pr.server ? `<b>${esc(serverName(pr.server))}</b> · ` : ''}${FACCION[f]}`
+if (!pr.server) {
+const L = serverList(), grp = g => `<optgroup label="${FACCION[g]}">${L.filter(s => s.faccion === g).map(s => `<option value="${s.id}">${esc(s.name)}</option>`).join('')}</optgroup>`;
+$('#jf-lead').innerHTML = `<label class="jf-srv"><span class="sr">Tu server</span><span class="sel"><select id="jf-srv"><option value="">Elegí tu server</option>${[f, f === 'elyos' ? 'asmodian' : 'elyos'].map(grp).join('')}</select></span></label>`;
+return;
+}
+$('#jf-lead').innerHTML = `<b>${esc(serverName(pr.server))}</b> · ${FACCION[f]}`
 + (sf && sf !== f ? ` <em class="tag jf-enemy" title="Tu server es ${FACCION[sf]}: estos jefes quedan en territorio enemigo (por la Grieta). La facción se cambia en el menú lateral.">zona enemiga · tu server es ${FACCION[sf]}</em>` : '');
 }
 /* ---------- "Lo maté": un toque guarda; el menú corrige la hora o deshace ---------- */
@@ -596,6 +604,7 @@ li.tabIndex = 0;
 roveId = li.dataset.boss;
 });
 $('#jf-q').addEventListener('input', () => { paintBar(); paint(); });
+$('#jf-lead').addEventListener('change', e => { const id = +e.target.value; if (e.target.id === 'jf-srv' && id) setProfile({ server: id, faccion: serverFaccion(id) }); });
 $('#jf-ord').addEventListener('change', e => { CFG.set({ ...CFG.get(), orden: e.target.value }); paint(); });
 $('#jf-q').addEventListener('keydown', e => { if (e.key === 'Escape' && e.target.value) { e.target.value = ''; paintBar(); paint(); } });
 $('#jf-com').addEventListener('click', e => {

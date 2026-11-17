@@ -4,6 +4,7 @@ const TILT = 40, KY = 1 / Math.cos(TILT * Math.PI / 180);
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const cssP = new Promise(r => document.head.append(Object.assign(document.createElement('link'),
 { rel: 'stylesheet', href: new URL('./pets-mesa.css' + new URL(import.meta.url).search, import.meta.url).href, onload: r, onerror: r })));
+const VQ = new URL(import.meta.url).search;
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const ico = id => `<svg aria-hidden="true"><use href="#${id}"/></svg>`;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -169,7 +170,7 @@ return out.sort((a, b) => b.count - a.count);
 const FN = { elyos: 'Elyos', asmodian: 'Asmodian' };
 export function petMap(host, pet, { mode, saveData, fac, rift, pn, gn }) {
 let dead = false, m = null;
-Promise.all([fetch(`assets/spawns/${pet.id}.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }), cssP]).then(([data]) => {
+Promise.all([fetch(`assets/spawns/${pet.id}.json${VQ}`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }), cssP]).then(([data]) => {
 if (dead) return;
 const own = data.regions.findIndex(r => r.zone === fac()), ab = data.regions.findIndex(r => r.zone === 'abismo');
 let reg = own >= 0 ? own : ab >= 0 ? ab : 0, mob = -1;
@@ -186,7 +187,7 @@ m.setPoints(R.mobs.map((x, i) => ({ key: i, ink: INKS[i % INKS.length], pts: x.p
 m.onFlag = fl => {
 const d = fl.dataset;
 m.look(+d.u, +d.v, Math.max(m.z * 1.5, 2.4));
-sum.innerHTML = `<b>${esc(d.mob)}</b>${d.sub === 'boss' ? ' (boss de campo)' : d.sub === 'elite' ? ' (élite)' : ''} · nv ${d.lvl} · <b>×${d.n}</b> en esta zona del mapa.`;
+sum.innerHTML = `<b>${esc(d.mob)}</b>${d.sub === 'boss' ? ' (jefe de campo)' : d.sub === 'elite' ? ' (élite)' : ''} · nv ${d.lvl} · <b>×${d.n}</b> en esta zona del mapa.`;
 };
 pick(mob);
 };
@@ -229,7 +230,7 @@ let filt = [...ver.children].find(b => b.getAttribute('aria-pressed') === 'true'
 const files = {}, R = () => regions.find(r => r.id === rid), full = () => esc(gn(R(), 'full'));
 const want0 = id => filt === 'todas' || (filt === 'faltan' ? !owned.has(id) : owned.has(id) && !isMax(id));
 const want = id => want0(id) && (!only || onlyIn(id, rid));
-const SUB = { boss: ' (boss de campo)', elite: ' (élite)' };
+const SUB = { boss: ' (jefe de campo)', elite: ' (élite)' };
 const entryTxt = (e, n) => `<b>${esc(pn(BY.get(e.petId)))}</b>: ${esc(gn(e, 'mob'))}${SUB[e.sub] || ''} · nv ${e.lvl}` +
 (n ? ` · <b>×${n}</b> en esta zona` : '') + ` · ${apar(e.spawns)} en ${full()}. <a href="#pet-${e.petId}">Ver la ficha</a>`;
 const tabsUI = () => { tabs.innerHTML = tabsHtml(rid); };  // el markup lo arma pets.js (las pinta al arrancar, antes de este módulo)
@@ -298,7 +299,7 @@ m?.destroy(); m = null;
 mapEl.innerHTML = '<div class="mesa-skel"><span>Desplegando el mapa…</span></div>'; listEl.innerHTML = '';
 tabsUI();
 const asked = rid;
-files[rid] ||= fetch(`assets/spawns/region-${rid}.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+files[rid] ||= fetch(`assets/spawns/region-${rid}.json${VQ}`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
 Promise.all([files[rid], cssP]).then(([d]) => {
 if (dead || asked !== rid) return;
 data = d; d.entries.forEach((e, i) => { e.i = i; });

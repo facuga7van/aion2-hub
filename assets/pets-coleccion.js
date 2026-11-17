@@ -166,6 +166,11 @@ if (!rq) build();
 paint();
 rq.showModal();
 }
+function qcats() {
+const { own, rc } = C.D.fac[C.fac()], ord = [own, 'comun', own + '_dg', rc, rc + '_dg', 'dungeon', 'dboss', 'worldboss', 'cofre'];
+const at = k => (ord.indexOf(k) + 1 || 99);
+return C.D.cats.filter(c => C.PETS.some(p => p.cat === c.key)).sort((a, b) => at(a.key) - at(b.key));
+}
 function build() {
 const { D, PETS, esc, ico, imgUrl } = C;
 rq = document.createElement('dialog');
@@ -174,7 +179,7 @@ rq.innerHTML = `<header class="rq-h"><div class="rq-t"><h2 id="rqT">Carga rápid
 `<label class="buscar rq-q">${ico('i-search')}<input type="search" id="rqQ" placeholder="Buscar pet" aria-label="Buscar pet en la carga rápida" autocomplete="off" spellcheck="false" enterkeyhint="search"></label>` +
 `<button type="button" class="btn gold rq-x" autofocus>Listo</button>` +
 `<p class="rq-hint">Tocá cada pet hasta su nivel: sin <b>→ 1 → 2 → 3</b> → sin.</p></header><div class="rq-b">` +
-D.cats.filter(c => PETS.some(p => p.cat === c.key)).map(c => `<section class="rq-s" data-cat="${c.key}" style="--c:var(--c-${c.key})"><div class="rq-sh">${ico(C.cico(c.key))}<h3>${esc(C.catLabel(c))} <span></span></h3>` +
+qcats().map(c => `<section class="rq-s" data-cat="${c.key}" style="--c:var(--c-${c.key})"><div class="rq-sh">${ico(C.cico(c.key))}<h3>${esc(C.catLabel(c))} <span></span></h3>` +
 `<button type="button" class="rq-all" data-all="1">Marcar todas (nv 1)</button><button type="button" class="rq-all" data-all="0">Desmarcar todas</button></div><div class="rq-g">` +
 PETS.filter(p => p.cat === c.key).map(p => `<button type="button" class="rq-p" data-id="${p.id}"><span class="rq-i pl" data-g="${p.genusKey}">` +
 `<img src="${imgUrl(p.id, 128)}" alt="" width="64" height="64" loading="lazy" decoding="async"></span><span class="rq-n">${esc(C.PN(p))}</span>` +
@@ -211,7 +216,7 @@ s.hidden = !n; any += n;
 rq.querySelector('.rq-none').hidden = !!any;
 });
 q.addEventListener('keydown', e => { if (e.key === 'Enter') { e.preventDefault(); q.blur(); rq.querySelector('.rq-p:not([hidden])')?.focus(); } });
-rq.addEventListener('close', () => { C.refreshAll(); C.apply(); });
+rq.addEventListener('close', () => { C.refreshAll(); C.apply(); C.nudge(); });
 }
 export function facChanged() { if (rq) { if (rq.open) rq.close(); const t = rq.querySelector('#hub-toast'); if (t) document.body.append(t); rq.remove(); rq = null; } }
 function paint() {

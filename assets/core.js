@@ -610,16 +610,9 @@ comunidad: ['Medido por la comunidad', 'No hay aviso oficial: lo midieron jugado
 sin: ['Sin confirmar', 'Una sola fuente, o un dato que todavía no pudimos cruzar. Tomalo como aproximado.'],
 };
 export const confOf = x => x.confidence === 'baja' ? 'sin' : (x.basis ? x.basis === 'oficial' : x.confidence === 'alta') ? 'oficial' : 'comunidad';
-const SITES = /questlog|shugo|aion2timers|aion2data|kisk|aion2hub/gi;
-export function cleanSrc(s) {
-const t = String(s || '').replace(/\s*\((?:ver )?(?:docs\/)?data-sources[^)]*\)/g, '')
-.replace(/[,;]?\s*(?:citada en |ver )?(?:docs\/)?data-sources(?:\.md)?\s*§?\s*[\d.]*\d/g, '').replace(/el dueño[^.;]*/g, 'confirmado en el juego').trim();
-const n = new Set((t.match(SITES) || []).map(x => x.toLowerCase())).size;
-if (n) return n > 1 ? 'Varias fuentes de la comunidad coinciden (detalle en Fuentes y créditos).' : 'Una fuente de la comunidad (detalle en Fuentes y créditos).';
-return /plaync|ncsoft/i.test(t) ? 'Avisos oficiales del juego.' : t;
-}
-export function confTag(x, { lv = confOf(x), note = '', label = '' } = {}) {
-return `<button type="button" class="tag conf c-${lv}" data-conf="${lv}" data-src="${esc(cleanSrc(x.source))}"${note ? ` data-note="${esc(note)}"` : ''} aria-haspopup="dialog">${esc(label || CONF_TXT[lv][0])}</button>`;
+export function confTag(x, { lv = confOf(x), note = '', label = '', dot = false } = {}) {
+if (dot) return `<button type="button" class="cfdot c-${lv}" data-conf="${lv}" data-src="${esc(x.source || '')}"${note ? ` data-note="${esc(note)}"` : ''} aria-haspopup="dialog" aria-label="${esc(CONF_TXT[lv][0])}${note ? ': ' + esc(note) : ''}" title="${esc(CONF_TXT[lv][0])}"><i aria-hidden="true"></i></button>`;
+return `<button type="button" class="tag conf c-${lv}" data-conf="${lv}" data-src="${esc(x.source || '')}"${note ? ` data-note="${esc(note)}"` : ''} aria-haspopup="dialog">${esc(label || CONF_TXT[lv][0])}</button>`;
 }
 let cfAnchor = null;
 function openConf(b) {
@@ -860,7 +853,7 @@ const pr = profile(), now = Date.now();
 const regOpts = Object.entries(REG).map(([k, r]) => `<option value="${k}"${k === pr.region ? ' selected' : ''}>${esc(r.name)}</option>`).join('');
 const evRows = EVS.filter(e => e.category !== 'reset').map(e => `<label class="chk"><input type="checkbox" data-vis="${e.id}"${isVisible(e) ? ' checked' : ''}> <span data-evn="${e.id}">${esc(gname(e))}</span>${confOf(e) === 'sin' ? ' ' + confTag(e) : ''}</label>`).join('');
 const html = `${welcome ? `<div class="ob-fac" role="group" aria-label="Tu facción" tabindex="-1" autofocus>${Object.entries(FACCION).map(([f, n]) => `<button type="button" class="ob-f" data-fac="${f}"><i class="femb femb-${f}" aria-hidden="true"></i><b>${n}</b></button>`).join('')}</div>` : ''}
-<fieldset><legend>${welcome ? 'Tu server <small>(opcional)</small>' : 'Dónde jugás'}</legend>
+<fieldset><legend>${welcome ? 'Tu server <small>para ver los jefes en vivo</small>' : 'Dónde jugás'}</legend>
 <div class="f2"><label>Región<span class="sel"><select id="s-reg">${regOpts}</select></span></label>
 <label>Servidor<span class="sel"><select id="s-srv"></select></span></label></div>
 ${welcome ? '' : '<div class="f2" id="s-fac"><span class="flab" id="s-fac-l">Facción</span><div class="seg" role="group" aria-labelledby="s-fac-l"><button type="button" data-fac="elyos">Elyos</button><button type="button" data-fac="asmodian">Asmodian</button></div></div>'}
@@ -1129,7 +1122,7 @@ tick();
 if (!store.get('hub-onboarded', 0) && !html.classList.contains('mini') && !store.get('hub-server', null)) openSettings({ welcome: true });
 else if (!store.get('hub-cuenta', null) && !store.get('hub-cuenta-ofrecida', 0) && !html.classList.contains('mini') && hasData()) {
 store.set('hub-cuenta-ofrecida', 1);
-const oc = () => { if (!$('dialog[open]')) loadCuenta().then(m => m.open('crear', true), () => {}); };
+const oc = () => { if (!$('dialog[open]')) toast('Guardá tus datos en todos tus dispositivos ·', { ms: 12000, action: { label: 'Crear cuenta', run: () => loadCuenta().then(m => m.open('crear', true), () => toast(CUENTA_OFF)) } }); };
 document.readyState === 'complete' ? oc() : addEventListener('load', oc, { once: true });
 }
 if (store.get('hub-cuenta', null)) { const lc = () => loadCuenta().catch(() => {}); document.readyState === 'complete' ? lc() : addEventListener('load', lc, { once: true }); } // con sesión: sync

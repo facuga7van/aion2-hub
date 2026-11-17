@@ -1,7 +1,7 @@
 import {
 $, esc, ico, on, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal,
 characters, taskList, taskDone, setTaskDone, taskProgress, PJ, TK, profile, serverName, registerKey, confOf, confTag, clockLeft, gname, gclass, HOUR,
-} from './core.js?v=731932d4c4';
+} from './core.js?v=11af44b380';
 const PER = { daily: { t: 'Diarias', when: 'reset diario' }, weekly: { t: 'Semanales', when: 'reset del miércoles' } };
 let editing = false;
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -22,23 +22,30 @@ g.innerHTML = `<div class="tk-h"><h2 id="h-${per}">${PER[per].t}</h2><span class
 <span class="tk-r">se limpian en <span class="cd" id="rs-${per}"></span> <small>${fmtClock(rs, { now })}</small></span></div>
 <div class="bar" role="progressbar" aria-label="${PER[per].t} hechas" aria-valuemin="0" aria-valuemax="${req.length}" aria-valuenow="${n}"><i style="--w:${pct}%"></i></div>
 <ul class="tk-list">${items.filter(t => !t.optional).map(t => row(t, per, done)).join('')}${items.some(t => t.optional) ? `<li class="tk-sep">Si te sobra tiempo</li>${items.filter(t => t.optional).map(t => row(t, per, done)).join('')}` : ''}${items.length ? '' : '<li class="tk-empty">Sin tareas. Sumá una con el lápiz.</li>'}</ul>
-<form class="tk-add" data-per="${per}"><input type="text" name="n" maxlength="60" placeholder="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" aria-label="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" required><button class="btn">${ico('i-plus')}Agregar</button></form>`;
+${legend(items)}<form class="tk-add" data-per="${per}"><input type="text" name="n" maxlength="60" placeholder="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" aria-label="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" required><button class="btn">${ico('i-plus')}Agregar</button></form>`;
 bind($('#rs-' + per), n2 => [fmtLeft(rs - n2), n2 + leftNext(rs - n2)]);
 for (const t of items) if (t.event) {
 const el = $(`#ev-${per}-${CSS.escape(t.id)}`), o = currentOcc(t.event, now) || nextOcc(t.event, now);
 if (el && o) { const cl = clockLeft(o.start); el.classList.toggle('pronto', o.start - now < 2 * HOUR); bind(el, n2 => isLive(o, n2) ? statusText(o, n2) : cl(n2)); }
 }
 }
+const lvOf = t => t.custom ? 'oficial' : t.unverified?.length ? 'sin' : confOf(t);
+function legend(items) {
+const has = new Set(items.map(lvOf));
+const L = [has.has('sin') && '<span><i class="cfl c-sin"></i>sin confirmar</span>', has.has('comunidad') && '<span><i class="cfl c-comunidad"></i>medido por la comunidad</span>'].filter(Boolean);
+return L.length ? `<p class="tk-cfl">${L.join('')}<span>tocá el punto para ver qué falta</span></p>` : '';
+}
+const nowrapEnd = (txt, tail) => { const s = String(txt || ''), i = s.lastIndexOf(' '); return tail ? `${esc(s.slice(0, i + 1))}<span class="nw">${esc(s.slice(i + 1))}${tail}</span>` : esc(s); };
 function row(t, per, done) {
 const v = done[t.id] || 0, max = t.count || 1, ok = v >= max, id = `t-${t.id}`;
 const tags = [t.custom && '<em class="tag gold">tuya</em>'].filter(Boolean).join('');
-const lv = t.custom ? 'oficial' : t.unverified?.length ? 'sin' : confOf(t);
-const conf = lv === 'oficial' ? '' : ' ' + confTag(t, { lv, note: (t.unverified || []).join(' · ') });
+const lv = lvOf(t);
+const conf = lv === 'oficial' ? '' : confTag(t, { lv, note: (t.unverified || []).join(' · '), dot: true });
 const ctrl = max > 1
 ? `<span class="tk-step" role="group" aria-label="${esc(gname(t))}: ${v} de ${max}"><button type="button" class="iconbtn" data-dec="${esc(t.id)}" aria-label="Una menos"${v ? '' : ' disabled'}>${ico('i-minus')}</button><output id="${id}" tabindex="-1">${v}/${max}</output><button type="button" class="iconbtn" data-inc="${esc(t.id)}" aria-label="Una más"${ok ? ' disabled' : ''}>${ico('i-plus')}</button></span>`
 : `<input type="checkbox" id="${id}" data-chk="${esc(t.id)}"${ok ? ' checked' : ''}>`;
 return `<li class="tk-row${ok ? ' ok' : ''}${t.optional ? ' opt' : ''}" data-t="${esc(t.id)}" data-per="${per}">
-${max > 1 ? '' : ctrl}<label class="tk-txt" ${max > 1 ? '' : `for="${id}"`}><span class="tk-name">${esc(gname(t))}${tags}</span>${t.detail || conf ? `<small>${esc(gname(t, 'detail'))}${conf}</small>` : ''}</label>
+${max > 1 ? '' : ctrl}<label class="tk-txt" ${max > 1 ? '' : `for="${id}"`}><span class="tk-name">${esc(gname(t))}${tags}</span>${t.detail || conf ? `<small>${nowrapEnd(gname(t, 'detail'), conf)}</small>` : ''}</label>
 ${t.event ? `<span class="tk-ev cd" id="ev-${per}-${esc(t.id)}"></span>` : ''}${max > 1 ? ctrl : ''}
 <button type="button" class="iconbtn tk-del" data-del="${esc(t.id)}" aria-label="Quitar ${esc(gname(t))}" title="${t.custom ? 'Borrar' : 'Ocultar'}">${ico('i-trash')}</button></li>`;
 }

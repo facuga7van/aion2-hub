@@ -1,4 +1,4 @@
-import { $, $$, esc, ico, store, toast, modal, announce, gname, galt, gameLang } from './core.js?v=731932d4c4';
+import { $, $$, esc, ico, store, toast, modal, announce, gname, galt, gameLang } from './core.js?v=11af44b380';
 let X;                                         // {nf, IC} que pasa personaje.js
 export const init = ctx => { X = ctx; };
 const VQ = new URL(import.meta.url).search;

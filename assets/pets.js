@@ -1,4 +1,4 @@
-import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=731932d4c4';
+import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=11af44b380';
 const VQ = new URL(import.meta.url).search;  // ?v=<hash>: los módulos lazy van con la misma versión
 const D = JSON.parse($('#pets-data').textContent);
 const ALL = D.pets, BY = new Map(ALL.map(p => [p.id, p]));
@@ -6,6 +6,7 @@ const G = D.genus;
 const PLE = Object.fromEntries(Object.entries(D.dungeons).map(([k, d]) => [k, d.en]));  // lugar ES -> EN
 for (const p of ALL) for (const r of p.routes) if (r.placeEn) PLE[r.place] = r.placeEn;
 const PN = p => gname({ name: p.name, nameEn: p.en });
+const ALT = o => gameLang() === 'en' ? galt(o) : '';
 const MOB = r => gname(r, 'mob');
 const PLACE = k => gname({ name: k, nameEn: PLE[k] });
 const GSLUG = { feral: 'fera', intellect: 'cogni', nature: 'natura', trans: 'varian', special: 'especial' };
@@ -46,14 +47,15 @@ const owned = new Set((ls.get('pets-owned', []) || []).map(String));
 const level = ls.get('pets-level', {}) || {};
 function save() {
 if (!(ls.set('pets-owned', [...owned]) & ls.set('pets-level', level))) { toast('Tu colección no se está guardando en este navegador.', 15000, () => col().then(m => m.act('exCopy')), 'Copiar link de respaldo'); return; }
-ls.set('pets-dirty', Date.now()); dirtyUI(); nudge();
+ls.set('pets-dirty', Date.now()); dirtyUI();
+if (!document.querySelector('dialog.rq[open]')) nudge();  // en la Carga rápida, el aviso del respaldo espera a "Listo"
 }
 const isMax = id => owned.has(id) && level[id] === 3;
 const ownN = () => PETS.filter(p => owned.has(p.id)).length;
 for (const p of ALL) {
 const cat = D.cats.find(c => c.key === p.cat);
 p.hay = norm([p.name, p.en, p.genus, ...Object.values(cat.label), $('.ch', CARD.get(p.id)).textContent,
-...p.routes.flatMap(r => [r.mob, r.mobEn, r.place, r.placeEn, r.note, r.shop, r.kind === 'fboss' && 'boss de campo']),
+...p.routes.flatMap(r => [r.mob, r.mobEn, r.place, r.placeEn, r.note, r.shop, r.kind === 'fboss' && 'jefe boss de campo']),
 ...p.chests.flatMap(c => [c.name, c.en])].filter(Boolean).join(' '));
 p.words = [...new Set(p.hay.split(/[^a-z0-9]+/).filter(w => w.length > 2))];
 p.nm = norm(p.name + ' ' + p.en);
@@ -134,7 +136,7 @@ const out = {}, n = {}, rift = D.fac[FAC].riftName;
 for (const p of PETS) for (const r of p.routes) if (r.kind === 'field' || r.kind === 'fboss') { out[r.place] ||= r; n[r.place] = (n[r.place] || 0) + 1; }
 const rk = r => (r.zone === FAC ? 0 : r.zone === 'abismo' ? 1 : r.place === rift ? 2 : 3) * 1e4 - n[r.place];  // dentro de cada grupo, la que más pets tiene
 const info = r => r.zone === FAC ? ['mapa', `Tu mapa (${FNAME[FAC]}).`] : r.zone === 'abismo' ? ['comun', 'Abismo: de las dos facciones.']
-: r.place === rift ? ['grieta', `Zona ${FNAME[r.zone]}: entrás por la Grieta.`] : ['worldboss', `Zona ${FNAME[r.zone]}: territorio enemigo, solo boss de campo.`];
+: r.place === rift ? ['grieta', `Zona ${FNAME[r.zone]}: entrás por la Grieta.`] : ['worldboss', `Zona ${FNAME[r.zone]}: territorio enemigo, solo jefe de campo.`];
 return Object.fromEntries(Object.values(out).sort((a, b) => rk(a) - rk(b)).map(r => [r.place, info(r)]));
 }
 const SHOP = 'Tienda, pase o evento', CHESTS = 'Solo cofres', UNID = 'Instancia sin identificar';
@@ -156,8 +158,8 @@ const rk = k => FR[k] ? Object.keys(FR).indexOf(k) : k === UNID ? 900 : k === SH
 return [...new Set([...m.keys(), ...also.keys()])].sort((a, b) => rk(a) - rk(b) || (m.get(b)?.length || 0) - (m.get(a)?.length || 0) || a.localeCompare(b)).map(k => {
 const dg = D.dungeons[k];
 const kind = FR[k] ? FR[k][0] : dg ? 'dungeon' : k === CHESTS || k === SHOP ? 'cofre' : '';
-let line = FR[k]?.[1] || (dg ? `${dg.type === 'raid' ? 'Raid' : 'Dungeon de grupo'} · ${dg.modes.length} dificultad${dg.modes.length > 1 ? 'es' : ''} en los datos.` :
-k === SHOP ? 'Atelier, Daeva Pass, mercaderes y eventos.' : k === CHESTS ? 'Sin ruta fija: solo cofres de mascota.' : 'Los datos no dicen en qué dungeon aparecen.');
+let line = FR[k]?.[1] || (dg ? `${dg.type === 'raid' ? 'Raid' : 'Mazmorra de grupo'} · ${dg.modes.length} dificultad${dg.modes.length > 1 ? 'es' : ''} en los datos.` :
+k === SHOP ? 'Atelier, Daeva Pass, mercaderes y eventos.' : k === CHESTS ? 'Sin ruta fija: solo cofres de mascota.' : 'Los datos no dicen en qué mazmorra aparecen.');
 const a = also.get(k);
 if (a) line += `<span class="also"><br>También acá: ${a.map(id => `<a href="#pet-${id}">${esc(PN(BY.get(id)))}</a>`).join('')}</span>`;
 return { key: 'lugar:' + FAC + ':' + k, title: PLACE(k), icon: k === SHOP ? 'i-shop' : k === UNID ? 'i-help' : 'c-' + kind, color: kind ? `var(--c-${kind})` : 'var(--niebla)', line, ids: m.get(k) || [] };
@@ -333,8 +335,8 @@ $('#plumaje').addEventListener('pointerleave', () => tip.classList.remove('on'))
 /* ---------- ficha (dialog) ---------- */
 let cur = null, mapa = null;
 function sorted(p) { return p.routes.filter(r => r.kind !== 'shop').sort((a, b) => far(a) - far(b) || (b.spawns || 0) - (a.spawns || 0)); }
-const SUBL = { normal: 'normal', elite: 'élite', boss: 'boss' };
-const TIP_INF = 'La dungeon la deduje por el nivel y el número del monstruo, porque los datos no dicen en cuál aparece.';
+const SUBL = { normal: 'normal', elite: 'élite', boss: 'jefe' };
+const TIP_INF = 'La mazmorra la deduje por el nivel y el número del monstruo, porque los datos no dicen en cuál aparece.';
 const TIP_UNID = 'Los datos tienen el monstruo pero no dicen en qué instancia aparece.';
 const duda = t => `<button type="button" class="duda" data-tip="${esc(t)}" aria-label="${esc(t)}">${ico('i-help')}</button>`;
 function secRutas(p) {
@@ -346,7 +348,7 @@ else if (lv === 3) lead = 'Está al máximo. Si sale otra alma, no la necesitás
 else lead = (lv === 2 ? `Para nivel 3 te faltan <b>${l3} almas</b>` : `${lv ? 'Para' : 'Si está en nivel 1, para'} nivel 3 te faltan <b>${l2 + l3} almas</b> (${l2} + ${l3})`) + ' <span class="q">(según los datos del juego)</span>.';
 const rows = rs.map((r, i) => {
 const k = r.kind === 'field' ? (far(r) ? ['c-grieta', 'var(--c-grieta)'] : ['c-mapa', 'var(--c-mapa)']) : r.kind === 'fboss' ? ['c-worldboss', 'var(--c-worldboss)'] : [r.sub === 'boss' ? 'c-dboss' : 'c-dungeon', r.sub === 'boss' ? 'var(--c-dboss)' : 'var(--c-dungeon)'];
-const sub = r.kind === 'fboss' ? '<span class="tag boss">boss de campo</span>' : r.sub !== 'normal' ? `<span class="tag ${r.sub}">${SUBL[r.sub]}</span>` : '';
+const sub = r.kind === 'fboss' ? '<span class="tag boss">jefe de campo</span>' : r.sub !== 'normal' ? `<span class="tag ${r.sub}">${SUBL[r.sub]}</span>` : '';
 const where = r.kind === 'dungeon' ? (r.unidentified ? 'Instancia sin identificar' + duda(TIP_UNID) : esc(PLACE(r.place)) + (r.inferred ? ' (inferido)' + duda(TIP_INF) : ''))
 : esc(PLACE(r.place)) + zoneTxt(r.zone);
 const n = r.spawns ? `<span class="n">${r.spawns}<small>${r.spawns > 1 ? 'apariciones' : 'aparición'}</small></span>` : '<span></span>';
@@ -360,14 +362,14 @@ const out = [], seen = new Set();
 for (const r of p.routes) {
 if (r.kind === 'dungeon') {
 const key = r.unidentified ? '?' + r.mob : r.place; if (seen.has(key)) continue; seen.add(key);
-if (r.unidentified) { out.push(`<div class="fr"><h4>Instancia sin identificar${duda(TIP_UNID)}</h4><p>Los datos no dicen en qué dungeon aparece <b>${esc(MOB(r))}</b> (nv ${nv(r.lvl)}).</p></div>`); continue; }
+if (r.unidentified) { out.push(`<div class="fr"><h4>Instancia sin identificar${duda(TIP_UNID)}</h4><p>Los datos no dicen en qué mazmorra aparece <b>${esc(MOB(r))}</b> (nv ${nv(r.lvl)}).</p></div>`); continue; }
 const dg = D.dungeons[r.place], mobs = p.routes.filter(x => x.kind === 'dungeon' && x.place === r.place);
 const on = new Set(mobs.flatMap(x => x.modes || dg.modes.map(m => m.id)));
 const g = dg.modes[0].group, en = dg.modes.find(m => m.energy)?.energy;
 const heur = mobs.some(x => x.modesFrom === 'idPrefix');
-const dn = { name: dg.name, nameEn: dg.en }, alt = galt(dn);
+const dn = { name: dg.name, nameEn: dg.en }, alt = ALT(dn);
 out.push(`<div class="fr"><h4>${esc(gname(dn))}${r.inferred ? ' (inferido)' + duda(TIP_INF) : ''}</h4>` +
-`<p>${alt ? `<span>${esc(alt)}</span> · ` : ''}${dg.type === 'raid' ? 'raid' : 'dungeon de grupo'} · ${g[0] === g[1] ? g[0] : g[0] + '-' + g[1]} jugadores${en ? ` · ${en} de energía Odyle` : ''}</p>` +
+`<p>${alt ? `<span>${esc(alt)}</span> · ` : ''}${dg.type === 'raid' ? 'raid' : 'mazmorra de grupo'} · ${g[0] === g[1] ? g[0] : g[0] + '-' + g[1]} jugadores${en ? ` · ${en} de energía Odyle` : ''}</p>` +
 `<p>La suelta: ${mobs.map(x => `<b>${esc(MOB(x))}</b> (${SUBL[x.sub]}, nv ${nv(x.lvl)})`).join(', ')}</p>` +
 `<div class="modos">${dg.modes.map((m, i) => `<span class="${on.has(m.id) ? '' : 'no'}">${m.diff ? D.diffs[m.diff] : 'Modo ' + (i + 1)}<small>${m.energy ? m.energy + ' E' : ''}</small></span>`).join('')}</div>` +
 (heur ? '<p class="q" style="margin-top:8px">Dificultades estimadas: pueden sobrar.</p>' : '') + '</div>');
@@ -386,7 +388,7 @@ out.push(`<div class="fr${r.until ? ' ucd' : ''}${r.until && daysTo(r.until) < 0
 if (!p.routes.length) out.push('<div class="fr"><h4>Solo cofres</h4><p>Ningún monstruo la suelta y no está en tienda: sale de los cofres de abajo.</p></div>');
 if (!out.length) return '';
 const dg = p.routes.some(r => r.kind === 'dungeon'), sh = p.routes.some(r => r.kind === 'shop');
-return `<section class="f-sec"><h3>${!p.hasMap ? 'Ficha de ruta' : dg && sh ? 'Dungeon y tienda' : dg ? (seen.size > 1 ? 'Dungeons' : 'Dungeon') : 'Tienda'}</h3><div class="fruta">${out.join('')}</div></section>`;
+return `<section class="f-sec"><h3>${!p.hasMap ? 'Ficha de ruta' : dg && sh ? 'Mazmorra y tienda' : dg ? (seen.size > 1 ? 'Mazmorras' : 'Mazmorra') : 'Tienda'}</h3><div class="fruta">${out.join('')}</div></section>`;
 }
 function secCofres(p) {
 if (!p.chests.length) return '';
@@ -408,7 +410,7 @@ const top = fBody.scrollTop;
 mapa?.destroy(); mapa = null;
 dlg.dataset.g = p.genusKey; dlg.dataset.cat = p.cat;
 const other = inF(p) ? `<p class="f-otra">Esquiva para ${FNAME[FAC]}: ningún monstruo de tu mapa la suelta.</p>` : '';
-const pn = PN(p), pa = galt({ name: p.name, nameEn: p.en });
+const pn = PN(p), pa = ALT({ name: p.name, nameEn: p.en });
 fBody.innerHTML = `<div class="f-top" aria-hidden="true"><span>${esc(pn)}</span></div><div class="f-vit"><div class="vitrina pl${$('.pl', card).classList.contains('dk') ? ' dk' : ''}" id="fVit" data-g="${p.genusKey}"><img src="${imgUrl(p.id)}" width="256" height="256" alt="${esc(pn)}"><span class="flash" aria-hidden="true"></span></div>` +
 `<h2 id="fN">${esc(pn)}</h2>${pa ? `<p class="en">${esc(pa)}</p>` : ''}` +
 `<p class="tg"><span class="gn">${ico('g-' + p.genusKey)}${p.genus}</span>${$('.ch', card).outerHTML}${p.isNew && !card.classList.contains('exp') ? `<span class="nueva">Nueva · ${fecha(p.createdAt)}</span>` : ''}</p>${other}</div>` +
@@ -531,7 +533,7 @@ const WIN = !MOBILE && /win/i.test(navigator.userAgentData?.platform || navigato
 let colM = null, colP = null, qlAuto = false;
 const col = () => colP ||= import('./pets-coleccion.js' + VQ).then(m => {
 m.init({ D, PETS, BY, get N() { return N; }, owned, level, save, paint, counts, refreshAll, apply, toast, copy, esc, ico, norm, ls, isMax, imgUrl, RM, WIN, QL_DIR, dirtyUI,
-catLabel, cico, inF, PN, base: () => location.origin + location.pathname, VQ });
+catLabel, cico, inF, PN, nudge, fac: () => FAC, base: () => location.origin + location.pathname, VQ });
 return colM = m;
 });
 function goBackup() { deep(); $('#bak').scrollIntoView({ block: 'center' }); $('#exCopy').focus({ preventScroll: true }); }
@@ -591,10 +593,10 @@ const x = G[b.dataset.g], s = x.slots[b.dataset.n - 1], t = x.slotTypes.find(t =
 $$('#genus .s').forEach(o => o.setAttribute('aria-pressed', o === b));
 const top = Math.max(...t.top.map(o => o.pct));
 const box = $('#gslot'); box.style.setProperty('--sc', `var(--s-${t.key})`);
-box.innerHTML = `<div class="gs-h"><h3><i></i>${x.plural} · slot ${s.n}</h3><span>${esc(t.label)} · nivel de desbloqueo ${s.openLevel} <span class="q">(según los datos del juego)</span></span></div>` +
+box.innerHTML = `<div class="gs-h"><h3><i></i>${x.plural} · casilla ${s.n}</h3><span>${esc(t.label)} · nivel de desbloqueo ${s.openLevel} <span class="q">(según los datos del juego)</span></span></div>` +
 `<ul class="gs-top">${t.top.map(o => `<li style="--w:${o.pct / top * 100}%"><b>${esc(o.label)}</b><span>hasta +${num(o.max)} · ${pct(o.pct)}%</span><i></i></li>`).join('')}</ul>` +
 `<p class="gs-meta">Puede tirar <b>${t.nStats}</b> stats distintos · <b>${pct(t.fillerPct || 0)}%</b> de las tiradas son HP/MP máx. · ` +
-(s.lock.crystals ? `Bloquearlo: <b>${num(s.lock.crystals)}</b> cristales + <b>${num(s.lock.gold)}</b> de oro.` : 'Este slot no se bloquea.') + '</p>';
+(s.lock.crystals ? `Bloquearla: <b>${num(s.lock.crystals)}</b> cristales + <b>${num(s.lock.gold)}</b> de oro.` : 'Esta casilla no se bloquea.') + '</p>';
 const gg = $('#genus .gg'), one = getComputedStyle(gg).gridTemplateColumns.split(' ').length === 1;
 (one ? b.closest('.gcard') : gg).after(box);
 const r = box.getBoundingClientRect();

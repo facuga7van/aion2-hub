@@ -2,7 +2,7 @@ import {
 $, $$, esc, ico, on, onTick, onStore, bind, countdown, fmtClock, fmtLeft, leftNext, schedule, upcoming, nextReset, renderUpcoming,
 nextBelled, bellButton, getBell, bossPic, EVENTS, isLive, isVisible, catIcon, tzSentence, versioned, characters, taskList, taskDone, taskProgress,
 setTaskDone, toast, prefs, setPrefs, partsIn, displayTz, store, confTag, clockLeft, gname, galt, alertName, nextOcc, currentOcc, HOUR, MIN,
-} from './core.js?v=731932d4c4';
+} from './core.js?v=11af44b380';
 const html = document.documentElement;
 /* ---------- resets y mantenimiento ---------- */
 function paintResets() {
@@ -205,7 +205,8 @@ const b = e.target.closest('[data-what]'), ev = b && EVENTS.get(b.dataset.what);
 if (!ev) return;
 const now = Date.now(), o = currentOcc(ev.id, now) || nextOcc(ev.id, now);
 const when = !o ? '' : isLive(o, now) ? ` En curso, hasta ${fmtClock(o.end, { now, day: false })}.` : ` Próximo: ${fmtClock(o.start, { now })}, en ${fmtLeft(o.start - now)}.`;
-toast(`<b>${esc(gname(ev))}</b> · ${CAT[ev.category] || 'Evento'}. ${esc(gname(ev, 'what'))}${when}`, { ms: 6000 });
+const cat = CAT[ev.category] || 'Evento', what = gname(ev, 'what') || '';
+toast(`<b>${esc(gname(ev))}</b> · ${what.toLowerCase().startsWith(cat.toLowerCase()) ? '' : esc(cat) + '. '}${esc(what)}${when}`, { ms: 6000 });
 });
 $('.tl-seg').addEventListener('click', e => {
 const b = e.target.closest('[data-span]');

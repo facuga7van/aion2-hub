@@ -1,8 +1,8 @@
 import {
-$, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION,
+$, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION, viewFaccion,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, setTitle, myChars, gname, galt, gclass, gameLang, on,
-} from './core.js?v=731932d4c4';
-import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=731932d4c4';
+} from './core.js?v=11af44b380';
+import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=11af44b380';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -195,9 +195,10 @@ const s = m[3] ? serverList(m[1]).find(x => slug(x.name) === m[3])?.id : null;
 return NAME.test(q) && s !== undefined ? { q, r: m[1], s } : null;
 }
 /* ---------- estados ---------- */
-function busy(on, html = '') {
+function busy(on, html = '', skel = false) {
 out.setAttribute('aria-busy', String(on));
-if (on) out.innerHTML = `<div class="pj-load" role="status"><span class="pj-spin" aria-hidden="true"></span>${html}</div>`;
+if (on) out.innerHTML = `<div class="pj-load" role="status"><span class="pj-spin" aria-hidden="true"></span>${html}</div>`
++ (skel ? '<div class="pj-skel" aria-hidden="true"><div class="sk-hd"><i class="sk-pt"></i><span><i></i><i></i></span></div><div class="sk-tabs"><i></i><i></i><i></i><i></i></div><div class="sk-card"><i></i><i></i><i></i></div><div class="sk-card"><i></i><i></i></div></div>' : '');
 }
 const MSG = {
 offline: e => ['Sin conexión con el servidor', e.lna ? LNA_MSG : 'No pude hablar con el servidor de la Bitácora en 3 segundos. Los horarios, avisos y tareas siguen andando; los personajes necesitan conexión.'],
@@ -222,7 +223,9 @@ busy(true, `Buscando «${esc(q)}» en ${esc(s ? serverName(s) : regName(r))}…`
 try {
 const res = await api('/api/search', { q, region: r, ...(s && { server: s }) });
 if (seq !== req) return;
-const list = res.results.map(x => refOfResult(r, x)).sort((a, b) => (b.n.toLowerCase() === q.toLowerCase()) - (a.n.toLowerCase() === q.toLowerCase()));
+const ql = q.toLowerCase(), pr = profile(), mf = viewFaccion();
+const rank = x => (x.n.toLowerCase() === ql ? 0 : 4) + (x.s === pr.server ? 0 : 2) + (x.f === mf ? 0 : 1);
+const list = res.results.map(x => refOfResult(r, x)).map((x, i) => [x, i]).sort((a, b) => rank(a[0]) - rank(b[0]) || a[1] - b[1]).map(([x]) => x);
 for (const x of list) ids.set(x.k.toLowerCase(), x.id);
 last = { q, r, s, list };
 if (list.length === 1) { location.hash = hashOf(list[0].k); return; }
@@ -307,7 +310,7 @@ addEventListener('hashchange', route);
 async function openChar(p, fresh = false) {
 const seq = ++req, k = keyOf(p.r, p.s, p.n), where = `${serverName(p.s)} (${regName(p.r)})`, known = ids.get(k.toLowerCase());
 retry = () => openChar(p, fresh);
-if (!fresh) busy(true, `Abriendo a <b>${esc(p.n)}</b> en ${esc(where)}…`);
+if (!fresh) busy(true, `Abriendo a <b>${esc(p.n)}</b> en ${esc(where)}…`, true);
 else { const rb = $('#pj-ref'); rb.disabled = true; rb.textContent = 'Refrescando…'; }
 const early = !fresh && known ? quick('/api/character', { id: known, server: p.s, region: p.r }) : null;
 const net = (async () => {
