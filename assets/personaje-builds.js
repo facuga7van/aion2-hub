@@ -1,5 +1,5 @@
-import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js?v=df769d92c6';
-import { useful, skillParts, CSLOT } from './personaje-calc.js?v=df769d92c6';
+import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js?v=f93b5aea8d';
+import { useful, skillParts, CSLOT } from './personaje-calc.js?v=f93b5aea8d';
 let X;                                         // {api, MSG, img, gcls, GRADE, nf, curated, CLS_KEY, gl} que pasa personaje.js
 export const init = ctx => { X = ctx; };
 const VQ = new URL(import.meta.url).search;   // ?v=<hash>: assets/pj-items.json con la misma versión

@@ -2,7 +2,7 @@ import {
 $, esc, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, toast, announce, store, versioned, norm, profile, serverName,
 FACCION, serverFaccion, setFaccion, ROOT, SCHEDULE, maintWindows, bellButton, getBell, setTimers, registerPalette, registerKey, partsIn, wallToUtc, displayTz,
 HUB_API, LNA_MSG, lnaBlocked, gname, galt, gboth, gameLang, modal, DATA, MIN, HOUR, DAY,
-} from './core.js?v=df769d92c6';
+} from './core.js?v=f93b5aea8d';
 const D = JSON.parse($('#page-data').textContent), WIN = D.windowMin * MIN, KEEP = 30 * MIN, TOL = 3 * MIN;
 const DR = D.drops, IT = DR.items;
 const BOSSES = D.bosses.map(b => ({ ...b, fac: b.faction === 'Elyos' ? 'elyos' : 'asmodian', cyc: b.respawnMin * MIN, world: b.respawnSource === 'oficial', tier: DR.bosses[b.id]?.t || 3, top: DR.bosses[b.id]?.t === 1, hay: norm(`${gboth(b)} ${gboth(b, 'teleport')}`) }));

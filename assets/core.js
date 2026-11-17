@@ -62,9 +62,9 @@ CACHE = null;
 emit('profile', profile());
 }
 export const HUB_API = (v => /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/.test(v) ? v : 'https://mora-server.tail3b8ec1.ts.net:8443')(String(store.get('hub-api', '') || '').replace(/\/$/, ''));
-export const LNA_MSG = 'Chrome bloqueó la conexión con el servidor de la Bitácora. Si te preguntó por "dispositivos de tu red local", tocá Permitir (pasa si usás Tailscale).';
+export const LNA_MSG = 'Chrome bloqueó la conexión con el servidor de la Bitácora. Si te preguntó por "dispositivos de tu red local", tocá Permitir.';
 export async function lnaBlocked() {
-try { return ['denied', 'prompt'].includes((await navigator.permissions.query({ name: 'local-network-access' })).state); } catch { return false; }
+try { return (await navigator.permissions.query({ name: 'local-network-access' })).state === 'denied'; } catch { return false; }
 }
 export const serverFaccion = id => id ? (String(id)[0] === '1' ? 'elyos' : 'asmodian') : null;
 export const serverList = (r = region()) => (SERVERS.regions[r] || []).map(([id, name]) => ({ id, name, faccion: serverFaccion(id) }));
