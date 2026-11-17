@@ -859,7 +859,7 @@ export function openSettings({ welcome = false } = {}) {
 const pr = profile(), now = Date.now();
 const regOpts = Object.entries(REG).map(([k, r]) => `<option value="${k}"${k === pr.region ? ' selected' : ''}>${esc(r.name)}</option>`).join('');
 const evRows = EVS.filter(e => e.category !== 'reset').map(e => `<label class="chk"><input type="checkbox" data-vis="${e.id}"${isVisible(e) ? ' checked' : ''}> <span data-evn="${e.id}">${esc(gname(e))}</span>${confOf(e) === 'sin' ? ' ' + confTag(e) : ''}</label>`).join('');
-const html = `${welcome ? `<div class="ob-fac" role="group" aria-label="Tu facción" tabindex="-1" autofocus>${Object.entries(FACCION).map(([f, n]) => `<button type="button" class="ob-f" data-fac="${f}"><i class="fe fe-${f}" aria-hidden="true"></i><b>${n}</b></button>`).join('')}</div>` : ''}
+const html = `${welcome ? `<div class="ob-fac" role="group" aria-label="Tu facción" tabindex="-1" autofocus>${Object.entries(FACCION).map(([f, n]) => `<button type="button" class="ob-f" data-fac="${f}"><i class="femb femb-${f}" aria-hidden="true"></i><b>${n}</b></button>`).join('')}</div>` : ''}
 <fieldset><legend>${welcome ? 'Tu server <small>(opcional)</small>' : 'Dónde jugás'}</legend>
 <div class="f2"><label>Región<span class="sel"><select id="s-reg">${regOpts}</select></span></label>
 <label>Servidor<span class="sel"><select id="s-srv"></select></span></label></div>
