@@ -1,4 +1,4 @@
-import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=7c64b0fb22';
+import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=429484d946';
 const VQ = new URL(import.meta.url).search;  // ?v=<hash>: los módulos lazy van con la misma versión
 const D = JSON.parse($('#pets-data').textContent);
 const ALL = D.pets, BY = new Map(ALL.map(p => [p.id, p]));
@@ -525,10 +525,16 @@ addEventListener('hashchange', () => {
 if (!DEEP.test(location.hash) || document.documentElement.hasAttribute('data-deep')) return;
 deep(); document.querySelector(location.hash.split(/[?&]/)[0])?.scrollIntoView();
 });
-/* ---------- "↑ Menú" en el celu: aparece cuando el menú de Pets (2x2) quedó arriba, fuera de la pantalla, y vuelve a él ---------- */
+/* ---------- "↑ Menú" en el celu: con el menú de Pets (2x2) arriba, fuera de la pantalla, aparece al scrollear hacia ARRIBA
+(al bajar se esconde, así no tapa lo que leés) y vuelve a él. Mientras hay un aviso abajo (toast) no está: nunca lo tapa ---------- */
 {
-const btn = $('#toMenu'), nav = $('.hnav');
-new IntersectionObserver(([e]) => { btn.hidden = e.isIntersecting || e.boundingClientRect.top > 0; }).observe(nav);
+const btn = $('#toMenu'), nav = $('.hnav'), tst = $('#hub-toast');
+const sy = () => Math.min(Math.max(scrollY, 0), document.documentElement.scrollHeight - innerHeight);
+let far = false, up = false, y = sy();
+const set = () => btn.classList.toggle('on', far && (up || btn.matches(':focus-visible')) && !tst?.classList.contains('on'));  // con el foco de teclado encima no se va (el foco no cae a body)
+new IntersectionObserver(([e]) => { far = !e.isIntersecting && e.boundingClientRect.top < 0; set(); }).observe(nav);
+addEventListener('scroll', () => { const c = sy(), d = c - y; if (Math.abs(d) > 8) { up = d < 0; y = c; set(); } }, { passive: true });
+if (tst) new MutationObserver(set).observe(tst, { attributes: true, attributeFilter: ['class'] });
 btn.onclick = () => { nav.scrollIntoView({ block: 'center', behavior: RM ? 'auto' : 'smooth' }); $('a', nav).focus({ preventScroll: true }); };
 }
 /* ---------- colección: pets-coleccion.js se carga al primer gesto que lo necesita ---------- */
