@@ -1,4 +1,4 @@
-import { $, $$, esc, store, on, emit, modal, toast, bind, myChars, HUB_API, lnaBlocked, LNA_MSG, PAGE } from './core.js?v=30d10ccdea';
+import { $, $$, esc, store, on, emit, modal, toast, bind, myChars, HUB_API, lnaBlocked, LNA_MSG, PAGE } from './core.js?v=7c64b0fb22';
 const VQ = new URL(import.meta.url).search;
 const NO_SYNC = new Set(['hub-cuenta', 'hub-sync', 'hub-live', 'hub-api', 'hub-pj-api', 'hub-alertas-log', 'hub-cid', 'hub-ahora-tl',
 'pets-backup', 'pets-bak-t', 'pets-dirty', 'pets-fx', 'pets-questlog-char', 'pets-questlog-sync']);
@@ -241,7 +241,7 @@ const passIn = (label = 'Contraseña', ac = 'current-password', name = 'pass') =
 const qFields = () => `<label>Pregunta de seguridad<span class="sel"><select name="qsel">${QUESTIONS.map(q => `<option>${esc(q)}</option>`).join('')}<option value="">Otra: la escribo yo</option></select></span></label>
 <label class="cu-otra" hidden>Tu pregunta<input name="qtxt" type="text" maxlength="120" autocomplete="off"></label>${inp('ans', 'Respuesta', 'text', 'off', ' maxlength="100"')}`;
 const act = (go, label, back = 'home', cls = 'gold') => `<p class="cu-err" role="alert"></p><div class="cu-act"><button type="button" class="btn ${cls}" data-go="${go}">${label}</button>${back ? `<button type="button" class="btn ghost" data-v="${back}">Volver</button>` : ''}</div>`;
-const tabs = v => `<p class="hint">Opcional: con una cuenta tenés tus personajes, tareas, timers, ajustes y pets en el celu y en la PC. Solo usuario y contraseña, sin email.</p>
+const tabs = v => `<p class="hint">Opcional: con una cuenta tenés tus personajes, tareas, campanas, ajustes y pets en el celu y en la PC. Solo usuario y contraseña, sin email.</p>
 <div class="seg" role="group" aria-label="Entrar o crear cuenta"><button type="button" data-v="entrar" aria-pressed="${v === 'entrar'}">Entrar</button><button type="button" data-v="crear" aria-pressed="${v === 'crear'}">Crear cuenta</button></div>`;
 const VIEWS = {
 entrar: () => `${tabs('entrar')}<div class="f2">${USER}${passIn()}</div>${act('login', 'Entrar', '')}<p><button type="button" class="linkbtn" data-v="olvide">¿Olvidaste tu contraseña?</button></p>`,
@@ -253,7 +253,7 @@ olvide: p => p.q == null
 <p class="hint">Se cierra la sesión en todos tus dispositivos.</p>${act('recover', 'Cambiar contraseña', 'entrar')}`,
 home: () => `<div class="cu-me"><span class="cu-avslot"></span><div><p class="cu-who">Entraste como <b>${esc(session()?.user)}</b>.${session()?.greet ? ` <span class="cu-greet-s">${esc(session().greet)}</span>` : ''}</p><p class="cu-avl"></p></div></div><p class="cu-st" aria-live="polite"></p><div class="cu-avpick"></div>
 <div class="cu-act"><button type="button" class="btn" data-go="logout">Cerrar sesión</button></div>
-<p class="hint">Personajes, tareas, timers, ajustes y pets quedan en el servidor y en cada dispositivo donde entres.</p>
+<p class="hint">Personajes, tareas, campanas, ajustes y pets quedan en el servidor y en cada dispositivo donde entres.</p>
 <div class="cu-more"><button type="button" class="linkbtn" data-v="pass">Cambiar contraseña</button><button type="button" class="linkbtn" data-v="preg">Cambiar pregunta de seguridad</button><button type="button" class="linkbtn" data-v="code">Generar código de recuperación</button><button type="button" class="linkbtn danger" data-v="borrar">Borrar cuenta</button></div>`,
 pass: () => `<p class="cu-h">Cambiar contraseña</p>${passIn('Contraseña actual')}${passIn('Contraseña nueva (8 o más)', 'new-password', 'np')}<p class="hint">Se cierra la sesión en tus otros dispositivos.</p>${act('password', 'Guardar')}`,
 preg: () => `<p class="cu-h">Cambiar pregunta de seguridad</p>${passIn('Contraseña actual')}${qFields()}${act('setq', 'Guardar')}`,

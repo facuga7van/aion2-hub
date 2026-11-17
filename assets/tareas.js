@@ -1,7 +1,7 @@
 import {
-$, esc, ico, on, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal,
+$, esc, ico, on, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal, evPic,
 characters, taskList, taskDone, setTaskDone, taskProgress, PJ, TK, profile, serverName, registerKey, confOf, confTag, clockLeft, gname, gclass, HOUR,
-} from './core.js?v=30d10ccdea';
+} from './core.js?v=7c64b0fb22';
 const PER = { daily: { t: 'Diarias', when: 'reset diario' }, weekly: { t: 'Semanales', when: 'reset del miércoles' } };
 let editing = false;
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -37,7 +37,7 @@ return L.length ? `<p class="tk-cfl">${L.join('')}<span>tocá el punto para ver 
 }
 const nowrapEnd = (txt, tail) => { const s = String(txt || ''), i = s.lastIndexOf(' '); return tail ? `${esc(s.slice(0, i + 1))}<span class="nw">${esc(s.slice(i + 1))}${tail}</span>` : esc(s); };
 function row(t, per, done) {
-const v = done[t.id] || 0, max = t.count || 1, ok = v >= max, id = `t-${t.id}`;
+const v = done[t.id] || 0, max = t.count || 1, ok = v >= max, id = `t-${esc(t.id)}`;
 const tags = [t.custom && '<em class="tag gold">tuya</em>'].filter(Boolean).join('');
 const lv = lvOf(t);
 const conf = lv === 'oficial' ? '' : confTag(t, { lv, note: (t.unverified || []).join(' · '), dot: true });
@@ -45,7 +45,7 @@ const ctrl = max > 1
 ? `<span class="tk-step" role="group" aria-label="${esc(gname(t))}: ${v} de ${max}"><button type="button" class="iconbtn" data-dec="${esc(t.id)}" aria-label="Una menos"${v ? '' : ' disabled'}>${ico('i-minus')}</button><output id="${id}" tabindex="-1">${v}/${max}</output><button type="button" class="iconbtn" data-inc="${esc(t.id)}" aria-label="Una más"${ok ? ' disabled' : ''}>${ico('i-plus')}</button></span>`
 : `<input type="checkbox" id="${id}" data-chk="${esc(t.id)}"${ok ? ' checked' : ''}>`;
 return `<li class="tk-row${ok ? ' ok' : ''}${t.optional ? ' opt' : ''}" data-t="${esc(t.id)}" data-per="${per}">
-${max > 1 ? '' : ctrl}<label class="tk-txt" ${max > 1 ? '' : `for="${id}"`}><span class="tk-name">${esc(gname(t))}${tags}</span>${t.detail || conf ? `<small>${nowrapEnd(gname(t, 'detail'), conf)}</small>` : ''}</label>
+${max > 1 ? '' : ctrl}<label class="tk-txt" ${max > 1 ? '' : `for="${id}"`}>${evPic(t, 80, 'tk-ic', 36) || ico('i-tareas', 'tk-ic')}<span class="tk-name">${esc(gname(t))}${tags}</span>${t.detail || conf ? `<small>${nowrapEnd(gname(t, 'detail'), conf)}</small>` : ''}</label>
 ${t.event ? `<span class="tk-ev cd" id="ev-${per}-${esc(t.id)}"></span>` : ''}${max > 1 ? ctrl : ''}
 <button type="button" class="iconbtn tk-del" data-del="${esc(t.id)}" aria-label="Quitar ${esc(gname(t))}" title="${t.custom ? 'Borrar' : 'Ocultar'}">${ico('i-trash')}</button></li>`;
 }
@@ -120,7 +120,7 @@ return added;
 $('#pj-add').onclick = async () => {
 const pr = profile(), box = document.createElement('div');
 box.innerHTML = `<label>Nombre<input type="text" id="pj-n" maxlength="24" autocomplete="off" required></label><p class="hint" style="margin-top:10px">Solo para separar las marcas de cada personaje. ${pr.server ? `Queda en ${esc(serverName(pr.server))}.` : ''}</p>
-<p class="hint pj-ql-l">¿Usás la app de escritorio que guarda tus combates? <button type="button" class="linkbtn" id="pj-ql">Traé tus personajes de ahí</button></p>`;
+<p class="hint pj-ql-l">¿Usás la app de DPS (el medidor de daño de PC)? <button type="button" class="linkbtn" id="pj-ql">Traé tus personajes de ahí</button></p>`;
 $('#pj-ql', box).onclick = () => { box.closest('dialog')?.close(); qlModal(); };
 setTimeout(() => $('#pj-n', box)?.focus(), 30);
 box.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'pj-n') { e.preventDefault(); box.closest('form').querySelector('.btn.gold').click(); } });
@@ -156,10 +156,10 @@ const QL_FIGS = [
 function qlModal() {
 const box = document.createElement('div'), win = /win/i.test(navigator.userAgentData?.platform || navigator.platform || '');
 box.className = 'ql';
-box.innerHTML = `<p class="lead">Si en esta PC usás la app de escritorio que registra tus combates de Aion 2, tus personajes ya están en un archivo, <b>characters.json</b>. Se lee en tu navegador, no se sube nada.</p>
+box.innerHTML = `<p class="lead">Si usás la app de DPS (el medidor de daño de PC), tus personajes ya están en un archivo, <b>characters.json</b>. Se lee en tu navegador, no se sube nada.</p>
 ${win ? `<details class="ql-help"><summary>¿No lo encontrás?</summary><ol class="pasos">${QL_FIGS.map(([a, svg, cap], i) => `<li><figure><svg viewBox="0 0 160 96" role="img" aria-label="${a}">${svg}</svg><figcaption><b>${i + 1}</b><span>${cap}</span></figcaption></figure></li>`).join('')}</ol>
 <div class="ql-path"><code id="ql-dir">${esc(QL_DIR)}</code><button type="button" class="btn ghost" data-qlcopy>Copiar carpeta</button></div></details>`
-: '<p class="hint">Esa app es solo para Windows. Si tenés el archivo igual, elegilo.</p>'}
+: '<p class="hint">La app de DPS es solo para Windows. Si tenés el archivo igual, elegilo.</p>'}
 <p class="ql-st" role="status"></p>
 <div class="ql-act"><button type="button" class="btn gold" data-qlpick>${ico('i-upload')}Elegir archivo</button></div>
 <input type="file" id="ql-file" accept=".json,application/json" hidden>`;

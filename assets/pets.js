@@ -1,4 +1,4 @@
-import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=30d10ccdea';
+import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=7c64b0fb22';
 const VQ = new URL(import.meta.url).search;  // ?v=<hash>: los módulos lazy van con la misma versión
 const D = JSON.parse($('#pets-data').textContent);
 const ALL = D.pets, BY = new Map(ALL.map(p => [p.id, p]));
@@ -525,6 +525,12 @@ addEventListener('hashchange', () => {
 if (!DEEP.test(location.hash) || document.documentElement.hasAttribute('data-deep')) return;
 deep(); document.querySelector(location.hash.split(/[?&]/)[0])?.scrollIntoView();
 });
+/* ---------- "↑ Menú" en el celu: aparece cuando el menú de Pets (2x2) quedó arriba, fuera de la pantalla, y vuelve a él ---------- */
+{
+const btn = $('#toMenu'), nav = $('.hnav');
+new IntersectionObserver(([e]) => { btn.hidden = e.isIntersecting || e.boundingClientRect.top > 0; }).observe(nav);
+btn.onclick = () => { nav.scrollIntoView({ block: 'center', behavior: RM ? 'auto' : 'smooth' }); $('a', nav).focus({ preventScroll: true }); };
+}
 /* ---------- colección: pets-coleccion.js se carga al primer gesto que lo necesita ---------- */
 const QL_DIR = '%APPDATA%\\Questlog\\aion-2';
 const MOBILE = /Android|iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -564,7 +570,8 @@ addEventListener('keydown', e => { if (e.key === 'Escape' && !ov.hidden) off(); 
 }
 new IntersectionObserver((es, o) => { if (es.some(e => e.isIntersecting)) { o.disconnect(); col(); } }, { rootMargin: '600px 0px' }).observe($('#coleccion'));
 if (!WIN) {
-$('#qlLead').textContent = MOBILE ? 'La app de DPS es solo para Windows. Desde el celu, usá la Carga rápida o abrí tu link de respaldo.' : 'La app de DPS es solo para Windows.';
+$('#qlLead').textContent = MOBILE ? 'Elegí el respaldo (.json) que descargaste o abrí tu link.' : 'La app de DPS es solo para Windows.';
+if (MOBILE) $('#qlCard h3').lastChild.textContent = 'Restaurar un respaldo';  // en el celu la app de DPS no corre: la tarjeta sirve para el respaldo
 for (const x of ['#qlHelp', '#qlDrop']) $(x).hidden = true;
 $('#qlLoad').classList.remove('gold'); $('#qlLoad').lastChild.textContent = MOBILE ? 'Restaurar un respaldo (.json)' : 'Tengo el archivo igual';
 }

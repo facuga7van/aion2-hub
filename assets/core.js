@@ -12,6 +12,7 @@ const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 export const DATA = JSON.parse(document.getElementById('hub-data').textContent);
 export const SCHEDULE = DATA.schedule, TASKS = DATA.tasks, SERVERS = DATA.servers, NAV = DATA.nav;
 export const ROOT = new URL('../', import.meta.url).href;      // core.js vive en assets/
+const siteHref = h => { try { const u = new URL(h, location.href); return u.href.startsWith(ROOT) ? u.href : ROOT; } catch { return ROOT; } };
 export const PAGE = document.documentElement.dataset.page;
 const REG = SCHEDULE.regions, EVS = SCHEDULE.events;
 export const EVENTS = new Map(EVS.map(e => [e.id, e]));
@@ -341,7 +342,7 @@ export function announce(text) { const l = $('#hub-live'); if (l) { l.textConten
 export const CREDITS = [
 ['Horarios y eventos', 'Notas y avisos oficiales de PLAYNC (NCSOFT). Lo que no tiene aviso oficial lo midieron jugadores y se cruzó con questlog.gg y shugo.gg; va rotulado.'],
 ['Jefes en vivo', 'Telemetría de jugadores: la app de escritorio de questlog.gg ve los jefes en las partidas de sus usuarios. Llega a través del servidor de la Bitácora. Si activás los reportes de la comunidad, también lo que avisan otros jugadores de tu server ("Estimado").'],
-['Jefes: nombres, teleports y retratos', 'Base de datos de Aion 2 de questlog.gg. Los ciclos "medidos" los midió la comunidad (Inven); los oficiales, del parche Global.'],
+['Jefes: nombres, teleports y retratos', 'Base de datos de Aion 2 de questlog.gg. Los ciclos "medidos" los midió la comunidad de jugadores; los oficiales, del parche Global.'],
 ['Jefes: drops', 'Qué suelta cada jefe y con qué chance: base de datos de questlog.gg cruzada con los datos del cliente Global que publica aion2data.com (https://aion2data.com/monsters). Íconos del CDN oficial de PLAYNC, re-guardados chicos.'],
 ['Personaje', 'Ficha pública de PLAYNC (equipo, skills, Daevanion, nivel de objeto) e íconos del CDN oficial de PLAYNC, re-guardados chicos. Nombres de skills en inglés, tablas de amplificación y builds de la comunidad: questlog.gg. Lo que usan los top: el armory público de PLAYNC sobre la lista de mayor CP de questlog.gg. Guías de builds: aion2data.com (https://aion2data.com). Puertas de contenido: notas oficiales de parche de PLAYNC; las de Expedición y Trascendencia, de guías de la comunidad.'],
 ['Personaje: títulos y logros', 'Conteo y títulos equipados: ficha pública de PLAYNC. Catálogo de títulos y logros (pasos, metas, recompensas, estatuas del Panteón): base de datos de questlog.gg, cruzada con los datos del cliente de aion2data.com (https://aion2data.com). Qué es "importante": criterio propio con lo que equipan los top. La lista de tus títulos y tu Panteón se carga desde characters.json de la app de escritorio de questlog.gg, en tu navegador. Íconos: CDN oficial de PLAYNC.'],
@@ -357,6 +358,7 @@ return modal({ title: 'Fuentes y créditos', node: box, cls: 'credits-m', action
 export function modal({ title, html = '', node = null, actions = [{ label: 'Cerrar', value: null }], cls = '' }) {
 const d = document.createElement('dialog');
 d.className = 'modal ' + cls;
+d.setAttribute('aria-label', title);  // nombre accesible del diálogo = su título
 d.innerHTML = `<form method="dialog"><h2>${esc(title)}</h2><div class="modal-b">${html}</div><div class="modal-act">${actions.map((a, i) =>
 `<button class="btn${a.primary ? ' gold' : ''}" value="${i}">${esc(a.label)}</button>`).join('')}</div></form>`;
 if (node) $('.modal-b', d).append(node);
@@ -468,7 +470,7 @@ const log = store.get('hub-alertas-log', []);
 if (log.includes(q.key)) return;                 // otra pestaña líder ya lo disparó
 store.set('hub-alertas-log', [...log, q.key].slice(-40));
 if (isSilenced(now)) return;                     // horas de silencio o M: solo el toast
-notify(title, { body, tag: 'hub-' + q.id, data: { href: it.href || ROOT } });
+notify(title, { body, tag: 'hub-' + q.id, data: { href: siteHref(it.href || ROOT) } });
 if (A.sound) chime(A.vol, q.lead === 0);
 }
 export function testAlert() {
@@ -647,7 +649,8 @@ m.style.top = (r.bottom + h + 8 > innerHeight ? Math.max(8, r.top - h - 6) : r.b
 const CAT_ICO = { pvp: 'i-pvp', boss: 'i-boss', evento: 'i-evento', reset: 'i-reset' };
 export const catIcon = ev => CAT_ICO[ev.category] || 'i-evento';
 export const bossPic = (r, px = 80, cls = 'up-p', sz = 32) => /^[\w-]+$/.test(r || '') ? `<img class="${cls}" src="${ROOT}assets/jefes/${r}-${px}.webp" width="${sz}" height="${sz}" alt="" loading="lazy" decoding="async">` : '';
-export function renderUpcoming(box, { count = 8, bells = true, minor = true } = {}) {
+export const evPic = (o, px = 80, cls = 'up-p', sz = 32) => bossPic(o.retrato, px, cls, sz) || (/^[\w-]+$/.test(o.icon || '') ? `<img class="${cls} gi" src="${ROOT}assets/ic/${o.icon}.webp" width="${sz}" height="${sz}" alt="" loading="lazy" decoding="async">` : '');
+export function renderUpcoming(box, { count = 8, bells = true, minor = true, minorLast = false } = {}) {
 const doc = box.ownerDocument;
 const draw = () => {
 const now = Date.now(), seen = new Set();
@@ -655,7 +658,7 @@ const L = upcoming(now, { count: count * 3, minor }).filter(o => o.ev.kind !== '
 const ol = doc.createElement('ol');
 ol.className = 'up';
 const k = (live, start) => live ? 0 : start;
-const rows = [...L.map(o => [k(isLive(o, now), o.start), o]), ...storedTimers(now).filter(t => t.up).map(t => [k(now >= t.start, t.start), null, t])].sort((a, b) => a[0] - b[0]);
+const rows = [...L.map(o => [k(isLive(o, now), o.start), o]), ...storedTimers(now).filter(t => t.up).map(t => [k(now >= t.start, t.start), null, t])].sort((a, b) => minorLast && (!!a[1]?.ev.minor - !!b[1]?.ev.minor) || a[0] - b[0]);
 for (const [, o, t] of rows) {
 if (t) {
 const li = doc.createElement('li'), live = now >= t.start;
@@ -668,14 +671,14 @@ ol.append(li);
 continue;
 }
 const li = doc.createElement('li'), live = isLive(o, now), portal = live && o.entry > now;
-li.className = 'up-r' + (live ? ' live' : '') + (o.maint === 'quizas' ? ' quizas' : '');
+li.className = 'up-r' + (live ? ' live' : '') + (o.maint === 'quizas' ? ' quizas' : '') + (minorLast && o.ev.minor ? ' up-min' : '');
 li.dataset.ev = o.id;
 const tags = [o.maint === 'quizas' && '<em class="tag warn" title="Puede caer dentro del mantenimiento del miércoles">¿mantenimiento?</em>',
 confOf(o.ev) === 'sin' && confTag(o.ev)].filter(Boolean).join('');
 const edge = portal ? o.entry : live ? o.end : o.start;
 const when = portal ? `cierra ${fmtClock(o.entry, { now, day: false })}` : live ? `hasta ${fmtClock(o.end, { now, day: false })}` : fmtClock(o.start, { now });
 const st = live ? (portal ? esc(o.ev.entryLabel) : 'en curso') : o.ev.kind === 'hourly' ? 'cada hora' : '';
-li.innerHTML = `${bossPic(o.ev.retrato) || ico(catIcon(o.ev), 'up-i')}<span class="up-n"><span class="up-nt">${esc(gname(o.ev, 'short') || gname(o.ev))}</span>${tags}${st ? `<small class="up-st${live ? '' : ' up-ev'}">${st}</small>` : ''}</span><time class="up-t" datetime="${new Date(edge).toISOString()}">${when}</time><span class="up-c cd"></span>`;
+li.innerHTML = `${evPic(o.ev) || ico(catIcon(o.ev), 'up-i')}<span class="up-n"><span class="up-nt">${esc(gname(o.ev, 'short') || gname(o.ev))}</span>${tags}${st ? `<small class="up-st${live ? '' : ' up-ev'}">${st}</small>` : ''}</span><time class="up-t" datetime="${new Date(edge).toISOString()}">${when}</time><span class="up-c cd"></span>`;
 if (bells) li.append(bellButton(o.id, gname(o.ev)));
 countdown($('.up-c', li), edge);
 ol.append(li);
@@ -724,7 +727,7 @@ const tm = storedTimers(now).sort((a, b) => (a.start <= now) - (b.start <= now) 
 if (tm) {
 const a = document.createElement('a');
 a.className = 'st-i st-timer';
-a.href = tm.href || ROOT;
+a.href = siteHref(tm.href || ROOT);
 a.innerHTML = `<b>${tm.approx ? '≈ ' : ''}${esc(alertName(tm))}</b><small>${fmtClock(tm.start, { now })}</small><span class="cd"></span>`;
 bind($('.cd', a), n => { const [t, d] = timerText(tm)(n); return [n < tm.start ? 'en ' + t : t, d]; });
 box.append(a);
@@ -822,7 +825,7 @@ d.close();
 if (it.run) it.run(); else if (it.href) go(it.href);
 }
 export function go(href) {
-const u = new URL(href, location.href);
+const u = new URL(siteHref(href));
 if (u.pathname === location.pathname && u.search === location.search && u.hash) { location.hash = u.hash; return; }
 location.href = u.href;
 }
@@ -852,7 +855,11 @@ export const loadCuenta = () => import('./cuenta.js' + new URL(import.meta.url).
 const CUENTA_OFF = 'Sin conexión: la cuenta se carga cuando vuelva.';
 function cuentaBox() {
 const f = Object.assign(document.createElement('fieldset'), { className: 's-cuenta', innerHTML: '<legend>Cuenta</legend>' });
-loadCuenta().then(m => m.mount(f), () => f.insertAdjacentHTML('beforeend', `<p class="hint">${CUENTA_OFF}</p>`));
+const mountCu = () => loadCuenta().then(m => m.mount(f), () => f.insertAdjacentHTML('beforeend', `<p class="hint">${CUENTA_OFF}</p>`));
+if (store.get('hub-cuenta', null)) { mountCu(); return f; }
+const b = Object.assign(document.createElement('button'), { type: 'button', className: 'btn s-cu-open', textContent: 'Entrar / Crear cuenta' });
+b.onclick = () => { b.disabled = true; mountCu().then(() => { b.remove(); $('input', f)?.focus(); }); };
+f.append(b);
 return f;
 }
 /* ---------- ajustes y onboarding de un paso ---------- */
@@ -1037,18 +1044,18 @@ id: ev.id, label: ev.name, short: ev.short, labelEn: ev.nameEn, shortEn: ev.shor
 next: now => nextOcc(ev.id, now), current: now => currentOcc(ev.id, now),
 note: o => o.ev.entry ? `${o.ev.entryLabel} ${o.ev.entry} min` : o.ev.notes?.split('.')[0],
 });
-registerPalette('nav', { group: 'Sección', items: NAV.map((n, i) => ({ id: 'nav-' + n.id, title: n.label, sub: n.desc, icon: n.icon, href: ROOT + n.href, pin: true, kw: String(i + 1) })) });
+registerPalette('nav', { group: 'Sección', items: NAV.map((n, i) => ({ id: 'nav-' + n.id, title: n.label, sub: n.desc, icon: n.icon, href: ROOT + n.href, pin: true, kw: `${i + 1} ${n.kw}` })) });
 registerPalette('poi', {
 group: 'Ir a', items: () => NAV.flatMap(n => (n.poi || []).map(x => ({ id: `poi-${n.id}-${x.id}`, title: x.label, sub: n.label, icon: n.icon, pin: true, kw: x.kw, w: 0.9,
 href: ROOT + n.href + (x.fac ? x.fac[profile().faccion === 'asmodian' ? 'asmodian' : 'elyos'] : x.href) }))),
 });
 registerPalette('cmd', {
 group: 'Acción', items: () => [
-{ id: 'cmd-ajustes', title: 'Ajustes', sub: 'Región, server, facción, idioma del juego, horas y avisos', icon: 'i-gear', run: () => openSettings(), pin: true, kw: 'configuracion server region faccion idioma ingles english nombres' },
+{ id: 'cmd-ajustes', title: 'Ajustes', sub: 'Server, facción, idioma y avisos', icon: 'i-gear', run: () => openSettings(), pin: true, kw: 'configuracion server region faccion idioma ingles english nombres horas' },
 { id: 'cmd-mute', title: isMuted() ? 'Activar avisos' : 'Silenciar avisos 1 hora', sub: 'Tecla M', icon: 'i-bell-off', run: () => toggleMute(), pin: true, kw: 'mute silencio' },
-{ id: 'cmd-pip', title: 'Sacar ventana', sub: 'Próximos en una ventana chica, siempre encima', icon: 'i-pip', run: () => popOut(), pin: true, kw: 'mini flotante picture overlay' },
-{ id: 'cmd-creditos', title: 'Fuentes y créditos', sub: 'De dónde salen los horarios, los jefes y las imágenes', icon: 'i-ext', run: () => openCredits(), kw: 'fuentes creditos datos questlog plaync shugo' },
-{ id: 'cmd-test', title: 'Probar aviso', sub: 'Toast, sonido y notificación', icon: 'i-bell-on', run: () => { audio(); testAlert(); }, kw: 'alerta sonido notificacion' },
+{ id: 'cmd-pip', title: 'Sacar ventana', sub: 'Lo próximo, siempre a la vista', icon: 'i-pip', run: () => popOut(), pin: true, kw: 'mini flotante picture overlay' },
+{ id: 'cmd-creditos', title: 'Fuentes y créditos', sub: 'De dónde salen los datos', icon: 'i-ext', run: () => openCredits(), kw: 'fuentes creditos datos questlog plaync shugo' },
+{ id: 'cmd-test', title: 'Probar aviso', sub: 'Cartel, sonido y notificación', icon: 'i-bell-on', run: () => { audio(); testAlert(); }, kw: 'alerta sonido notificacion' },
 { id: 'cmd-help', title: 'Teclado', sub: 'Tecla ?', icon: 'i-help', run: () => openHelp(), kw: 'ayuda atajos teclas' },
 ],
 });

@@ -1,8 +1,8 @@
 import {
 $, $$, esc, ico, on, onTick, onStore, bind, countdown, fmtClock, fmtLeft, leftNext, schedule, upcoming, nextReset, renderUpcoming,
-nextBelled, bellButton, getBell, bossPic, EVENTS, isLive, isVisible, catIcon, tzSentence, versioned, characters, taskList, taskDone, taskProgress,
+nextBelled, bellButton, getBell, evPic, EVENTS, isLive, isVisible, catIcon, tzSentence, versioned, characters, taskList, taskDone, taskProgress,
 setTaskDone, toast, prefs, setPrefs, partsIn, displayTz, store, confTag, clockLeft, gname, galt, alertName, nextOcc, currentOcc, HOUR, MIN,
-} from './core.js?v=30d10ccdea';
+} from './core.js?v=7c64b0fb22';
 const html = document.documentElement;
 /* ---------- resets y mantenimiento ---------- */
 function paintResets() {
@@ -38,7 +38,7 @@ const hint = mine ? `${ico('i-bell-on')} <span>Te aviso ${leadsTxt(mine)}.${nb &
 box.innerHTML = `${cur ? `<p class="hero-now"><i class="st-dot" aria-hidden="true"></i>En curso: <b>${esc(gname(cur.ev, 'short') || gname(cur.ev))}</b> <span>hasta ${fmtClock(cur.end, { now, day: false })}</span></p>` : ''}
 <div class="hero-main"><p class="hero-k2">${ico(catIcon(ev))}${CAT[ev.category] || 'Evento'}</p><p class="hero-n"${galt(ev) ? ` title="${esc(galt(ev))}"` : ''}>${esc(name)}</p>${ev.what ? `<p class="hero-q">${esc(gname(ev, 'what'))}</p>` : ''}<p class="hero-l">${lbl}</p><p class="hero-c cd" id="hero-c"></p>
 <p class="hero-s"><time>${fmtClock(live ? occ.end : occ.start, { now })}${live ? ' fin' : ''}</time>${bits.map(b => `<span>${esc(b)}</span>`).join('')}${confTag(ev)}</p></div>
-<div class="hero-side">${bossPic(ev.retrato, 192, 'hero-p', 96)}</div>
+<div class="hero-side">${evPic(ev, 192, 'hero-p', 96)}</div>
 <p class="hero-hint">${hint}</p>`;
 $('.hero-side', box).append(bellButton(ev.id, name));
 bind($('#hero-c'), n => [fmtLeft(target - n), n + leftNext(target - n)]);
@@ -97,7 +97,7 @@ return `<i class="${cls}" style="left:${pct(o.start)};width:${w ? `calc(${pct(o.
 }).join('');
 if (!bl && PH.matches) return '';                   // celu: una fila vacía en la ventana que ves solo ocupa lugar
 n++;
-return `<div class="tl-row" id="tl-${ev.id}"><button type="button" class="tl-l" data-what="${esc(ev.id)}">${ico(catIcon(ev))}<span class="tl-nm">${esc(gname(ev, 'short') || gname(ev))}</span>${ev.what ? `<small>${esc(gname(ev, 'what'))}</small>` : ''}</button><div class="tl-tr">${bl}</div></div>`;
+return `<div class="tl-row" id="tl-${ev.id}"><button type="button" class="tl-l" data-what="${esc(ev.id)}">${evPic({ icon: ev.icon }, 80, 'tl-p', 20) || ico(catIcon(ev))}<span class="tl-nm">${esc(gname(ev, 'short') || gname(ev))}</span>${ev.what ? `<small>${esc(gname(ev, 'what'))}</small>` : ''}</button><div class="tl-tr">${bl}</div></div>`;
 }).join('');
 const resets = c.list.filter((o, i, L) => o.ev.category === 'reset' && o.start > t0 && o.start < t1 && !(o.id === 'reset-diario' && L.some(w => w.id === 'reset-semanal' && w.start === o.start)))
 .map(o => `<i class="tl-rs${o.id === 'reset-semanal' ? ' wk' : ''}" style="left:${pct(o.start)}"><span>${o.id === 'reset-semanal' ? 'Reset semanal' : 'Reset'}</span></i>`).join('');
@@ -159,8 +159,8 @@ function paintWake() {
 wakeBtn.setAttribute('aria-pressed', String(!!lock));
 wakeBtn.title = lock ? 'La pantalla no se apaga mientras tengas esto abierto (tocá para soltar)' : 'Que la pantalla no se apague mientras tengas esto abierto';
 }
-if ('wakeLock' in navigator) {
-wakeBtn.hidden = false;
+if (!('wakeLock' in navigator)) wakeBtn.hidden = true;
+else {
 paintWake();
 wakeBtn.onclick = () => { if (lock) { wantLock = false; lock.release(); } else { wantLock = true; getLock(); } };
 document.addEventListener('visibilitychange', () => { if (!document.hidden && wantLock && !lock) getLock(); });
@@ -185,7 +185,7 @@ $('#tzline').innerHTML = `${esc(tzSentence())} <button type="button" class="link
 $('#up-sub').textContent = prefs().clock === 'server' ? 'hora del server' : 'en tu reloj';
 }
 function paintAll() { paintResets(); paintHero(); paintTl(); paintTz(); }
-renderUpcoming($('#up'), { count: 10 });
+renderUpcoming($('#up'), { count: 10, minorLast: true });   // los de cada hora al final: la primera fila es la de "Lo próximo"
 paintAll();
 paintTk();
 paintPins();

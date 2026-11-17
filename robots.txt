@@ -1,0 +1,3 @@
+User-agent: *
+Allow: /
+Sitemap: https://facuga7van.github.io/aion2-hub/sitemap.xml
