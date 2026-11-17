@@ -1,4 +1,4 @@
-import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=429484d946';
+import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=51a276714b';
 const VQ = new URL(import.meta.url).search;  // ?v=<hash>: los módulos lazy van con la misma versión
 const D = JSON.parse($('#pets-data').textContent);
 const ALL = D.pets, BY = new Map(ALL.map(p => [p.id, p]));
@@ -166,7 +166,8 @@ return { key: 'lugar:' + FAC + ':' + k, title: PLACE(k), icon: k === SHOP ? 'i-s
 });
 }
 if (mode === 'fuente') return D.cats.map(c => ({ key: 'cat:' + c.key, ids: ALL.filter(p => p.cat === c.key).map(p => p.id) }));
-return D.genusOrder.map(g => ({ key: 'genus:' + g, ids: ALL.filter(p => p.genusKey === g).map(p => p.id) }));  // la de arranque: las secciones las arma el build
+const az = (a, b) => a.name.localeCompare(b.name, 'es', { sensitivity: 'base' });  // dentro del genus, por nombre (igual que el build)
+return D.genusOrder.map(g => ({ key: 'genus:' + g, ids: ALL.filter(p => p.genusKey === g).sort(az).map(p => p.id) }));  // la de arranque: las secciones las arma el build
 }
 function regroup() {
 const frag = document.createDocumentFragment();
