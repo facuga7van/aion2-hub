@@ -1,5 +1,5 @@
-import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js?v=d624ec9232';
-import { useful, skillParts } from './personaje-calc.js?v=d624ec9232';
+import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js?v=a6a3e41ad9';
+import { useful, skillParts } from './personaje-calc.js?v=a6a3e41ad9';
 let X;                                         // {api, MSG, img, gcls, GRADE, nf, curated, CLS_KEY, gl} que pasa personaje.js
 export const init = ctx => { X = ctx; };
 const VQ = new URL(import.meta.url).search;   // ?v=<hash>: assets/pj-items.json con la misma versión
@@ -48,6 +48,8 @@ const TSLOTS = ['weapon', 'offhand', 'helmet', 'shoulder', 'torso', 'pants', 'gl
 const ARC = [['chalice', 'Cáliz'], ['parchment', 'Pergamino'], ['compass', 'Brújula'], ['bell', 'Campana'], ['mirror', 'Espejo']];
 const SET_ES = { Vigor: 'Vitalidad', Magic: 'Magia' };
 export const CSLOT = { 1: 'weapon', 2: 'offhand', 3: 'helmet', 4: 'shoulder', 5: 'torso', 6: 'pants', 7: 'gloves', 8: 'boots', 19: 'cape', 10: 'necklace', 11: 'earring', 12: 'earring', 13: 'ring', 14: 'ring', 15: 'bracelet', 16: 'bracelet', 17: 'belt', 22: 'amulet', 23: 'rune', 24: 'rune' };
+const cslot = s => CSLOT[s] || ARC[s - 41]?.[0];
+const SK_MIN = 0.2;
 export const often = s => s >= 0.9 ? 'casi todos' : s >= 0.65 ? 'la mayoría' : s >= 0.4 ? 'la mitad' : s >= 0.2 ? 'algunos' : 'pocos';
 const share = (s, what = 'la usan') => `<span class="sh" role="img" aria-label="${what} ${often(s)} (${pct(s)} %)"><i style="--q:${pct(s)}%"></i></span>`;
 const skIcon = (id, sz) => SK[id]?.[1] ? X.img(`https://assets.playnccdn.com/static-aion2-gamedata/resources/${SK[id][1]}.png`, sz) : '';
@@ -81,7 +83,14 @@ const card = (cls, h, body) => `<section class="cu-card ${cls}"><h4 class="cu-ch
 function topHtml(C, k, cls, cur) {
 const T = C.top?.[k], all = C.top?.all?.n;
 const mine = {};
-for (const [slot, it] of Object.entries(cur?.x?.items || {})) for (const l of it?.subStats || []) (mine[CSLOT[slot]] ||= new Set()).add(String(l.id).toLowerCase());
+for (const [slot, it] of Object.entries(cur?.x?.items || {})) {
+const m = mine[cslot(+slot)] ||= new Set();
+for (const l of it?.subStats || []) m.add(String(l.id).toLowerCase());
+for (const l of it?.subSkills || []) m.add('sk:' + l.id);
+}
+const parts = cur?.x ? skillParts(cur.d, cur.x.items || {}, cur.x.boards || {}) : null;
+const mySk = new Map((cur?.d.skills || []).map(x => [String(x.id), x]));
+const uses = id => parts ? useful(mySk.get(String(id)), parts.get(String(id))) : null;
 const myLv = new Map((cur?.d.skills || []).map(x => [String(x.id), x.level || 0]));
 const myStig = new Set((cur?.d.skills || []).filter(x => x.category === 'Dp' && x.level > 0).map(x => String(x.id)));
 const have = cur?.x ? (s, id) => !!mine[s]?.has(id) : () => false;
@@ -90,15 +99,28 @@ const sk = s => ({ name: s.name, nameEn: SK[s.id]?.[0] });
 const ok = (s, l) => have(s, l.id) ? ico('i-check') + '<span class="sr">La tenés: </span>' : '';
 const chip = (s, l) => `<li data-id="${esc(l.id)}"${have(s, l.id) ? ' class="have"' : ''} title="La usan ${often(l.share)} los top (${pct(l.share)} % de las piezas)${have(s, l.id) ? '. Vos la tenés' : ''}">${ok(s, l)}${esc(l.name)}${share(l.share)}</li>`;
 const pill = (s, l) => `<li data-id="${esc(l.id)}"${have(s, l.id) ? ' class="have"' : ''}>${ok(s, l)}${esc(l.name)}</li>`;
-const slots = TSLOTS.filter(s => T.slots[s]?.lines?.length);
+const skName = l => gname({ name: l.name, nameEn: SK[l.id]?.[0] });
+const skHave = (s, l) => have(s, 'sk:' + l.id);
+const okI = '<span class="sr">La tenés: </span>';
+const skPill = (s, l) => `<li class="sk${skHave(s, l) ? ' have' : ''}" data-sk="${esc(l.id)}" title="+ nivel de ${esc(skName(l))}: la llevan ${often(l.share)} los top (${pct(l.share)} %)${skHave(s, l) ? '. Vos la tenés' : ''}">${skHave(s, l) ? ico('i-check') + okI : skIcon(l.id, 16)}${esc(skName(l))}</li>`;
+const skWant = s => (T.slots[s]?.skillLines || []).filter(l => l.share >= SK_MIN && uses(l.id) !== false);
+const slots = [...TSLOTS, ...ARC.map(([c]) => c)].filter(s => T.slots[s]?.lines?.length || T.slots[s]?.skillLines?.length);
 const piece = s => {
-const x = T.slots[s], it = x.items?.[0], best = x.lines.filter(l => l.tier === 'Best'), en = Math.round(x.enchant || 0);
-return `<li class="cu-p" data-slot="${s}"><span class="eq-i cu-pi"${it ? ` title="${esc(it.name)}${en ? ` · los top la llevan a +${en}` : ''}"` : ''}>${gi(IT[it?.id], 44)}${en ? `<b class="eq-en">+${en}</b>` : ''}</span>
-<b class="cu-pn">${esc(x.name)}</b><ul class="cu-pl">${(best.length ? best : x.lines.filter(l => l.tier === 'Good').slice(0, 3)).map(l => pill(s, l)).join('')}</ul></li>`;
+const x = T.slots[s], it = x.items?.[0], best = x.lines.filter(l => l.tier === 'Best'), en = Math.round(x.enchant || 0), a = T.arcana?.[s]?.[0];
+const sk = skWant(s).slice(0, 3), skAll = (x.skillLines || []).filter(l => l.share >= SK_MIN).length;
+const pic = a ? gi(arcIco(s, a.set), 44) : gi(IT[it?.id], 44);
+const name = a ? `${esc(x.name)} <small>${esc(gname({ name: SET_ES[a.set] || a.set, nameEn: a.set }))}</small>` : esc(x.name);
+const none = !sk.length && skAll && parts ? '<li class="sk-no">Las que llevan los top son de skills que no usás</li>' : '';
+return `<li class="cu-p" data-slot="${s}"><span class="eq-i cu-pi"${it ? ` title="${esc(it.name)}${en ? ` · los top la llevan a +${en}` : ''}"` : ''}>${pic}${en ? `<b class="eq-en">+${en}</b>` : ''}</span>
+<b class="cu-pn">${name}</b><ul class="cu-pl">${(best.length ? best : x.lines.filter(l => l.tier === 'Good').slice(0, 3)).map(l => pill(s, l)).join('')}${sk.map(l => skPill(s, l)).join('')}${none}</ul></li>`;
+};
+const skChip = (s, l) => {
+const off = uses(l.id) === false, h = skHave(s, l);
+return `<li data-sk="${esc(l.id)}" class="${[h && 'have', off && 'off'].filter(Boolean).join(' ')}" title="La llevan ${often(l.share)} los top (${pct(l.share)} %)${off ? '. No usás esa skill: para vos vale 0' : h ? '. Vos la tenés' : ''}">${h ? ico('i-check') + okI : ''}${esc(skName(l))}${off ? '<span class="sr"> (no la usás)</span>' : ''}${share(l.share)}</li>`;
 };
 const rows = slots.map(s => {
-const x = T.slots[s];
-return `<li class="cu-row" data-slot="${s}"><b class="cu-sn">${esc(x.name)}</b>${TIERS.map(([t, lb]) => { const L = x.lines.filter(l => l.tier === t); return L.length ? `<div class="cu-t" data-t="${t}"><small>${lb}</small><ul class="cu-c">${L.map(l => chip(s, l)).join('')}</ul></div>` : ''; }).join('')}</li>`;
+const x = T.slots[s], K = (x.skillLines || []).filter(l => l.share >= 0.1);
+return `<li class="cu-row" data-slot="${s}"><b class="cu-sn">${esc(x.name)}</b>${TIERS.map(([t, lb]) => { const L = x.lines.filter(l => l.tier === t); return L.length ? `<div class="cu-t" data-t="${t}"><small>${lb}</small><ul class="cu-c">${L.map(l => chip(s, l)).join('')}</ul></div>` : ''; }).join('')}${K.length ? `<div class="cu-t" data-t="skill"><small>Línea de skill</small><ul class="cu-c">${K.map(l => skChip(s, l)).join('')}</ul></div>` : ''}</li>`;
 }).join('');
 const stig = T.stigmas.filter(s => s.share >= 0.2).map(s => tile({ id: s.id, pic: skIcon(s.id, 48), name: gname(sk(s)), lv: s.lvl ? Math.round(s.lvl) : 0, have: myStig.has(String(s.id)), dim: s.share < 0.5, s: s.share, title: `${gboth(sk(s))}: la usan ${often(s.share)}${s.lvl ? `, nivel ${Math.round(s.lvl)}` : ''}` })).join('');
 const skills = (T.skills || []).filter(s => s.cat === 'Passive' || s.onBar >= 0.5).sort((a, b) => b.lvl - a.lvl).slice(0, 8).map(s => {
@@ -116,7 +138,7 @@ ${card('cu-stc', `Estigmas${X.gl('stig')} <small>${cur ? 'tilde = ya la tenés s
 ${arc ? card('cu-arcc', `Arcanas${X.gl('arc')} <small>el set de cada carta</small>`, `<ul class="cu-is cu-arc">${arc}</ul>`) : ''}
 ${skills ? card('cu-skc', `Skills que más suben${X.gl('skills')} <small>nivel de los top${cur ? ' y el tuyo' : ''}</small>`, `<ul class="cu-is cu-sk">${skills}</ul>`) : ''}
 </div>
-<h4 class="pj-h4 cu-eh">Qué buscar en cada pieza${X.gl('lineas')} <small>las líneas que llevan casi todos${cur?.x ? ' · tilde = ya la tenés' : ''}</small></h4>
+<h4 class="pj-h4 cu-eh">Qué buscar en cada pieza${X.gl('lineas')} <small>las líneas que llevan casi todos${cur?.x ? ' · tilde = ya la tenés' : ''} · ${parts ? 'líneas de skill: solo las de skills que usás' : 'una línea de skill sirve solo si usás esa skill'}</small></h4>
 <ul class="cu-eq">${slots.map(piece).join('')}</ul>
 <details class="cu-more"><summary>Todas las líneas, pieza por pieza <small>también las que usan algunos</small></summary><ul class="cu-st">${rows}</ul></details>
 </div>`;
@@ -256,7 +278,7 @@ return { q: max > min ? Math.max(0, Math.min(1, (x - min) / (max - min))) : 1, m
 const rng = r => { const f = v => r.s === 100 ? num(r.pctv ? v / 100 : Math.round(v / 100)) : num(v); return `${f(r.min)}–${f(r.max)}${r.pctv ? ' %' : ''}`; };
 export async function itemBody(it, e, cur, kind) {
 const skills = new Map((cur.d.skills || []).map(s => [String(s.id), s])), parts = skillParts(cur.d, cur.x?.items || {}, cur.x?.boards || {}), use = id => useful(skills.get(String(id)), parts.get(String(id)));
-const C = X.curated(cur), T = C?.top?.[kind]?.slots?.[CSLOT[e.slot]];
+const C = X.curated(cur), T = C?.top?.[kind]?.slots?.[cslot(e.slot)];
 let pool = null;
 if (it.subStatRandom && (it.subStats || []).length) try { pool = (await getLines(it.id)).items?.[it.id]?.lines; } catch { /* sin rango */ }
 const top = new Map((T?.lines || []).map(l => [l.id, l]));
@@ -267,13 +289,17 @@ const id = String(s.id).toLowerCase(), r = pool && rollOf({ id, value: s.value }
 return `<li class="ln2" data-line="${esc(id)}"><span class="ln-n">${esc(s.name)}${t ? ` <em class="tag gold" title="La usan ${often(t.share)} los top ${KIND_ES[kind]} en esta pieza">top</em>` : ''}</span><b>${esc(s.value)}</b>
 ${r && !r.out ? `<span class="qb" role="img" aria-label="Salió al ${pct(r.q)} % del rango (${rng(r)})" title="Rango en Global: ${rng(r)}"><i style="--q:${pct(r.q)}%"></i></span><small class="q-p">${pct(r.q)} %</small>` : '<small class="q-na">—</small>'}</li>`;
 }).join('');
-const sk = (it.subSkills || []).map(s => li(`${s.name} +${s.level}`, use(s.id) ? 'la usás' : '<span class="warn">no la usás</span>')).join('');
+const topSk = new Map((T?.skillLines || []).map(l => [String(l.id), l]));
+const topTag = t => t && t.share >= SK_MIN ? ` <em class="tag gold" title="La llevan ${often(t.share)} los top ${KIND_ES[kind]} en esta pieza">top</em>` : '';
+const sk = (it.subSkills || []).map(s => li(`${s.name} +${s.level}`, use(s.id) ? 'la usás' : '<span class="warn">no la usás</span>', topTag(topSk.get(String(s.id))))).join('');
+const skWant = [...topSk.values()].filter(l => l.share >= SK_MIN && use(l.id) && !(it.subSkills || []).some(s => String(s.id) === String(l.id))).slice(0, 3);
 const want = T ? T.lines.filter(l => (l.tier === 'Best' || l.tier === 'Good') && !(it.subStats || []).some(s => String(s.id).toLowerCase() === l.id)).slice(0, 3) : [];
 return `<p class="tip-m">${[it.categoryName, it.level && `nivel ${it.level}`, it.maxEnchantLevel && `encantamiento +${it.enchantLevel ?? e.enchant ?? 0} de ${it.maxEnchantLevel}`, it.maxExceedEnchantLevel && `amplificación +${e.exceed || 0} de ${it.maxExceedEnchantLevel}`].filter(Boolean).map(esc).join(' · ')}</p>
 ${main ? `<h4>Stats</h4><ul>${main}</ul>` : ''}
 ${lines ? `<h4>Líneas <small>barra = qué tan alto salió</small></h4><ul class="tip-ln">${lines}</ul>` : ''}
 ${want.length ? `<p class="tip-want">Los top ${KIND_ES[kind]} buscan acá: ${want.map(l => `<b>${esc(l.name)}</b> (${often(l.share)})`).join(', ')}.</p>` : ''}
 ${sk ? `<h4>Líneas de skill</h4><ul>${sk}</ul>` : ''}
+${skWant.length ? `<p class="tip-want">Líneas de skill que llevan los top ${KIND_ES[kind]} acá, de skills que usás: ${skWant.map(l => `<b>${esc(gname({ name: l.name, nameEn: SK[l.id]?.[0] }))}</b> (${often(l.share)})`).join(', ')}.</p>` : ''}
 ${(it.magicStoneStat || []).length ? `<h4>Piedras de maná</h4><ul>${it.magicStoneStat.map(s => li(s.name, esc(s.value))).join('')}</ul>` : ''}
 ${(it.godStoneStat || []).map(g => `<h4>Piedra divina</h4><p class="tip-gs ${X.gcls(g.grade)}"><b>${esc(g.name)}</b>${esc(g.desc || '')}</p>`).join('')}
 ${(it.sources || []).length ? `<p class="tip-from">Sale de: ${esc(it.sources.join(', '))}</p>` : ''}`;
