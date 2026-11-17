@@ -1,5 +1,5 @@
-import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js?v=9f32cafe85';
-import { useful, skillParts } from './personaje-calc.js?v=9f32cafe85';
+import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js?v=db50fa3fb7';
+import { useful, skillParts } from './personaje-calc.js?v=db50fa3fb7';
 let X;                                         // {api, MSG, img, gcls, GRADE, nf, curated, CLS_KEY, gl} que pasa personaje.js
 export const init = ctx => { X = ctx; };
 const VQ = new URL(import.meta.url).search;   // ?v=<hash>: assets/pj-items.json con la misma versión
@@ -47,6 +47,14 @@ const TIERS = [['Best', 'Imprescindible'], ['Good', 'Muy usada'], ['Fine', 'A ve
 const TSLOTS = ['weapon', 'offhand', 'helmet', 'shoulder', 'torso', 'pants', 'gloves', 'boots', 'cape', 'necklace', 'earring', 'ring', 'bracelet'];
 const ARC = [['chalice', 'Cáliz'], ['parchment', 'Pergamino'], ['compass', 'Brújula'], ['bell', 'Campana'], ['mirror', 'Espejo']];
 const SET_ES = { Vigor: 'Vitalidad', Magic: 'Magia' };
+const godFam = icon => String(icon || '').match(/Godstone\w*_(\d{3})(?:\.png)?$/)?.[1] || null;
+const GOD = {
+'001': ['Ceguera', 'Blind'], '003': ['Sellado', 'Seal'], '004': ['Atadura', 'Root'], '005': ['Aturdimiento', 'Stun'], '006': ['Parálisis', 'Paralyze'],
+'007': ['−50 % vel. de movimiento', '−50% Move Speed'], '008': ['−50 % vel. de combate', '−50% Combat Speed'], '009': ['Envenenamiento', 'Poison'], '010': ['Sangrado', 'Bleed'],
+'011': ['Fuego a un objetivo', 'Fire, single target'], '012': [null, 'Water, single target'], '013': ['Tierra a un objetivo', 'Earth, single target'], '014': ['Viento a un objetivo', 'Wind, single target'],
+'015': ['Fuego de área', 'Fire AoE'], '016': [null, 'Water AoE'], '017': ['Tierra de área', 'Earth AoE'], '018': ['Viento de área', 'Wind AoE'],
+};
+const godName = (f, en) => gname({ name: GOD[f]?.[0], nameEn: GOD[f]?.[1] }) || String(en || `Piedra ${f}`).replace(/^Theostone:\s*/, '');
 export const CSLOT = { 1: 'weapon', 2: 'offhand', 3: 'helmet', 4: 'shoulder', 5: 'torso', 6: 'pants', 7: 'gloves', 8: 'boots', 19: 'cape', 10: 'necklace', 11: 'earring', 12: 'earring', 13: 'ring', 14: 'ring', 15: 'bracelet', 16: 'bracelet', 17: 'belt', 22: 'amulet', 23: 'rune', 24: 'rune' };
 const cslot = s => CSLOT[s] || ARC[s - 41]?.[0];
 const SK_MIN = 0.2;
@@ -94,6 +102,8 @@ const uses = id => parts ? useful(mySk.get(String(id)), parts.get(String(id))) :
 const myLv = new Map((cur?.d.skills || []).map(x => [String(x.id), x.level || 0]));
 const myStig = new Set((cur?.d.skills || []).filter(x => x.category === 'Dp' && x.level > 0).map(x => String(x.id)));
 const have = cur?.x ? (s, id) => !!mine[s]?.has(id) : () => false;
+const myGod = cur?.x ? [1, 2].map(s => cur.x.items?.[s]).map(it => it && { fam: (it.godStoneStat || []).map(g => godFam(g.icon)).filter(Boolean), empty: (it.godStoneSlotCount || 0) > (it.godStoneStat || []).length }) : [];
+const myFam = new Set(myGod.flatMap(g => g?.fam || []));
 if (!T?.slots) return `<h3 class="pj-h">Lo que usan los mejores <small>${KIND_ES[k]}</small></h3>${whyP(`Sin datos de los top ${KIND_ES[k]}: ${C.reasons?.top?.[k] || `muestra chica (${T?.n || 0} de ${all})`}. No rellenamos con otras builds.`)}`;
 const sk = s => ({ name: s.name, nameEn: SK[s.id]?.[0] });
 const ok = (s, l) => have(s, l.id) ? ico('i-check') + '<span class="sr">La tenés: </span>' : '';
@@ -131,11 +141,19 @@ const arc = ARC.filter(([c]) => T.arcana?.[c]?.length).map(([c, lb]) => {
 const a = T.arcana[c][0], set = { name: SET_ES[a.set] || a.set, nameEn: a.set }, e = Math.round(T.slots[c]?.enchant || 0);
 return tile({ pic: gi(arcIco(c, a.set), 48), name: gname({ name: lb, nameEn: ARC_EN[c][0] }), lv: e ? '+' + e : 0, sub: esc(gname(set)), s: a.share, title: `${lb} de ${set.name.toLowerCase()}: la usan ${often(a.share)}` });
 }).join('');
+const G = T.theostones, gL = G?.list || [], pair = G?.pairs?.[0], gr = g => X.GRADE[g] || g;
+const gn = f => godName(f, gL.find(x => x.f === f)?.stoneEn);
+const gs = gL.map(x => tile({ id: x.f, pic: gi('Icon_Item_Usable_Godstone_WP_r_' + x.f, 48), name: gn(x.f), have: myFam.has(x.f), dim: x.share < 0.5, sub: `<span class="${X.gcls(x.grade)}">${esc(gr(x.grade))}</span>`, s: x.share, title: `${gn(x.f)}: la usan ${often(x.share)} (${pct(x.share)} %), la más común en ${gr(x.grade).toLowerCase()}` })).join('');
+const gsMiss = gL.find(x => !myFam.has(x.f));
+const gsWarn = [...myGod.map((g, i) => g?.empty && `${i ? 'Tu secundaria' : 'Tu arma'} tiene la ranura de piedra sagrada vacía`), myGod[0]?.fam[0] && myGod[0].fam[0] === myGod[1]?.fam[0] && `Tenés ${gn(myGod[0].fam[0])} en las dos manos: aplica una sola`].filter(Boolean);
+const gsBody = `<ul class="cu-is cu-gs">${gs}</ul><div class="cu-gst"><p class="cu-gsn">Poné una en el arma y otra distinta en la secundaria: dos con el mismo efecto aplican uno solo.${pair ? ` El par más usado: <b>${esc(gn(pair.f[0]))} + ${esc(gn(pair.f[1]))}</b> (${often(pair.share)}).` : ''}</p>
+${gsWarn.length ? `<p class="cu-gsw" role="note">${esc(gsWarn.join('. '))}.${gsMiss ? ` Los top llevan <b>${esc(gn(gsMiss.f))}</b>.` : ''}</p>` : ''}</div>`;
 return `<h3 class="pj-h">Lo que usan los mejores ${esc(CLS_ES[cls] || '')} <small>${KIND_ES[k]} · ${T.n} de los ${all} con más poder de combate de Global · semana del ${C.v.slice(8, 10)}/${C.v.slice(5, 7)}</small></h3>
 <div class="cu-top">
 <div class="cu-g">
 ${card('cu-stc', `Estigmas${X.gl('stig')} <small>${cur ? 'tilde = ya la tenés subida' : 'atenuadas = solo algunos'}</small>`, `<ul class="cu-is cu-stig">${stig}</ul>`)}
 ${arc ? card('cu-arcc', `Arcanas${X.gl('arc')} <small>el set de cada carta</small>`, `<ul class="cu-is cu-arc">${arc}</ul>`) : ''}
+${gs ? card('cu-gsc', `Theostones (Piedra sagrada)${X.gl('gs')} <small>${cur?.x ? 'tilde = ya la tenés' : 'el efecto y el grado más común'}</small>`, gsBody) : ''}
 ${skills ? card('cu-skc', `Skills que más suben${X.gl('skills')} <small>nivel de los top${cur ? ' y el tuyo' : ''}</small>`, `<ul class="cu-is cu-sk">${skills}</ul>`) : ''}
 </div>
 <h4 class="pj-h4 cu-eh">Qué buscar en cada pieza${X.gl('lineas')} <small>las líneas que llevan casi todos${cur?.x ? ' · tilde = ya la tenés' : ''} · ${parts ? 'líneas de skill: solo las de skills que usás' : 'una línea de skill sirve solo si usás esa skill'}</small></h4>
@@ -293,6 +311,8 @@ const topSk = new Map((T?.skillLines || []).map(l => [String(l.id), l]));
 const topTag = t => t && t.share >= SK_MIN ? ` <em class="tag gold" title="La llevan ${often(t.share)} los top ${KIND_ES[kind]} en esta pieza">top</em>` : '';
 const sk = (it.subSkills || []).map(s => li(`${s.name} +${s.level}`, use(s.id) ? 'la usás' : '<span class="warn">no la usás</span>', topTag(topSk.get(String(s.id))))).join('');
 const skWant = [...topSk.values()].filter(l => l.share >= SK_MIN && use(l.id) && !(it.subSkills || []).some(s => String(s.id) === String(l.id))).slice(0, 3);
+const GT = C?.top?.[kind]?.theostones?.list || [], gTop = new Map(GT.map(x => [x.f, x])), gMine = new Set((it.godStoneStat || []).map(g => godFam(g.icon)));
+const gEmpty = (it.godStoneSlotCount || 0) > (it.godStoneStat || []).length, gWant = it.godStoneSlotCount ? GT.filter(x => !gMine.has(x.f)).slice(0, 3) : [];
 const want = T ? T.lines.filter(l => (l.tier === 'Best' || l.tier === 'Good') && !(it.subStats || []).some(s => String(s.id).toLowerCase() === l.id)).slice(0, 3) : [];
 return `<p class="tip-m">${[it.categoryName, it.level && `nivel ${it.level}`, it.maxEnchantLevel && `encantamiento +${it.enchantLevel ?? e.enchant ?? 0} de ${it.maxEnchantLevel}`, it.maxExceedEnchantLevel && `amplificación +${e.exceed || 0} de ${it.maxExceedEnchantLevel}`].filter(Boolean).map(esc).join(' · ')}</p>
 ${main ? `<h4>Stats</h4><ul>${main}</ul>` : ''}
@@ -301,13 +321,15 @@ ${want.length ? `<p class="tip-want">Los top ${KIND_ES[kind]} buscan acá: ${wan
 ${sk ? `<h4>Líneas de skill</h4><ul>${sk}</ul>` : ''}
 ${skWant.length ? `<p class="tip-want">Líneas de skill que llevan los top ${KIND_ES[kind]} acá, de skills que usás: ${skWant.map(l => `<b>${esc(gname({ name: l.name, nameEn: SK[l.id]?.[0] }))}</b> (${often(l.share)})`).join(', ')}.</p>` : ''}
 ${(it.magicStoneStat || []).length ? `<h4>Piedras de maná</h4><ul>${it.magicStoneStat.map(s => li(s.name, esc(s.value))).join('')}</ul>` : ''}
-${(it.godStoneStat || []).map(g => `<h4>Piedra divina</h4><p class="tip-gs ${X.gcls(g.grade)}"><b>${esc(g.name)}</b>${esc(g.desc || '')}</p>`).join('')}
+${(it.godStoneStat || []).map(g => `<h4>Piedra sagrada${gTop.has(godFam(g.icon)) ? ` <em class="tag gold" title="La llevan ${often(gTop.get(godFam(g.icon)).share)} los top ${KIND_ES[kind]}">top</em>` : ''}</h4><p class="tip-gs ${X.gcls(g.grade)}"><b>${esc(g.name)}</b>${esc(g.desc || '')}</p>`).join('')}
+${gWant.length || gEmpty ? `<p class="tip-want">${gEmpty ? 'La ranura de piedra sagrada está vacía. ' : ''}${gWant.length ? `Piedra sagrada que llevan los top ${KIND_ES[kind]}: ${gWant.map(x => `<b>${esc(godName(x.f, x.stoneEn))}</b> (${often(x.share)})`).join(', ')}.` : ''}</p>` : ''}
 ${(it.sources || []).length ? `<p class="tip-from">Sale de: ${esc(it.sources.join(', '))}</p>` : ''}`;
 }
 function how() {
 modal({ title: 'Cómo elegimos', cls: 'pj-how', html: `
 <p><b>Lo que usan los mejores.</b> Una vez por semana miramos la ficha pública oficial de los 30 personajes con más poder de combate de cada clase en Global y los separamos en Estándar, Healer y PvP por lo que llevan puesto (amuleto feroz, piedras y líneas de JcJ, estigmas de curación). Si un tipo tiene menos de 3, no lo mostramos: decimos por qué en vez de rellenar.</p>
 <p><b>Imprescindible</b> = la lleva al menos la mitad de las piezas de los top; <b>Muy usada</b>, una de cada cuatro; <b>A veces</b>, una de cada diez. La barrita dice cuántos: "casi todos", "la mayoría", "la mitad", "algunos".</p>
+<p><b>Piedras sagradas.</b> Contamos por efecto (Sellado, Parálisis…) cuántos top lo llevan en el arma o la secundaria, sin importar el grado; dos con el mismo efecto en un personaje cuentan una vez, porque el juego aplica uno solo.</p>
 <p><b>Recomendadas.</b> Builds públicas de jugadores con un puntaje de 0 a 100: 45 % cuánto se parecen a los top de su tipo, 20 % votos, 20 % si son posteriores al último parche y 15 % si coinciden con las guías. Menos de 50 no entra.</p>
 <p><b>Calidad de una línea</b> (en el detalle de cada pieza): dónde cayó tu valor dentro del rango posible de ese ítem. 100 % = salió al tope. Los porcentajes de la ficha vienen redondeados a un decimal: puede haber ±3 puntos.</p>
 <p>La ficha oficial muestra solo el preset activo. Las fuentes, en "Fuentes y créditos".</p>` });

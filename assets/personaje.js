@@ -1,8 +1,8 @@
 import {
 $, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, setTitle, myChars, gname, galt, gclass, gameLang, on,
-} from './core.js?v=9f32cafe85';
-import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=9f32cafe85';
+} from './core.js?v=db50fa3fb7';
+import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=db50fa3fb7';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -48,6 +48,7 @@ dae: ['Daevanion', 'Tableros de nodos que abrís con cristales de Daevanion: sal
 spec: ['Especialización', 'Cuando una skill activa llega a 8, 12 y 16, se abre una mejora nueva que elegís en la ventana de skills. Es el salto más grande que da subir una skill.'],
 pts: ['Puntos de skill', 'Cada skill sube hasta 10 con puntos de skill. La ficha oficial no muestra cuántos te quedan sin usar.'],
 skills: ['Nivel de skill', 'Se arma con puntos (hasta 10), nodos de Daevanion (hasta +4) y líneas de skill del equipo y de las Arcanas. 14 es el tope normal; de ahí para arriba, solo con líneas.'],
+gs: ['Piedra sagrada', 'Theostone: va una en el arma y otra en la secundaria. Al atacar tiene chance de aplicar su efecto (sellado, parálisis, daño extra). Dos con el mismo efecto aplican uno solo.'],
 stig: ['Estigmas', 'Skills especiales que van en 4 espacios aparte. Suben solo con Fragmentos de Estigma, hasta 20.'],
 ariel: ['Ariel', 'El quinto tablero de Daevanion: da daño contra jefes. Sus nodos se abren con Fragmentos de Ariel de Expedición difícil (100 fragmentos = 1 cristal, hasta 30 por personaje).'],
 lineas: ['Líneas', 'Los stats extra de cada pieza, que salen al azar. Los mejores buscan ciertas líneas en cada pieza. En Equipo, tocá una pieza para ver qué tan alto te salió cada una.'],

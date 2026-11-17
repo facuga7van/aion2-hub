@@ -16,7 +16,7 @@ const met = GATES.filter(g => il >= g.il), next = GATES.find(g => il < g.il) || 
 return { cur: met.at(-1) || null, next, need: next ? next.il - il : 0, prev: met.at(-1)?.il ?? 0 };
 }
 const MS = { Common: 1, Rare: 2, Epic: 2, Legend: 3, Mythic: 3, Unique: 4, Special: 6 };
-const GS = { Common: 1, Rare: 3, Epic: 5, Legend: 7, Mythic: 9, Unique: 5, Special: 13 };
+const GS = { Common: 1, Rare: 3, Epic: 5, Legend: 5, Mythic: 9, Unique: 10, Special: 13 };
 export const NODE_COST = { Common: 1, Rare: 2, Legend: 3, Unique: 4 };
 export const isArcana = slot => slot >= 41 && slot <= 45;
 const nodesOf = b => (b?.nodeList || []).filter(n => n.type !== 'None');
