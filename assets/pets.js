@@ -1,4 +1,4 @@
-import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=46c22c94f0';
+import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=b7a5b09129';
 const VQ = new URL(import.meta.url).search;  // ?v=<hash>: los módulos lazy van con la misma versión
 const D = JSON.parse($('#pets-data').textContent);
 const ALL = D.pets, BY = new Map(ALL.map(p => [p.id, p]));
@@ -38,7 +38,7 @@ const zoneTxt = z => z !== 'abismo' && z !== FAC ? ` (zona ${FNAME[z]})` : '';
 const far = r => !!r.zone && r.zone !== FAC && r.zone !== 'abismo';  // ruta fuera de tu mapa (Grieta o territorio enemigo)
 const cico = k => /^(alt|ver)/.test(k) ? (k.startsWith(D.fac[FAC].rc) ? 'c-grieta' : 'c-mapa') + (k.endsWith('_dg') ? '_dg' : '') : 'c-' + k;
 const ftxt = el => { const c = el.cloneNode(true); c.querySelectorAll((FAC === 'asmodian' ? '.fe' : '.fa') + (gameLang() === 'en' ? ',.n-es' : ',.n-en')).forEach(x => x.remove()); return c.textContent; };
-const RID = { verteron: '1010', eltnen: '1011', altgard: '1110', morheim: '1111' };
+const RID = { verteron: '1010', altgard: '1110' };
 const inReg = (p, r) => r === 'abismo' ? p.routes.some(x => x.zone === 'abismo') : r === 'grieta' ? inF(p) && p.cat.startsWith(D.fac[FAC].rc)
 : r === 'dungeon' ? p.routes.some(x => x.kind === 'dungeon') : r === 'cofre' ? p.cat === 'cofre' : p.routes.some(x => x.regionId === RID[r]);
 /* ---------- colección (mismo formato del Bestiario en pets-owned / pets-level) ---------- */
