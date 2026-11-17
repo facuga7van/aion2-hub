@@ -1022,6 +1022,10 @@ next: now => nextOcc(ev.id, now), current: now => currentOcc(ev.id, now),
 note: o => o.ev.entry ? `${o.ev.entryLabel} ${o.ev.entry} min` : o.ev.notes?.split('.')[0],
 });
 registerPalette('nav', { group: 'Sección', items: NAV.map((n, i) => ({ id: 'nav-' + n.id, title: n.label, sub: n.desc, icon: n.icon, href: ROOT + n.href, pin: true, kw: String(i + 1) })) });
+registerPalette('poi', {
+group: 'Ir a', items: () => NAV.flatMap(n => (n.poi || []).map(x => ({ id: `poi-${n.id}-${x.id}`, title: x.label, sub: n.label, icon: n.icon, pin: true, kw: x.kw, w: 0.9,
+href: ROOT + n.href + (x.fac ? x.fac[profile().faccion === 'asmodian' ? 'asmodian' : 'elyos'] : x.href) }))),
+});
 registerPalette('cmd', {
 group: 'Acción', items: () => [
 { id: 'cmd-ajustes', title: 'Ajustes', sub: 'Región, server, facción, idioma del juego, horas y avisos', icon: 'i-gear', run: () => openSettings(), pin: true, kw: 'configuracion server region faccion idioma ingles english nombres' },

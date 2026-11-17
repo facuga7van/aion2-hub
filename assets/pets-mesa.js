@@ -222,11 +222,12 @@ region();
 return { destroy() { dead = true; m?.destroy(); } };
 }
 /* ---------- Mapa de farmeo: una región por pestaña, un pin por pet (su zona más densa); tocar un pin dice pet, mob y nivel ---------- */
-export function plan(mapEl, listEl, { BY, owned, isMax, mode, saveData, ver, tabs, cap, regions, rl, pn, gn, start, count, onRegion }) {
-let data = null, m = null, sel = null, rid = start, dead = false;
+export function plan(mapEl, listEl, { BY, owned, isMax, mode, saveData, ver, tabs, cap, regions, rl, pn, gn, start, count, onRegion, ex, onlyIn, solo }) {
+let data = null, m = null, sel = null, rid = start, dead = false, only = solo.get();
 let filt = [...ver.children].find(b => b.getAttribute('aria-pressed') === 'true')?.dataset.v || 'faltan';
 const files = {}, R = () => regions.find(r => r.id === rid), full = () => esc(gn(R(), 'full'));
-const want = id => filt === 'todas' || (filt === 'faltan' ? !owned.has(id) : owned.has(id) && !isMax(id));
+const want0 = id => filt === 'todas' || (filt === 'faltan' ? !owned.has(id) : owned.has(id) && !isMax(id));
+const want = id => want0(id) && (!only || onlyIn(id, rid));
 const SUB = { boss: ' (boss de campo)', elite: ' (élite)' };
 const entryTxt = (e, n) => `<b>${esc(pn(BY.get(e.petId)))}</b>: ${esc(gn(e, 'mob'))}${SUB[e.sub] || ''} · nv ${e.lvl}` +
 (n ? ` · <b>×${n}</b> en esta zona` : '') + ` · ${e.spawns} spawn${e.spawns > 1 ? 's' : ''} en ${full()}. <a href="#pet-${e.petId}">Ver la ficha</a>`;
@@ -237,10 +238,16 @@ const pin = (e, f, cls) => ({ u: f.u, v: f.v, cls: 'pin' + cls, style: `--bc:${B
 html: `<img src="assets/p/${e.petId}-128.webp" alt="" loading="lazy" decoding="async"><span>${f.count}</span>` });
 function render() {
 tabsUI();
+ex.setAttribute('aria-pressed', only);
 if (!data) return;
 const es = data.entries.filter(e => want(e.petId)), name = full();
+const ids0 = new Set(data.entries.filter(e => want0(e.petId)).map(e => e.petId)), nEx = [...ids0].filter(id => onlyIn(id, rid)).length;
+ex.querySelector('span').innerHTML = `Solo de este mapa <b>${nEx}</b>`;
+ex.setAttribute('aria-label', `Solo de este mapa: ${nEx} de ${ids0.size}`);
 if (sel && !es.some(e => e.petId === sel)) { sel = null; cap.textContent = ''; }
-if (!es.length) {
+if (!es.length && only && ids0.size) {
+listEl.innerHTML = `<div class="gr-empty"><b>Ninguna sale solo en ${name}.</b>Las ${ids0.size} que mirás también salen en otro lado: farmealas donde te quede más cómodo. Sacá "Solo de este mapa" para verlas.</div>`;
+} else if (!es.length) {
 listEl.innerHTML = filt === 'faltan' ? `<div class="gr-empty"><b>Ya tenés todas las de ${name}.</b>Tocá "Subir a 3" para ver dónde farmear almas, o elegí otro mapa.</div>`
 : filt === 'subir' ? `<div class="gr-empty"><b>Nada para subir.</b>Las de ${name} que tenés ya están al máximo.</div>` : `<div class="gr-empty"><b>Sin pets en ${name}.</b></div>`;
 } else {
@@ -315,10 +322,11 @@ filt = b.dataset.v; for (const x of ver.children) x.setAttribute('aria-pressed',
 render();
 };
 const onTab = e => { const b = e.target.closest('[data-reg]'); if (b && b.dataset.reg !== rid) { rid = b.dataset.reg; load(); } };
-listEl.addEventListener('click', onList); ver.addEventListener('click', onVer); tabs.addEventListener('click', onTab);
+const onEx = () => { only = !only; solo.set(only); render(); };
+listEl.addEventListener('click', onList); ver.addEventListener('click', onVer); tabs.addEventListener('click', onTab); ex.addEventListener('click', onEx);
 load();
 return {
 refresh: render,
-destroy() { dead = true; m?.destroy(); tabs.innerHTML = ''; listEl.removeEventListener('click', onList); ver.removeEventListener('click', onVer); tabs.removeEventListener('click', onTab); },
+destroy() { dead = true; m?.destroy(); tabs.innerHTML = ''; listEl.removeEventListener('click', onList); ver.removeEventListener('click', onVer); tabs.removeEventListener('click', onTab); ex.removeEventListener('click', onEx); },
 };
 }

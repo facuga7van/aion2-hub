@@ -1,4 +1,4 @@
-import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=a6a3e41ad9';
+import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=46c22c94f0';
 const VQ = new URL(import.meta.url).search;  // ?v=<hash>: los módulos lazy van con la misma versión
 const D = JSON.parse($('#pets-data').textContent);
 const ALL = D.pets, BY = new Map(ALL.map(p => [p.id, p]));
@@ -598,13 +598,15 @@ const saveData = !!navigator.connection?.saveData;
 const mode = { get: () => ls.get('pets-mapa', RM ? 'plano' : 'mesa'), set: v => ls.set('pets-mapa', v) };
 let mesaP = null, plan = null, planOn = false;
 const mesa = () => mesaP ||= import('./pets-mesa.js' + VQ);
-const missingIn = rid => PETS.filter(p => !owned.has(p.id) && p.routes.some(r => r.regionId === rid)).length;
+const onlyIn = (id, rid) => { const p = BY.get(id); return !!p?.routes.length && p.routes.every(r => r.regionId === rid); };
+const solo = { get: () => ls.get('pets-mapa-solo', false), set: v => ls.set('pets-mapa-solo', v) };
+const missingIn = rid => PETS.filter(p => !owned.has(p.id) && p.routes.some(r => r.regionId === rid) && (!solo.get() || onlyIn(p.id, rid))).length;
 function mountPlan() {
 plan?.destroy(); plan = null;
 const f = D.fac[FAC];
 mesa().then(m => {
-plan = m.plan($('#grMap'), $('#grList'), { BY, owned, isMax, mode, saveData, ver: $('#grVer'), tabs: $('#grReg'), cap: $('#grCap'), fac: FAC,
-regions: D.regions, rl: r => gname(r) + (r.id === f.rift ? ' · Grieta' : ''), pn: PN, gn: gname, start: f.main, count: missingIn,
+plan = m.plan($('#grMap'), $('#grList'), { BY, owned, isMax, mode, saveData, ver: $('#grVer'), tabs: $('#grReg'), cap: $('#grCap'), fac: FAC, ex: $('#grEx'), onlyIn, solo,
+regions: D.regions, rl: r => gname(r) + (r.id === f.rift ? ' · Grieta' : ''), pn: PN, gn: gname, start: D.regions.some(r => r.id === U.get('mapa')) ? U.get('mapa') : f.main, count: missingIn,
 onRegion: rid => { $('#grNote').hidden = rid !== f.rift; } });
 }).catch(() => { $('#grMap').innerHTML = '<p class="gr-empty">No pude cargar el mapa.</p>'; });
 }
