@@ -1,5 +1,5 @@
-import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js?v=04fb0fb3a6';
-import { useful, skillParts, CSLOT, GOD, godFam, GR_F, GR_N } from './personaje-calc.js?v=04fb0fb3a6';
+import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js?v=987703c857';
+import { useful, skillParts, CSLOT, GOD, godFam, GR_F, GR_N } from './personaje-calc.js?v=987703c857';
 let X;                                         // {api, MSG, img, gcls, GRADE, nf, curated, CLS_KEY, gl} que pasa personaje.js
 export const init = ctx => { X = ctx; };
 const VQ = new URL(import.meta.url).search;   // ?v=<hash>: assets/pj-items.json con la misma versión
@@ -288,14 +288,14 @@ return `<ol class="cu-wl">${L.slice(0, WK_MAX).map(li).join('')}</ol>${more > 0 
 function recB(r) {
 if (!BUILD_OK.test(r.url || '')) return null;
 const u = new URL(r.url), id = +u.searchParams.get('build-id'), slug = decodeURIComponent(u.pathname.split('/').pop());
-return id && /^[A-Za-z0-9_-]+$/.test(slug) ? { id, slug, name: r.name, char: r.char, author: r.author, likes: r.likes, tags: r.tags || [], url: r.url } : null;
+return id && /^[A-Za-z0-9_-]+$/.test(slug) ? { id, slug, name: r.name, likes: r.likes, tags: r.tags || [], url: r.url } : null;
 }
 const progOf = (C, k) => (C.recommended?.progresion || []).filter(r => !r.kind || r.kind === k);
 function recHtml(C, k) {
 const row = (r, i) => {
 const m = r.parts?.match != null ? pct(r.parts.match) : null;
 return `<li class="cu-r"><b class="cu-sc" style="--q:${+r.score || 0}%" title="Puntaje de 0 a 100: cuánto se parece a los top, votos, si es reciente y si coincide con las guías"><span>${esc(r.score)}</span></b>
-<span class="cu-rm"><b class="bl-nm">${esc(r.name || r.char || 'Sin nombre')}</b><small>${esc(r.author || '—')} · ${X.nf(r.likes)} votos${r.updatedAt ? ` · ${ago(r.updatedAt)}` : ''}</small>
+<span class="cu-rm"><b class="bl-nm">${esc(r.name || 'Build sin nombre')}</b><small>${X.nf(r.likes)} votos${r.updatedAt ? ` · ${ago(r.updatedAt)}` : ''}</small>
 ${m != null ? `<span class="cu-mt" title="${esc(r.why || '')}"><span class="sh" role="img" aria-label="Se parece ${m} % a los top${r.comparedWith === 'all' ? ' de la clase' : ''}"><i style="--q:${m}%"></i></span><small>${m} % como los top${r.comparedWith === 'all' ? ' de la clase' : ''}</small>${(r.tags || []).includes('beginner-friendly') ? '<em class="tag gold">Para empezar</em>' : ''}</span>` : `<small class="cu-rw">${esc(r.why || '')}</small>`}</span>
 ${recB(r) ? `<button type="button" class="btn" data-rver="${i}">Ver build</button>` : ''}</li>`;
 };
@@ -355,7 +355,7 @@ if (s !== seq) return;
 list = r.builds;
 outEl.innerHTML = list.length ? `<p class="bl-n">${X.nf(r.total)} build${r.total === 1 ? '' : 's'} de ${CLS_ES[cls]}${tag ? ` con «${TAG_ES[tag]}»` : ''}; acá van las ${list.length} más votadas.${r.stale ? ' <em class="tag bad">la fuente no responde: es la última lista que tengo</em>' : ''}</p>
 <ol class="bl-l">${list.map((b, i) => `<li class="bl-c"><b class="bl-v" title="Votos">${ico('i-star-on')}${X.nf(b.likes)}</b>
-<span class="bl-m"><b class="bl-nm">${esc(b.name || b.char || 'Sin nombre')}</b><small>de ${esc(b.author || '—')}${b.updatedAt ? ` · actualizada ${ago(b.updatedAt)}` : ''}</small>
+<span class="bl-m"><b class="bl-nm">${esc(b.name || 'Build sin nombre')}</b><small>${b.updatedAt ? `actualizada ${ago(b.updatedAt)}` : 'build de jugadores'}</small>
 ${b.tags.length ? `<span class="bl-t">${b.tags.map(t => `<em class="tag">${esc(TAG_ES[t] || t)}</em>`).join('')}</span>` : ''}</span>
 <span class="bl-a"><button type="button" class="btn" data-ver="${i}">Ver build</button></span></li>`).join('')}</ol>`
 : `<p class="pj-empty">No hay builds de ${CLS_ES[cls]}${tag ? ` con «${TAG_ES[tag]}»` : ''} publicadas.</p>`;
@@ -386,12 +386,12 @@ else if (rv) showBuild(recB(R[+rv.dataset.rver]));
 loadCur();
 }
 /* ---------- detalle de una build (modal) ---------- */
-const attrib = b => `<p class="bd-src"><em class="tag gold">De jugadores</em> Build de <b>${esc(b.author || '—')}</b>${b.likes != null ? ` · ${X.nf(b.likes)} votos` : ''} · <a href="${esc(BUILD_OK.test(b.url || '') ? b.url : '#')}" target="_blank" rel="noopener noreferrer">Ver la original${ico('i-ext')}</a></p>`;
+const attrib = b => `<p class="bd-src"><em class="tag gold">De jugadores</em> Build pública${b.likes != null ? ` · ${X.nf(b.likes)} votos` : ''} · <a href="${esc(BUILD_OK.test(b.url || '') ? b.url : '#')}" target="_blank" rel="noopener noreferrer">Ver la original${ico('i-ext')}</a></p>`;
 function showBuild(b) {
 const box = document.createElement('div');
 box.className = 'bd';
 box.innerHTML = `${attrib(b)}<div class="bd-b">${loading('Cargando la build…')}</div>`;
-modal({ title: b.name || b.char || 'Build', node: box, cls: 'pj-bd' });
+modal({ title: b.name || 'Build', node: box, cls: 'pj-bd' });
 const fill = async () => {
 try { $('.bd-b', box).innerHTML = buildBody(await getBuild(b.slug, b.id)); } catch (e) { $('.bd-b', box).innerHTML = errHtml(e, 'esa build'); }
 };
