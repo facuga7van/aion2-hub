@@ -1,5 +1,5 @@
-import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js?v=11af44b380';
-import { useful, skillParts, CSLOT } from './personaje-calc.js?v=11af44b380';
+import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js?v=fd5adc75d5';
+import { useful, skillParts, CSLOT, GOD, godFam, GR_F, GR_N } from './personaje-calc.js?v=fd5adc75d5';
 let X;                                         // {api, MSG, img, gcls, GRADE, nf, curated, CLS_KEY, gl} que pasa personaje.js
 export const init = ctx => { X = ctx; };
 const VQ = new URL(import.meta.url).search;   // ?v=<hash>: assets/pj-items.json con la misma versión
@@ -48,15 +48,7 @@ const TIERS = [['Best', 'Imprescindible'], ['Good', 'Muy usada'], ['Fine', 'A ve
 const TSLOTS = ['weapon', 'offhand', 'helmet', 'shoulder', 'torso', 'pants', 'gloves', 'boots', 'cape', 'necklace', 'earring', 'ring', 'bracelet'];
 const ARC = [['chalice', 'Cáliz'], ['parchment', 'Pergamino'], ['compass', 'Brújula'], ['bell', 'Campana'], ['mirror', 'Espejo']];
 const SET_ES = { Vigor: 'Vitalidad', Magic: 'Magia' };
-const godFam = icon => String(icon || '').match(/Godstone\w*_(\d{3})(?:\.png)?$/)?.[1] || null;
-const GOD = {
-'001': ['Ceguera', 'Blind'], '003': ['Sellado', 'Seal'], '004': ['Atadura', 'Root'], '005': ['Aturdimiento', 'Stun'], '006': ['Parálisis', 'Paralyze'],
-'007': ['−50 % vel. de movimiento', '−50% Move Speed'], '008': ['−50 % vel. de combate', '−50% Combat Speed'], '009': ['Envenenamiento', 'Poison'], '010': ['Sangrado', 'Bleed'],
-'011': ['Fuego a un objetivo', 'Fire, single target'], '012': ['Agua a un objetivo', 'Water, single target'], '013': ['Tierra a un objetivo', 'Earth, single target'], '014': ['Viento a un objetivo', 'Wind, single target'],
-'015': ['Fuego de área', 'Fire AoE'], '016': ['Agua de área', 'Water AoE'], '017': ['Tierra de área', 'Earth AoE'], '018': ['Viento de área', 'Wind AoE'],
-};
 const godName = (f, en) => gname({ name: GOD[f]?.[0], nameEn: GOD[f]?.[1] }) || String(en || `Piedra ${f}`).replace(/^Theostone:\s*/, '');
-const GR_F = { Common: 'Común', Rare: 'Rara', Epic: 'Épica', Legend: 'Legendaria', Unique: 'Única', Mythic: 'Mítica', Special: 'Especial' };
 const grF = g => GR_F[g] || g || '';
 const msGr = st => st.grade ? `<small class="cu-msq ${X.gcls(st.grade)}">${esc(grF(st.grade))}${st.v ? ` +${n1(st.v)}${unit(st.id)}` : ''}</small>` : '';
 const cslot = s => CSLOT[s] || ARC[s - 41]?.[0];
@@ -69,6 +61,7 @@ const isPvp = id => /^pvp/i.test(String(id));
 const unit = id => ST[String(id).toLowerCase()]?.[1] === 'p' ? ' %' : '';
 const n1 = v => new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 }).format(v);
 const mean = a => a.reduce((s, x) => s + x, 0) / a.length;
+const orL = a => a.length > 1 ? a.slice(0, -1).join(', ') + ' o ' + a.at(-1) : a[0] || '';
 const setOf = ic => /PveSet/.test(ic || '') ? 'V' : /DefenceSet/.test(ic || '') ? 'M' : '-';
 /* ---------- red (con caché de la sesión) ---------- */
 const memo = new Map();
@@ -119,14 +112,15 @@ const myStig = new Set((cur?.d.skills || []).filter(x => x.category === 'Dp' && 
 const have = cur?.x ? (s, id) => !!mine[s]?.has(id) : () => false;
 const myGod = cur?.x ? [1, 2].map(s => cur.x.items?.[s]).map(it => it && { fam: (it.godStoneStat || []).map(g => godFam(g.icon)).filter(Boolean), empty: (it.godStoneSlotCount || 0) > (it.godStoneStat || []).length }) : [];
 const myFam = new Set(myGod.flatMap(g => g?.fam || []));
-const GR_N = { Common: 1, Rare: 2, Legend: 3, Unique: 4, Epic: 5, Mythic: 6, Special: 7 }, myGr = {};
+const myGr = {};
 for (const it of cur?.x ? [1, 2].map(s => cur.x.items?.[s]) : []) for (const g of it?.godStoneStat || []) { const f = godFam(g.icon); if (f && (GR_N[g.grade] || 0) > (GR_N[myGr[f]] || 0)) myGr[f] = g.grade; }
-if (!T?.slots) return `<h3 class="pj-h">Lo que usan los mejores <small>${KIND_ES[k]}</small></h3>${whyP(`Sin datos de los top ${KIND_ES[k]}: ${C.reasons?.top?.[k] || `muestra chica (${T?.n || 0} de ${all})`}. No rellenamos con otras builds.`)}`;
+if (!T?.slots) return `<h3 class="pj-h">Lo que usan los mejores <small>${KIND_ES[k]}</small></h3>${whyP(`Sin datos de los top ${KIND_ES[k]}: ${C.reasons?.top?.[k] || `muestra chica (${T?.n || 0} de ${all})`}. Acá no los reemplazamos con otro tipo; en Próximos pasos ${cur ? 'te comparamos' : 'comparamos'} con los top de toda la clase${k === 'support' ? ', que pegan y no curan' : ''}.`)}`;
 const sk = s => ({ name: s.name, nameEn: SK[s.id]?.[0] });
 const ok = (s, l) => have(s, l.id) ? ico('i-check') + '<span class="sr">La tenés: </span>' : '';
 const vsAvg = (s, l) => { const v = myV[s]?.[l.id]; return v && l.avg != null ? { me: mean(v), top: l.avg } : null; };
 const avgTxt = (l, a) => a ? `Tu ${l.name}: ${n1(a.me)}${unit(l.id)}; los top que la llevan sacaron ${n1(a.top)}${unit(l.id)} de media` : '';
-const D = k === 'pve' || k === 'pvp' ? (C.diffs?.pveVsPvp?.list || []).filter(d => d.what === 'line' || d.what === 'stigma') : [];
+const D = k === 'pve' || k === 'pvp' ? (C.diffs?.pveVsPvp?.list || []).filter((d, i, L) => d.what === 'line' || d.what === 'stigma'
+|| (d.what === 'arcana' && d.PvP > d.PvE && !L.slice(0, i).some(x => x.what === 'arcana' && x.slot === d.slot && x.PvP > x.PvE))) : [];
 const dif = new Map(D.filter(d => d.what === 'line').map(d => [d.slot + '|' + d.id, d]));
 const ARMOR = new Set(['helmet', 'shoulder', 'torso', 'pants', 'gloves', 'boots', 'cape']);   // slot 'armor' del curado: alguna pieza
 const difOf = (s, id) => dif.get(s + '|' + id) || (ARMOR.has(s) ? dif.get('armor|' + id) : undefined);
@@ -148,15 +142,17 @@ const ampP = s => {
 const t = T.slots[s]?.exceed;
 if (!(t >= 0.5)) return '';
 const E = myEq(s), me = cur && E.length ? Math.min(...E.map(e => e.exceed || 0)) : null, tr = Math.round(t);
-const lab = `Amplificación: los top la llevan a +${n1(t)}${me != null ? `; vos, +${me}` : ''}`;
-return `<span class="cu-pa" role="img" aria-label="${lab}" title="${lab}"><span class="eq-amp">${[1, 2, 3, 4, 5].map(i => `<i class="${[(me ?? tr) >= i && 'on', tr >= i && 'tg'].filter(Boolean).join(' ')}"></i>`).join('')}</span><small${me != null ? ` class="${me < tr ? 'low' : 'ok'}"` : ''}>${me != null ? `vos +${me} · top +${tr}` : `top +${tr}`}</small></span>`;
+const no = me != null && cur?.x && E.every(e => cur.x.items?.[e.slot] && !cur.x.items[e.slot].maxExceedEnchantLevel);
+const lab = `Amplificación: los top la llevan a +${n1(t)}${no ? '; la tuya no se amplifica' : me != null ? `; vos, +${me}` : ''}`;
+return `<span class="cu-pa" role="img" aria-label="${lab}" title="${lab}"><span class="eq-amp">${[1, 2, 3, 4, 5].map(i => `<i class="${[!no && (me ?? tr) >= i && 'on', tr >= i && 'tg'].filter(Boolean).join(' ')}"></i>`).join('')}</span><small${me != null && !no ? ` class="${me < tr ? 'low' : 'ok'}"` : ''}>${no ? 'la tuya no se amplifica; la de los top sí' : me != null ? `vos +${me} · top +${tr}` : `top +${tr}`}</small></span>`;
 };
 const pvpMs = s => (myMs[s] || []).filter(isPvp).length;
 const piece = s => {
 const x = T.slots[s], it = x.items?.[0], best = x.lines.filter(l => l.tier === 'Best'), en = Math.round(x.enchant || 0), a = T.arcana?.[s]?.[0];
 const sk = skWant(s).slice(0, 3), skAll = (x.skillLines || []).filter(l => l.share >= SK_MIN).length, pv = k === 'pvp' ? 0 : pvpMs(s);
-const pic = a ? gi(arcIco(s, a.set), 44) : gi(IT[it?.id], 44), mineIt = !a && it && myEq(s).some(e => [it.id, ...(it.ids || [])].map(String).includes(String(e.id)));
-const itT = !a && it ? `<small class="cu-pit${mineIt ? ' have' : ''}" title="${esc(x.items.map(i => `${gname(i)} ${pct(i.share)} %`).join(' · '))}">${mineIt ? ico('i-check') + '<span class="sr">La tenés: </span>' : ''}<span>${esc(gname(it))}</span> <b>${pct(it.share)} %</b></small>` : '';
+const pic = a ? gi(arcIco(s, a.set), 44) : gi(IT[it?.id], 44), E2 = myEq(s), hit = !a && it ? E2.filter(e => [it.id, ...(it.ids || [])].map(String).includes(String(e.id))).length : 0, mineIt = hit > 0;
+const half = E2.length === 2 && hit === 1;
+const itT = !a && it ? `<small class="cu-pit${mineIt ? ' have' : ''}" title="${esc(x.items.map(i => `${gname(i)} ${pct(i.share)} %`).join(' · '))}">${mineIt ? ico('i-check') + `<span class="sr">${half ? 'Tenés una de las dos: ' : 'La tenés: '}</span>` : ''}<span>${esc(gname(it))}</span> <b>${pct(it.share)} %</b>${half ? ' <em class="cu-half">1 de 2</em>' : ''}</small>` : '';
 const name = a ? `${esc(x.name)} <small>${esc(gname({ name: SET_ES[a.set] || a.set, nameEn: a.set }))}</small>` : esc(x.name);
 const none = !sk.length && skAll && parts ? '<li class="sk-no">Las que llevan los top son de skills que no usás</li>' : '';
 return `<li class="cu-p" data-slot="${s}"><span class="eq-i cu-pi"${en ? ` title="Encantamiento: los top la llevan a +${en}"` : ''}>${pic}${en ? `<b class="eq-en">+${en}</b>` : ''}</span>
@@ -179,12 +175,12 @@ const kOf = s => s.k ?? Math.round(s.share * 1000);
 const tie = stM.length === 4 ? stA0.filter(s => kOf(s) === kOf(stM[3])) : [], stA = stA0.filter(s => !tie.includes(s));
 const tieG = tie.length ? [stM[3], ...tie] : [], tieHave = tieG.some(s => myStig.has(String(s.id)));
 const stVos = (s, alt) => { const m = myLv.get(String(s.id)) || 0, t = Math.round(s.lvl || 0); return cur && (m || !alt) ? `<span class="${m >= t ? 'ok' : m < t - 4 ? 'low' : ''}">vos ${m}</span>` : ''; };
-const stT = (s, alt) => tile({ id: s.id, pic: skIcon(s.id, 48), name: gname(sk(s)), lv: s.lvl ? Math.round(s.lvl) : 0, have: myStig.has(String(s.id)), dim: alt || s.share < 0.5, sub: stVos(s, alt), s: s.share, title: `${gboth(sk(s))}: la usan ${often(s.share)}${s.lvl ? `, nivel ${Math.round(s.lvl)}` : ''}${alt ? ' (alternativa)' : ''}${tieG.includes(s) ? `. Empatada: ${tieG.map(x => gname(sk(x))).join(' o ')} las suben los mismos top` : ''}` });
+const stT = (s, alt) => tile({ id: s.id, pic: skIcon(s.id, 48), name: gname(sk(s)), lv: s.lvl ? Math.round(s.lvl) : 0, have: myStig.has(String(s.id)), dim: alt || s.share < 0.5, sub: stVos(s, alt), s: s.share, title: `${gboth(sk(s))}: la usan ${often(s.share)}${s.lvl ? `, nivel ${Math.round(s.lvl)}` : ''}${alt ? ' (alternativa)' : ''}${tieG.includes(s) ? `. Empatada: ${orL(tieG.map(x => gname(sk(x))))} las suben los mismos top` : ''}` });
 const stMiss = cur ? stM.filter(s => s.share >= 0.5 && !myStig.has(String(s.id)) && !(s === stM[3] && tieHave)) : [], stInst = cur ? stA.filter(s => myStig.has(String(s.id))) : [];
-const stList = L => L.map(s => `<b>${(s === stM[3] && tieG.length ? tieG : [s]).map(x => esc(gname(sk(x)))).join('</b> o <b>')}</b> (${often(s.share)})`).join(', ');
+const stList = L => L.map(s => `${orL((s === stM[3] && tieG.length ? tieG : [s]).map(x => `<b>${esc(gname(sk(x)))}</b>`))} (${often(s.share)})`).join(', ');
 const stMain = stM.map(s => stT(s)).join('') + tie.map(s => `<li class="cu-or" aria-hidden="true">o</li>${stT(s)}`).join('');
 const stigBody = `<div class="cu-stw"><ul class="cu-is cu-stig">${stMain}</ul>${stA.length ? `<div class="cu-alt"><small>Alternativas</small><ul class="cu-is cu-stig cu-sta">${stA.map(s => stT(s, 1)).join('')}</ul></div>` : ''}</div>
-${tie.length ? `<p class="cu-stn par" role="note">La cuarta está empatada: ${tieG.map(x => `<b>${esc(gname(sk(x)))}</b>`).join(' o ')}, las suben los mismos top. Cualquiera vale.</p>` : ''}
+${tie.length ? `<p class="cu-stn par" role="note">La cuarta está empatada: ${orL(tieG.map(x => `<b>${esc(gname(sk(x)))}</b>`))}, las suben los mismos top. Cualquiera vale.</p>` : ''}
 ${!stMiss.length ? '' : stInst[0]?.share >= stMiss[0].share - 0.25 ? `<p class="cu-stn par" role="note">Los top se reparten entre ${stList(stMiss)} y ${stList(stInst)}: vos llevás la segunda.</p>`
 : `<p class="cu-stn" role="note">Te falta ${stList(stMiss)}.${stInst.length ? ` En su lugar tenés ${stList(stInst)}, una alternativa.` : ''}</p>`}`;
 const skills = (T.skills || []).filter(s => s.cat === 'Passive' || s.onBar >= 0.5).sort((a, b) => b.lvl - a.lvl).slice(0, 8).map(s => {
@@ -212,9 +208,11 @@ const gs = gL.map(x => tile({ id: x.f, pic: gi('Icon_Item_Usable_Godstone_WP_r_'
 sub: `<span class="${X.gcls(x.grade)}">${esc(grF(x.grade))}</span>${gMine(x) ? ` <span class="cu-gmy ${X.gcls(gMine(x))}">la tuya: ${esc(grF(gMine(x)))}</span>` : ''}`, s: x.share,
 title: `${gn(x.f)}: la usan ${often(x.share)} (${pct(x.share)} %), la más común en ${grF(x.grade).toLowerCase()}${gMine(x) ? `; la tuya es ${grF(gMine(x)).toLowerCase()}` : ''}` })).join('');
 const gsMiss = gL.find(x => !myFam.has(x.f));
+const gsOut = [...myFam].filter(f => !gL.some(x => x.f === f));
+const gsOutTxt = gsOut.length && gL.length ? `La tuya: ${gsOut.map(f => `<b>${esc(gn(f))}</b>${myGr[f] ? ` (${esc(grF(myGr[f]).toLowerCase())})` : ''}`).join(' y ')}: la lleva menos de 1 de cada 10 top; los top, <b>${esc(pair ? `${gn(pair.f[0])} + ${gn(pair.f[1])}` : gn(gL[0].f))}</b>.` : '';
 const gsWarn = [...myGod.map((g, i) => g?.empty && `${i ? 'Tu secundaria' : 'Tu arma'} tiene la ranura de piedra sagrada vacía`), myGod[0]?.fam[0] && myGod[0].fam[0] === myGod[1]?.fam[0] && `Tenés ${gn(myGod[0].fam[0])} en las dos manos: aplica una sola`].filter(Boolean);
 const gsBody = `<ul class="cu-is cu-gs">${gs}</ul><div class="cu-gst"><p class="cu-gsn">Poné una en el arma y otra distinta en la secundaria: dos con el mismo efecto aplican uno solo.${pair ? ` El par más usado: <b>${esc(gn(pair.f[0]))} + ${esc(gn(pair.f[1]))}</b> (${often(pair.share)}).` : ''}</p>
-${gsWarn.length ? `<p class="cu-gsw" role="note">${esc(gsWarn.join('. '))}.${gsMiss ? ` Los top llevan <b>${esc(gn(gsMiss.f))}</b>.` : ''}</p>` : ''}</div>`;
+${gsWarn.length ? `<p class="cu-gsw" role="note">${esc(gsWarn.join('. '))}.${gsMiss ? ` Los top llevan <b>${esc(gn(gsMiss.f))}</b>.` : ''}</p>` : ''}${gsOutTxt ? `<p class="cu-gsw cu-gso" role="note">${gsOutTxt}</p>` : ''}</div>`;
 const msAgg = {};
 let msW = 0;
 for (const x of Object.values(T.slots)) if (x.stones?.length) { msW += x.pieces; for (const st of x.stones) (msAgg[st.id] ||= { ...st, w: 0 }).w += st.share * x.pieces; }
@@ -229,7 +227,8 @@ const msBody = `<ul class="cu-ms">${msTop.map(st => `<li data-ms="${esc(st.id)}"
 <div class="cu-gst"><p class="cu-gsn">De cada 100 ranuras de los top, en todo el equipo.${msGrd ? ' Pieza por pieza, con el grado y el valor más comunes, en la tabla completa de abajo.' : ' Solo se sabe qué piedra ponen, no su grado ni cuánto suma. Pieza por pieza, en la tabla completa de abajo.'}</p>
 ${pvN ? `<p class="cu-msw${k === 'pvp' ? ' par' : ''}" role="note">Tenés <b>${pvN} piedra${pvN > 1 ? 's' : ''} de maná JcJ</b> (${esc(myPv.map(([s, n]) => `${(T.slots[s]?.name || s).toLowerCase()}${n > 1 ? ` ×${n}` : ''}`).join(', '))}): solo suman contra jugadores${k === 'pvp' ? '' : `, no en ${KIND_ES[k]}`}.${pvTxt}</p>` : ''}</div>`;
 const P = cur?.d.profile || {};
-const ampS = cur ? (cur.d.equipment || []).filter(e => e.slot < 41 && T.slots[CSLOT[e.slot]]?.exceed >= 2).map(e => [e.exceed || 0, T.slots[CSLOT[e.slot]].exceed])
+const ampMe = e => cur.x ? cur.x.items?.[e.slot]?.maxExceedEnchantLevel > 0 && T.slots[CSLOT[e.slot]]?.exceed != null : T.slots[CSLOT[e.slot]]?.exceed >= 2;
+const ampS = cur ? (cur.d.equipment || []).filter(e => e.slot < 41 && ampMe(e)).map(e => [e.exceed || 0, T.slots[CSLOT[e.slot]].exceed])
 : Object.values(CSLOT).filter(s => T.slots[s]?.exceed >= 2).map(s => [0, T.slots[s].exceed]);
 const vsT = [T.cpMedian && ['cp', 'Poder de combate', P.combatPower, T.cpMedian, X.nf, 'top típico'], T.ilvlMedian && ['il', 'Nivel de objeto', P.itemLevel, T.ilvlMedian, X.nf, 'top típico'],
 ampS.length && ['amp', 'Amplificación por pieza', mean(ampS.map(x => x[0])), mean(ampS.map(x => x[1])), v => '+' + n1(v), 'los top']].filter(Boolean);
@@ -240,9 +239,9 @@ return `<li data-vs="${id}"><small>${lb}</small><b>${f(q != null ? me : top)}</b
 const vs = vsT.length ? `<ul class="cu-vs" aria-label="${cur ? 'Vos contra los top' : 'Los top'}" title="Top típico = la mediana: la mitad de los top tiene más y la mitad menos">${vsT.map(vsLi).join('')}</ul>` : '';
 const thin = T.confidence === 'baja' || T.n < 8;
 const dWhere = d => d.what === 'stigma' ? 'Estigma' : d.slot === 'armor' ? 'Armadura (alguna pieza)' : T.slots[d.slot]?.name || d.slot;
-const dLi = d => `<li><span>${esc(dWhere(d))}</span> <b>${esc(d.what === 'stigma' ? gname(sk(d)) : d.name)}</b> <small>${pct(d.PvE)} % → ${pct(d.PvP)} %</small></li>`;
+const dLi = d => `<li><span>${esc(dWhere(d))}</span>${d.what === 'arcana' ? ' ·' : ''} <b>${esc(d.what === 'stigma' ? gname(sk(d)) : d.what === 'arcana' ? gname({ name: SET_ES[d.name] || d.name, nameEn: d.name }) : d.name)}</b> <small>${pct(d.PvE)} % → ${pct(d.PvP)} %</small></li>`;
 const dCols = [['pvp', 'En PvP sube', D.filter(d => d.PvP > d.PvE)], ['pve', 'En Estándar manda', D.filter(d => d.PvE > d.PvP)]].sort((a, b) => (b[0] === k) - (a[0] === k)).filter(x => x[2].length);
-const dSame = [C.diffs?.pveVsPvp?.sameArcana?.length === 5 && 'Arcanas', !D.some(d => d.what === 'stigma') && 'estigmas'].filter(Boolean);
+const dSame = [!D.some(d => d.what === 'arcana') && 'Arcanas', !D.some(d => d.what === 'stigma') && 'estigmas'].filter(Boolean);
 const difHtml = D.length ? `<section class="cu-dif" aria-labelledby="cu-dh"><h4 class="pj-h4" id="cu-dh">Estándar contra PvP <small>lo que más cambia · % de los top, Estándar → PvP</small></h4>
 <div class="cu-dg">${dCols.map(([d, h, L]) => `<div class="cu-dc" data-d="${d}"><small>${h}</small><ul>${L.map(dLi).join('')}</ul></div>`).join('')}</div>
 ${dSame.length ? `<p class="cu-gsn">${dSame.join(' y ').replace(/^./, c => c.toUpperCase())}: sin diferencias claras con esta muestra.</p>` : ''}</section>`
@@ -291,6 +290,7 @@ if (!BUILD_OK.test(r.url || '')) return null;
 const u = new URL(r.url), id = +u.searchParams.get('build-id'), slug = decodeURIComponent(u.pathname.split('/').pop());
 return id && /^[A-Za-z0-9_-]+$/.test(slug) ? { id, slug, name: r.name, char: r.char, author: r.author, likes: r.likes, tags: r.tags || [], url: r.url } : null;
 }
+const progOf = (C, k) => (C.recommended?.progresion || []).filter(r => !r.kind || r.kind === k);
 function recHtml(C, k) {
 const row = (r, i) => {
 const m = r.parts?.match != null ? pct(r.parts.match) : null;
@@ -299,8 +299,8 @@ return `<li class="cu-r"><b class="cu-sc" style="--q:${+r.score || 0}%" title="P
 ${m != null ? `<span class="cu-mt" title="${esc(r.why || '')}"><span class="sh" role="img" aria-label="Se parece ${m} % a los top${r.comparedWith === 'all' ? ' de la clase' : ''}"><i style="--q:${m}%"></i></span><small>${m} % como los top${r.comparedWith === 'all' ? ' de la clase' : ''}</small>${(r.tags || []).includes('beginner-friendly') ? '<em class="tag gold">Para empezar</em>' : ''}</span>` : `<small class="cu-rw">${esc(r.why || '')}</small>`}</span>
 ${recB(r) ? `<button type="button" class="btn" data-rver="${i}">Ver build</button>` : ''}</li>`;
 };
-const main = C.recommended?.[k] || [], prog = C.recommended?.progresion || [];
-return `<h3 class="pj-h">Builds recomendadas <small>${KIND_ES[k]} · las más parecidas a los top</small></h3>
+const main = C.recommended?.[k] || [], prog = progOf(C, k);
+return `<h3 class="pj-h">Builds recomendadas <small>${KIND_ES[k]} · de más a menos puntaje</small></h3>
 ${main.length ? `<ol class="cu-rec">${main.map((r, i) => row(r, i)).join('')}</ol>` : whyP(C.reasons?.recommended?.[k] || `No hay builds ${KIND_ES[k]} con respaldo.`)}
 ${prog.length ? `<details class="cu-prog"><summary>Para el que recién llega a 45 <small>${prog.length}</small></summary><ol class="cu-rec">${prog.map((r, i) => row(r, main.length + i)).join('')}</ol></details>` : ''}`;
 }
@@ -320,7 +320,7 @@ const cuEl = $('.cu', el), more = $('#bl-more', el), outEl = $('.bl-out', el);
 let seq = 0, cseq = 0, list = [], listFor = null, C = null, R = [];
 const paintCur = () => {
 if (K === 'support' && !HEAL.has(cls)) K = 'pve';
-R = [...(C.recommended?.[K] || []), ...(C.recommended?.progresion || [])];
+R = [...(C.recommended?.[K] || []), ...progOf(C, K)];
 repaint = cur ? null : paintCur;
 cuEl.innerHTML = `${cur ? '' : kindSeg(C, K, cls)}${topHtml(C, K, cls, cur)}${recHtml(C, K)}<p class="pj-note">Se recalcula cada semana. No son datos oficiales. <button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button></p>`;
 };
@@ -404,16 +404,16 @@ function buildBody(d) {
 const eq = SLOT.map(s => [s, d.equipment.find(e => e.slot === s[0])]).filter(x => x[1]);
 const sk = d.skills?.list || [];
 return `${d.stale ? '<p class="tag bad">La fuente no responde: es la última versión que tengo</p>' : ''}
-<h3 class="pj-h">Equipo</h3><ul class="bd-eq">${eq.map(([s, e]) => `<li class="${X.gcls(e.grade)}"><span class="eq-i">${X.img(e.icon, 40)}${e.lvl ? `<b class="eq-en">+${e.lvl}</b>` : ''}</span>
+<h3 class="pj-h">Equipo</h3><ul class="bd-eq">${eq.map(([s, e]) => `<li class="${X.gcls(e.grade)}"><span class="eq-i">${X.img(e.icon, 40)}${+e.lvl ? `<b class="eq-en">+${+e.lvl}</b>` : ''}</span>
 <span class="bd-t"><small>${s[1]} · <span class="eq-gr">${esc(X.GRADE[e.grade] || e.grade)}</span></small><b>${esc(e.name)}</b>
 ${e.lines.length ? `<ul class="ln">${e.lines.map(lineLi).join('')}</ul>` : ''}
 ${e.stones.length ? `<small class="bd-ms">Piedras de maná: ${e.stones.map(x => `${esc(stLabel(x.id))} +${esc(fmt(x.id, x.v))}`).join(' · ')}</small>` : ''}</span></li>`).join('') || '<li class="pj-empty">Sin equipo cargado.</li>'}</ul>
-${d.arcana.length ? `<h3 class="pj-h">Arcanas</h3><ul class="bd-ar bd-arc">${d.arcana.map(a => `<li>${X.img(a.icon, 36)}<b class="${X.gcls(a.grade)}">${esc(a.name)}${a.lvl ? ` +${a.lvl}` : ''}</b><small>${a.skills.map(s => `${esc(s.name || `Skill ${s.id}`)} +${s.lvl}`).join(' · ') || 'sin skills'}</small></li>`).join('')}</ul>` : ''}
+${d.arcana.length ? `<h3 class="pj-h">Arcanas</h3><ul class="bd-ar bd-arc">${d.arcana.map(a => `<li>${X.img(a.icon, 36)}<b class="${X.gcls(a.grade)}">${esc(a.name)}${+a.lvl ? ` +${+a.lvl}` : ''}</b><small>${a.skills.map(s => `${esc(s.name || `Skill ${s.id}`)} +${+s.lvl || 0}`).join(' · ') || 'sin skills'}</small></li>`).join('')}</ul>` : ''}
 <h3 class="pj-h">Skills y estigmas ${d.skills ? `<small>${esc(d.skills.name || '')}</small>` : ''}</h3>
-${sk.length ? SKCAT.map(([c, t]) => { const l = sk.filter(s => s.cat === c).sort((a, b) => (b.slot != null) - (a.slot != null)); return l.length ? `<h4 class="pj-h4">${t}</h4><ul class="sk-g">${l.map(s => `<li class="sk2${c !== 'passive' && s.slot == null ? ' off' : ''}">${skIcon(s.id, 28)}<span>${esc(s.name || `Skill ${s.id}`)}</span><b>Nv ${s.lvl}</b></li>`).join('')}</ul>` : ''; }).join('')
+${sk.length ? SKCAT.map(([c, t]) => { const l = sk.filter(s => s.cat === c).sort((a, b) => (b.slot != null) - (a.slot != null)); return l.length ? `<h4 class="pj-h4">${t}</h4><ul class="sk-g">${l.map(s => `<li class="sk2${c !== 'passive' && s.slot == null ? ' off' : ''}">${skIcon(s.id, 28)}<span>${esc(s.name || `Skill ${s.id}`)}</span><b>Nv ${+s.lvl || 0}</b></li>`).join('')}</ul>` : ''; }).join('')
 + '<p class="pj-note">Atenuadas: subidas pero sin poner en la barra. Las especializaciones no se muestran: la ficha oficial no las tiene.</p>' : '<p class="pj-empty">Esta build no trae skills.</p>'}
 <h3 class="pj-h">Daevanion</h3>
-${d.daevanion ? `<ul class="bd-ar">${Object.entries(d.daevanion.boards).map(([id, l]) => `<li><b>${DAE[(+id % 10) - 1] || `Tablero ${esc(id)}`}</b><small>${l.length} nodos</small></li>`).join('')}</ul>` : '<p class="pj-empty">Esta build no trae Daevanion.</p>'}`;
+${d.daevanion ? `<ul class="bd-ar">${Object.entries(d.daevanion.boards).map(([id, l]) => `<li><b>${DAE[(+id % 10) - 1] || `Tablero ${esc(id)}`}</b><small>${+l.length || 0} nodos</small></li>`).join('')}</ul>` : '<p class="pj-empty">Esta build no trae Daevanion.</p>'}`;
 }
 /* ---------- detalle de una pieza: calidad de cada línea y si la usan los top de tu build ---------- */
 export function rollOf(line, pool) {
@@ -449,13 +449,23 @@ const skWant = [...topSk.values()].filter(l => l.share >= SK_MIN && use(l.id) &&
 const GT = C?.top?.[kind]?.theostones?.list || [], gTop = new Map(GT.map(x => [x.f, x])), gMine = new Set((it.godStoneStat || []).map(g => godFam(g.icon)));
 const gEmpty = (it.godStoneSlotCount || 0) > (it.godStoneStat || []).length, gWant = it.godStoneSlotCount ? GT.filter(x => !gMine.has(x.f)).slice(0, 3) : [];
 const msTop = new Map((T?.stones || []).map(x => [x.id, x]));
-const msTag = s => { const id = String(s.id).toLowerCase(); return isPvp(id) && kind !== 'pvp' ? '<em class="tag bad" title="Piedra JcJ: solo suma contra jugadores">JcJ</em>' : msTop.get(id)?.share >= MS_TOP ? `<em class="tag gold" title="${pct(msTop.get(id).share)} de cada 100 ranuras de los top ${KIND_ES[kind]} en esta pieza">top</em>` : ''; };
-const want = T ? T.lines.filter(l => (l.tier === 'Best' || l.tier === 'Good') && !(it.subStats || []).some(s => String(s.id).toLowerCase() === l.id)).slice(0, 3) : [];
+const msTag = s => {
+const id = String(s.id).toLowerCase(), t = msTop.get(id);
+if (isPvp(id) && kind !== 'pvp') return '<em class="tag bad" title="Piedra JcJ: solo suma contra jugadores">JcJ</em>';
+if (!(t?.share >= MS_TOP)) return '';
+const tt = `${pct(t.share)} de cada 100 ranuras de los top ${KIND_ES[kind]} en esta pieza${t.grade ? `, casi siempre ${grF(t.grade).toLowerCase()}` : ''}`;
+const v = parseFloat(String(s.value ?? '').replace(/[^\d.,-]/g, '').replace(',', '.')), low = t.grade && s.grade && ((GR_N[s.grade] || 0) < (GR_N[t.grade] || 0) || (s.grade === t.grade && t.v && v < t.v));
+return `<em class="tag gold" title="${esc(tt)}">${t.grade ? `top: ${esc(grF(t.grade))}${t.v ? ` +${n1(t.v)}${unit(id)}` : ''}` : 'tipo top'}</em>${low ? `<em class="tag ms-low">la tuya: ${esc(grF(s.grade))}</em>` : ''}`;
+};
+const fixed = it.subStatRandom === false && (it.subStats || []).length, tIt = T?.items?.[0];
+const want = T && !fixed ? T.lines.filter(l => (l.tier === 'Best' || l.tier === 'Good') && !(it.subStats || []).some(s => String(s.id).toLowerCase() === l.id)).slice(0, 3) : [];
 return `<p class="tip-m">${[it.categoryName, it.level && `nivel ${it.level}`, it.maxEnchantLevel && `encantamiento +${it.enchantLevel ?? e.enchant ?? 0} de ${it.maxEnchantLevel}`, it.maxExceedEnchantLevel && `amplificación +${e.exceed || 0} de ${it.maxExceedEnchantLevel}${T?.exceed >= 0.5 ? ` (los top +${n1(T.exceed)})` : ''}`].filter(Boolean).map(esc).join(' · ')}</p>
 ${main ? `<h4>Stats</h4><ul>${main}</ul>` : ''}
 ${lines ? `<h4>Líneas <small>barra = qué tan alto salió</small></h4><ul class="tip-ln">${lines}</ul>` : ''}
-${maxed.length ? `<p class="tip-want tip-max">${esc(maxed.join(' y '))}: ya ${maxed.length > 1 ? 'salieron' : 'salió'} al tope de esta pieza. El promedio de los top es más alto porque llevan piezas de más nivel.</p>` : ''}
+${maxed.length ? `<p class="tip-want tip-max">${esc(maxed.length > 1 ? maxed.slice(0, -1).join(', ') + ' y ' + maxed.at(-1) : maxed[0])}: ya ${maxed.length > 1 ? 'salieron' : 'salió'} al tope de esta pieza. El promedio de los top es más alto porque llevan piezas de más nivel.</p>` : ''}
+${fixed ? `<p class="tip-want">Líneas fijas: lo que cambia es la pieza.${tIt && ![tIt.id, ...(tIt.ids || [])].map(String).includes(String(it.id ?? e.id)) ? ` Los top ${KIND_ES[kind]} llevan <b>${esc(gname(tIt))}</b> (${often(tIt.share)}).` : ''}</p>` : ''}
 ${want.length ? `<p class="tip-want">Los top ${KIND_ES[kind]} buscan acá: ${want.map(l => `<b>${esc(l.name)}</b> (${often(l.share)})`).join(', ')}.</p>` : ''}
+${(it.surpassStats || []).length ? `<h4>Breakthrough <small>solo contra jugadores</small></h4><ul class="tip-bt">${it.surpassStats.map(s => li(stN(s), esc(fv(s.value)))).join('')}</ul>` : ''}
 ${sk ? `<h4>Líneas de skill</h4><ul>${sk}</ul>` : ''}
 ${skWant.length ? `<p class="tip-want">Líneas de skill que llevan los top ${KIND_ES[kind]} acá, de skills que usás: ${skWant.map(l => `<b>${esc(gname({ name: l.name, nameEn: SK[l.id]?.[0] }))}</b> (${often(l.share)})`).join(', ')}.</p>` : ''}
 ${(it.magicStoneStat || []).length ? `<h4>Piedras de maná</h4><ul class="tip-ms">${it.magicStoneStat.map(s => li(stN(s), esc(s.value), msTag(s))).join('')}</ul>` : ''}

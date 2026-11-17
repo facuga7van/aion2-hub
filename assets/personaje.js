@@ -1,8 +1,8 @@
 import {
 $, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION, viewFaccion,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, setTitle, myChars, gname, galt, gclass, gameLang, on,
-} from './core.js?v=11af44b380';
-import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=11af44b380';
+} from './core.js?v=fd5adc75d5';
+import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, LEVEL_CAP, isArcana } from './personaje-calc.js?v=fd5adc75d5';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -15,6 +15,7 @@ const REGS = Object.keys(SERVERS.regions);
 const regName = r => SCHEDULE.regions[r]?.name || r.toUpperCase();
 const slug = s => norm(s).replace(/[^a-z0-9]+/g, '-');
 const fac = raceId => raceId === 1 ? 'elyos' : 'asmodian';
+const facOk = f => f === 'elyos' ? 'elyos' : 'asmodian';   // la de un ref guardado va a una clase: lista cerrada
 const keyOf = (r, s, n) => `${r}/${slug(serverName(s) || String(s))}/${n}`;
 const hashOf = k => '#' + k.split('/').map(encodeURIComponent).join('/');
 const nf = n => n == null ? '—' : new Intl.NumberFormat('es-AR').format(n);
@@ -49,11 +50,12 @@ spec: ['Especialización', 'Cuando una skill activa llega a 8, 12 y 16, se abre 
 pts: ['Puntos de skill', 'Cada skill sube hasta 10 con puntos de skill. La ficha oficial no muestra cuántos te quedan sin usar.'],
 skills: ['Nivel de skill', 'Se arma con puntos (hasta 10), nodos de Daevanion (hasta +4) y líneas de skill del equipo y de las Arcanas. 14 es el tope normal; de ahí para arriba, solo con líneas.'],
 gs: ['Piedra sagrada', 'Theostone: va una en el arma y otra en la secundaria. Al atacar tiene chance de aplicar su efecto (sellado, parálisis, daño extra). Dos con el mismo efecto aplican uno solo.'],
+ms: ['Piedras de maná', 'Van en las ranuras de cada pieza y suman un stat (Ataque, Crítico…). Las JcJ solo suman contra jugadores. Se cambian por otras sin perder la pieza.'],
 stig: ['Estigmas', 'Skills especiales que van en 4 espacios aparte. Suben solo con Fragmentos de Estigma, hasta 20.'],
 ariel: ['Ariel', 'El quinto tablero de Daevanion: da daño contra jefes. Sus nodos se abren con Fragmentos de Ariel de Expedición difícil (100 fragmentos = 1 cristal, hasta 30 por personaje).'],
 lineas: ['Líneas', 'Los stats extra de cada pieza, que salen al azar. Los mejores buscan ciertas líneas en cada pieza. En Equipo, tocá una pieza para ver qué tan alto te salió cada una.'],
 };
-const STEP_GL = { 'amp-arma': 'amp', 'amp-acc': 'amp', 'amp-arm': 'amp', enc: 'enc', arc: 'arc', dae: 'dae', pts: 'pts', ariel: 'ariel', gear: 'il' };
+const STEP_GL = { 'amp-arma': 'amp', 'amp-acc': 'amp', 'amp-arm': 'amp', 'amp-brac': 'amp', enc: 'enc', arc: 'arc', dae: 'dae', pts: 'pts', ariel: 'ariel', gear: 'il', gs: 'gs', ms: 'ms' };
 const gl = k => GL[k] ? `<button type="button" class="gl" data-que="${k}" aria-label="¿Qué es ${esc(GL[k][0].toLowerCase())}?" aria-expanded="false" aria-controls="pj-gl"></button>` : '';
 const glTip = Object.assign(document.createElement('div'), { id: 'pj-gl', className: 'pj-gl' });
 glTip.setAttribute('popover', 'auto');
@@ -236,8 +238,8 @@ if (seq === req) paintError(e, [`No encontré «${q}» en ${s ? serverName(s) : 
 }
 const clsIco = (c, sz = 20) => CLS_FILE[c] ? icoGame('UT_Class_' + CLS_FILE[c] + '_Large', sz, 'pj-ci') : '';
 const card = (x, tag = '') => `<li><a class="pj-card" href="${esc(hashOf(x.k))}">${img(x.i, 48, 'pj-pt')}
-<span class="pj-cn"><b>${esc(x.n)}${tag}</b><small>${clsIco(x.c, 16)}${x.l ? `Nv ${x.l} · ` : ''}${esc(gclass(x.c || ''))}</small></span>
-<span class="pj-cs">${esc(serverName(x.s) || '')}<em class="tag fac-${x.f}">${FACCION[x.f] || ''}</em></span></a></li>`;
+<span class="pj-cn"><b>${esc(x.n)}${tag}</b><small>${clsIco(x.c, 16)}${+x.l ? `Nv ${+x.l} · ` : ''}${esc(gclass(x.c || ''))}</small></span>
+<span class="pj-cs">${esc(serverName(x.s) || '')}<em class="tag fac-${facOk(x.f)}">${FACCION[x.f] || ''}</em></span></a></li>`;
 function paintResults() {
 out.setAttribute('aria-busy', 'false');
 if (!last.list.length) {
@@ -389,7 +391,7 @@ async function loadCurated(c) {
 const cls = CLS_KEY[c.d.profile.class];
 if (!cls || CUR.has(cls)) return;
 CUR.set(cls, null);
-const paint = () => { if (cur === c) { paintBuild(); if (TAB === 'daevanion') paintPanel(); } };
+const paint = () => { if (cur === c) { paintBuild(); if (c.x && ['pasos', 'skills', 'daevanion'].includes(TAB)) paintPanel(); } };
 const hit = quick('/api/curated', { class: cls }), net = api('/api/curated', { class: cls });   // lo guardado ya; la de ahora (ETag) si cambió
 net.catch(() => {});
 const h = await hit;
@@ -404,6 +406,7 @@ const topSkills = (c, k) => topLevels(curated(c)?.top, k);
 const kindStored = ref => store.get(BLD, {})[ref.k.toLowerCase()] || null;
 const okKind = (c, k) => kindsOf(c).some(([v]) => v === k) ? k : null;
 const kindOf = c => okKind(c, kindStored(c.ref)) || guess(c).kind;
+const own = () => !!(cur && mineOf(cur.ref));
 const guess = c => { const g = kindGuess(c.d, c.x?.items, curated(c)?.method?.kindSets); return okKind(c, g.kind) ? g : { kind: 'pve', sig: [] }; };
 function paintBuild() {
 const box = $('#pj-bld');
@@ -411,7 +414,7 @@ if (!box || !cur) return;
 const g = guess(cur), k = kindOf(cur), st = okKind(cur, kindStored(cur.ref));
 box.innerHTML = `<span class="pj-bl-l"><span id="pj-bl-l">Build</span>${gl('build')}</span>
 <div class="seg" role="group" aria-labelledby="pj-bl-l">${kindsOf(cur).map(([v, l]) => `<button type="button" data-kind="${v}" aria-pressed="${v === k}">${l}${v === g.kind ? ' <small>sugerida</small>' : ''}</button>`).join('')}</div>
-<small class="pj-bl-why"${g.sig.length && !st ? ` title="${esc(g.sig.join(', '))}"` : ''}>${st ? 'La elegiste vos.' : 'Sugerida por lo que tenés puesto.'}</small>`;
+<small class="pj-bl-why"${g.sig.length && !st ? ` title="${esc(g.sig.join(', '))}"` : ''}>${st ? 'La elegiste vos.' : own() ? 'Sugerida por lo que tenés puesto.' : 'Sugerida por lo que lleva puesto.'}</small>`;
 }
 /* ---------- ficha ---------- */
 function paintChar() {
@@ -425,7 +428,7 @@ ${all.length ? `<nav class="pj-mine" aria-label="Mis personajes"><span>Mis perso
 ${img(p.image, 72, 'pj-pt pj-pt-l', '')}
 <div class="pj-hm">
 <h2 id="pj-nm" class="pj-nm">${esc(p.name)}</h2>
-<p class="pj-meta">${clsIco(p.class)}<span>${esc(gclass(p.class))} · Nv ${p.level}</span><span>${esc(p.server || serverName(ref.s))}</span><span class="fac-${ref.f}">${FACCION[ref.f]}</span>${p.legion ? `<span>Legión ${esc(p.legion)}</span>` : ''}</p>
+<p class="pj-meta">${clsIco(p.class)}<span>${esc(gclass(p.class))} · Nv ${+p.level || 0}</span><span>${esc(p.server || serverName(ref.s))}</span><span class="fac-${facOk(ref.f)}">${FACCION[ref.f]}</span>${p.legion ? `<span>Legión ${esc(p.legion)}</span>` : ''}</p>
 </div>
 <dl class="pj-big"><div><dt>Poder de combate${gl('cp')}</dt><dd>${nf(p.combatPower)}</dd></div><div><dt>Nivel de objeto${gl('il')}</dt><dd id="pj-il">${nf(p.itemLevel)}</dd></div></dl>
 <div class="pj-acts">
@@ -488,9 +491,9 @@ const ST_TXT = { equipo: 'Qué tan buenas son tus piezas', enc: 'El «+» de cad
 function whereHtml(P) {
 const il = P.path.il, roof = P.path.roof, W = P.path.ways, g = gateOf(il), nx = g.next;
 const lo = g.cur?.il ?? Math.max(0, il - 200), hi = Math.max(roof, nx?.il ?? roof, il + 1), at = x => ((x - lo) / (hi - lo) * 100).toFixed(2) + '%';
-const name = x => esc(x.short || x.name);
-const txt = !nx ? 'Ya entrás a todo el contenido que pide nivel de objeto.'
-: `Para <b>${name(nx)}</b> te faltan <b>${nf(g.need)}</b>. ${roof >= nx.il ? `Mejorando lo que ya tenés llegás a <b>${nf(roof)}</b>: te alcanza.` : `Mejorando lo que tenés llegás a ${nf(roof)}: para eso vas a necesitar mejor equipo.`}`;
+const name = x => esc(x.short || x.name), y = own();
+const txt = !nx ? (y ? 'Ya entrás a todo el contenido que pide nivel de objeto.' : 'Ya entra a todo el contenido que pide nivel de objeto.')
+: `Para <b>${name(nx)}</b> ${y ? 'te faltan' : 'le faltan'} <b>${nf(g.need)}</b>. ${roof >= nx.il ? `Mejorando lo que ya ${y ? 'tenés llegás' : 'tiene llega'} a <b>${nf(roof)}</b>: ${y ? 'te' : 'le'} alcanza.` : `Mejorando lo que ${y ? 'tenés llegás' : 'tiene llega'} a ${nf(roof)}: para eso ${y ? 'vas' : 'va'} a necesitar mejor equipo.`}`;
 return `<section class="wh" aria-labelledby="wh-h"><h3 class="wh-h" id="wh-h">Dónde estás${gl('il')}</h3>
 <p class="wh-n"><b>${nf(il)}</b><span>de nivel de objeto</span></p>
 <div class="wh-bar" role="img" aria-label="${esc(`Nivel de objeto ${nf(il)}${nx ? `; ${nx.short || nx.name} pide ${nf(nx.il)}` : ''}; mejorando lo que tenés llegás a ${nf(roof)}`)}">
@@ -499,19 +502,33 @@ ${nx ? `<b class="wh-g" style="--x:${at(nx.il)}"><span>${nf(nx.il)}</span></b>` 
 <p class="wh-t">${txt}</p>
 ${W.length ? `<ul class="rt-k" aria-label="Lo que suma cada mejora al nivel de objeto">${W.map(w => `<li class="w-${WAY[w[0]] || 'dae'}"><i></i>${esc(w[0])} <b>+${nf(w[1])}</b></li>`).join('')}</ul>` : ''}</section>`;
 }
+function levelHtml(lv) {
+const y = own();
+lv = +lv || 0;
+return `<section class="wh" aria-labelledby="wh-h"><h3 class="wh-h" id="wh-h">Dónde estás</h3>
+<p class="wh-n"><b>Nivel ${lv}</b><span>de ${LEVEL_CAP}</span></p>
+<div class="wh-bar" role="img" aria-label="Nivel ${lv} de ${LEVEL_CAP}"><i class="wh-now" style="--w:${(lv / LEVEL_CAP * 100).toFixed(2)}%"></i></div>
+<p class="wh-t">Lo que más rinde ahora es subir de nivel con la historia. En nivel ${LEVEL_CAP}, acá ${y ? 'vas' : 'va'} a ver qué mejorar primero y cómo ${y ? 'estás' : 'está'} contra los mejores.</p></section>`;
+}
+const ST_VIS = 5;
 function stepsHtml() {
-const k = kindOf(cur), P = plan(cur.d, cur.x.items, cur.x.boards, k, topSkills(cur, k)), st = stations(cur.d, cur.x.items, cur.x.boards);
-const C = curated(cur), noTop = C?.top && !C.top[k]?.slots;
-const note = !noTop ? '' : k === 'support' ? `Sin top ${KIND_ES[k]} esta semana: te comparamos con los top de toda la clase, que pegan y no curan. Tomalo como orientación.` : `Sin top ${KIND_ES[k]} esta semana: te comparamos con los top de toda la clase.`;
+const k = kindOf(cur), P = plan(cur.d, cur.x.items, cur.x.boards, k, topSkills(cur, k)), st = stations(cur.d, cur.x.items, cur.x.boards), y = own();
+const C = curated(cur), noTop = !P.low && C?.top && !C.top[k]?.slots;
+const note = !noTop ? '' : `Sin top ${KIND_ES[k]} esta semana: ${y ? 'te comparamos' : 'lo comparamos'} con los top de toda la clase${k === 'support' ? ', que pegan y no curan. Tomalo como orientación.' : '.'}`;
 const by = new Map((cur.d.equipment || []).map(e => [e.slot, e]));
-const steps = P.steps.map((s, i) => `<li class="st" data-step="${s.id}">
+const act = P.steps.filter(s => s.id !== 'gear'), gear = P.steps.find(s => s.id === 'gear'), nVis = gear ? ST_VIS - 1 : ST_VIS;
+const more = act.slice(nVis), cheapN = more.filter(s => s.cheap).length;
+const li = (s, i) => `<li class="st" data-step="${s.id}">
 <span class="st-n">${i + 1}</span>
-${s.icon ? gameIcon(s.icon, 48) : s.board ? icoGame('board_icon_unique_open', 48, 'st-ic') : ''}
-<div class="st-b"><p class="st-th"><b class="st-t">${esc(s.title)}</b>${gl(s.id.startsWith('stig') ? 'stig' : s.T ? 'spec' : STEP_GL[s.id])}</p>
+${s.icon ? gameIcon(s.icon, 48) : s.board ? icoGame('board_icon_unique_open', 48, 'st-ic') : s.id === 'lvl' && CLS_FILE[cur.d.profile.class] ? icoGame('UT_Class_' + CLS_FILE[cur.d.profile.class] + '_Large', 48, 'st-ic') : '<span class="st-ic" aria-hidden="true"></span>'}
+<div class="st-b"><p class="st-th"><b class="st-t">${esc(s.title)}</b>${s.cheap ? '<em class="st-ch">barato</em>' : ''}${gl(s.id.startsWith('stig') ? 'stig' : s.T ? 'spec' : STEP_GL[s.id])}</p>
 <ul class="st-g">${s.gain.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
 ${s.skills ? `<ul class="st-sk2">${s.skills.map(x => `<li>${img(x.icon, 24)}<span>${esc(x.name)} <b>+${x.n}</b>${x.T ? ` <em>llega a ${x.T}</em>` : ''}</span></li>`).join('')}</ul>` : ''}
 ${s.cost || s.sure !== 'seguro' ? `<small class="st-c">${esc(s.cost || '')}${s.sure === 'seguro' ? '' : ' <em class="st-s" title="Depende de cosas que la ficha no muestra o de promedios">aprox.</em>'}</small>` : ''}
-${s.detail ? `<details class="st-d"><summary>Ver el detalle</summary><small>${esc(s.detail)}</small></details>` : ''}</div></li>`).join('');
+${s.detail ? `<details class="st-d"><summary>Ver el detalle</summary><small>${esc(s.detail)}</small></details>` : ''}</div></li>`;
+const steps = act.slice(0, nVis).map(li).join('')
++ (more.length ? `<li class="st-more"><details><summary>Ver ${more.length} paso${more.length > 1 ? 's' : ''} más${cheapN ? ` <small>· ${cheapN} barato${cheapN > 1 ? 's' : ''}</small>` : ''}</summary><ol class="st-l">${more.map((s, i) => li(s, nVis + i)).join('')}</ol></details></li>` : '')
++ (gear ? li(gear, act.length) : '');
 const pic = { equipo: by.get(5)?.icon || by.get(1)?.icon, enc: by.get(1)?.icon, arc: by.get(41)?.icon };
 const sIco = s => s.k === 'amp' ? icoGame('Icon_Item_Enchant_Amplify_A_001', 36, 'rt-i') : s.k === 'dae' ? icoGame('board_icon_legend_open', 36, 'rt-i') : img(pic[s.k], 36, 'rt-i');
 const route = st.map(s => { const q = s.of ? Math.min(1, s.v / s.of) : 0; return `<li class="rt rt-${s.k}"${s.tip ? ` title="${esc(s.tip)}"` : ''}>${sIco(s)}
@@ -519,11 +536,11 @@ const route = st.map(s => { const q = s.of ? Math.min(1, s.v / s.of) : 0; return
 <span class="rt-v"><b>${Math.round(q * 100)} %</b><small>${s.k === 'equipo' ? `nivel ${nf(s.v)} de ${nf(s.of)}` : s.k === 'dae' ? `${nf(s.v)} de ${nf(s.of)} puntos` : `${nf(s.v)} de ${nf(s.of)}`}</small></span>
 <span class="rt-r" style="--q:${Math.round(q * 100)}%"><i></i></span></li>`; }).join('');
 return `<div class="st-w">
-${whereHtml(P)}
-<section class="pj-sec st-m" aria-labelledby="st-h"><h3 id="st-h" class="pj-h">Qué hacer ahora <small>para tu build ${esc(KIND_ES[k])}, de lo que más rinde a lo que menos</small></h3>
+${P.low ? levelHtml(cur.d.profile.level) : whereHtml(P)}
+<section class="pj-sec st-m" aria-labelledby="st-h"><h3 id="st-h" class="pj-h">Qué hacer ahora <small>${P.low ? `hasta nivel ${LEVEL_CAP}` : `para ${y ? 'tu' : 'la'} build ${esc(KIND_ES[k])}, de lo que más rinde a lo que menos`}</small></h3>
 ${note ? `<p class="st-note" role="note">${esc(note)}</p>` : ''}
 ${P.steps.length ? `<ol class="st-l">${steps}</ol>` : '<p class="pj-empty">No veo pasos con lo que muestra la ficha: equipo, amplificación, Arcanas y Daevanion están al tope. Lo que sigue es cambiar de equipo.</p>'}</section>
-<section class="rt-w" aria-labelledby="rt-h"><h3 class="wh-h" id="rt-h">Cómo vas <small>lo que se sube sin cambiar de equipo</small></h3><ol class="rt-l">${route}</ol></section>
+${P.low ? '' : `<section class="rt-w" aria-labelledby="rt-h"><h3 class="wh-h" id="rt-h">Cómo vas <small>lo que se sube sin cambiar de equipo</small></h3><ol class="rt-l">${route}</ol></section>`}
 </div>`;
 }
 /* ---------- equipo ---------- */
@@ -544,7 +561,7 @@ ${groups.map(([t, l]) => `<h4 class="pj-h4">${t}</h4><ul class="eq-g">${l.map(([
 ? `<li class="eq empty"><span class="eq-i"></span><span class="eq-t"><small>${esc(lb)}</small><span class="eq-n">Vacío</span></span></li>`
 : `<li><button type="button" class="eq ${gcls(e.grade)}" data-slot="${s}" aria-haspopup="dialog"><span class="eq-i">${img(e.icon, 44)}${e.enchant ? `<b class="eq-en">+${e.enchant}</b>` : ''}</span>
 <span class="eq-t"><small>${esc(lb)}${it[e.slot]?.level ? ` · nivel ${it[e.slot].level}` : ''}</small><span class="eq-n">${esc(gname(e))}</span>${pips(e)}</span></button></li>`).join('')}</ul>`).join('')}
-<div class="pj-pw">${cur.d.pet ? `<span>${img(cur.d.pet.icon, 36)}<small>Pet</small> ${esc(gname(cur.d.pet))} · Nv ${cur.d.pet.level}</span>` : ''}${cur.d.wings ? `<span>${img(cur.d.wings.icon, 36)}<small>Alas</small> ${esc(gname(cur.d.wings))}${cur.d.wings.enchant ? ` +${cur.d.wings.enchant}` : ''}</span>` : ''}</div></section>`;
+<div class="pj-pw">${cur.d.pet ? `<span>${img(cur.d.pet.icon, 36)}<small>Pet</small> ${esc(gname(cur.d.pet))} · Nv ${+cur.d.pet.level || 0}</span>` : ''}${cur.d.wings ? `<span>${img(cur.d.wings.icon, 36)}<small>Alas</small> ${esc(gname(cur.d.wings))}${cur.d.wings.enchant ? ` +${cur.d.wings.enchant}` : ''}</span>` : ''}</div></section>`;
 }
 /* ---------- skills: ícono, ES/EN y barra por fuente ---------- */
 const skName = s => ({ name: s.name, nameEn: s.nameEn && s.nameEn !== s.name ? s.nameEn : SK[s.id]?.[0] || s.nameEn });
