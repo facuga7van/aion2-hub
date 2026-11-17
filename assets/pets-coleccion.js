@@ -99,11 +99,12 @@ g.keys.push(key); g.names.push(String(j.roster?.[key]?.name || ch.name || key.re
 return gs.size ? { groups: [...gs.values()].sort((a, b) => b.list.size - a.list.size) } : { err: 'empty' };
 }
 const ERR = {
-wrong: () => `Ese no parece ser el characters.json de la app de DPS ni un respaldo de este sitio. La carpeta es <code>${C.QL_DIR}</code>`,
-empty: () => 'Ese archivo no tiene pets todavía. Abrí la app de DPS mientras jugás (ahí se guarda tu colección) y volvé a probar.',
-read: () => 'No pude leer el archivo. Probá de nuevo.',
+wrong: 'Ese no parece ser el characters.json de la app de DPS ni un respaldo de este sitio.',
+empty: 'Ese archivo no tiene pets todavía. Abrí la app de DPS mientras jugás (ahí se guarda tu colección) y volvé a probar.',
+read: 'No pude leer el archivo. Probá de nuevo.',
 };
-const qlErr = k => modal('No es ese archivo', `<p class="imp-err">${ERR[k]()}</p>`, [['', 'Entendido', 'gold']]);
+const where = () => `<details class="ql-help"><summary>¿No lo encontrás?</summary><p>Está en la carpeta <code>${C.QL_DIR}</code>. Tocá <b>Elegir archivo</b>, pegala en la barra de arriba (Ctrl+V) y Enter.</p></details>`;
+const qlErr = k => modal('No es ese archivo', `<p class="imp-err">${ERR[k]}</p>${k === 'wrong' && C.WIN ? where() : ''}`, [['', 'Entendido', 'gold']]);
 export async function file(f, silent) {
 let j; try { j = JSON.parse(await f.text()); } catch (e) { return qlErr(e instanceof SyntaxError ? 'wrong' : 'read'); }
 if (j?.format === 'bestiario-esquivo' && Array.isArray(j.owned)) {

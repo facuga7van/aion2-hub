@@ -2,7 +2,7 @@ import {
 $, esc, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, toast, announce, store, versioned, norm, profile, serverName,
 FACCION, serverFaccion, setFaccion, ROOT, SCHEDULE, maintWindows, bellButton, getBell, setTimers, registerPalette, registerKey, partsIn, wallToUtc, displayTz,
 HUB_API, LNA_MSG, lnaBlocked, gname, galt, gboth, gameLang, modal, DATA, MIN, HOUR, DAY,
-} from './core.js?v=db50fa3fb7';
+} from './core.js?v=678c516c58';
 const D = JSON.parse($('#page-data').textContent), WIN = D.windowMin * MIN, KEEP = 30 * MIN, TOL = 3 * MIN;
 const DR = D.drops, IT = DR.items;
 const BOSSES = D.bosses.map(b => ({ ...b, fac: b.faction === 'Elyos' ? 'elyos' : 'asmodian', cyc: b.respawnMin * MIN, world: b.respawnSource === 'oficial', tier: DR.bosses[b.id]?.t || 3, top: DR.bosses[b.id]?.t === 1, hay: norm(`${gboth(b)} ${gboth(b, 'teleport')}`) }));
@@ -14,6 +14,7 @@ const ord = () => ['importancia', 'nombre', 'nivel'].includes(CFG.get().orden) ?
 const favs = () => new Set(CFG.get().fav || []), ocultos = () => new Set(OCU.get().ids || []);
 const MAINT = SCHEDULE.maintenance?.fieldBossesAfterMaintenance !== 'keep';
 const POLL = 30e3, RETRY = 60e3, LIVE_POLL = 60e3, LIVE_VALID = 15 * MIN;
+const CUT = 7000, HOLD = 3000, BACKOFF = [5e3, 15e3];
 const pad = n => String(n).padStart(2, '0');
 const srv = () => profile().server || 0;
 const myFac = () => profile().faccion === 'asmodian' ? 'asmodian' : 'elyos';   // la facción que ves (selector global del riel)
@@ -30,13 +31,13 @@ let mwAt = -Infinity, mwL = [];
 const mws = now => { if (Math.abs(now - mwAt) > MIN) { mwAt = now; mwL = maintWindows(now - 3 * DAY, now + DAY); } return mwL; };
 async function api(path, body) {
 try {
-const r = await fetch(HUB_API + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(3000) }
-: { cache: 'no-cache', signal: AbortSignal.timeout(3000) });        // no-cache: el navegador revalida con If-None-Match (ETag) y el 304 no baja nada
+const r = await fetch(HUB_API + path, body ? { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body), signal: AbortSignal.timeout(CUT) }
+: { cache: 'no-cache', signal: AbortSignal.timeout(CUT) });        // no-cache: el navegador revalida con If-None-Match (ETag) y el 304 no baja nada
 return { r, txt: await r.text() };
-} catch (e) { return { fail: e.name }; }                               // TimeoutError (3 s) o TypeError (red, CORS, permiso de red local)
+} catch (e) { return { fail: e.name }; }                               // TimeoutError (7 s) o TypeError (red, CORS, permiso de red local)
 }
 /* ---------- en vivo: Questlog vía /api/timers ---------- */
-let live = null, liveMap = new Map(), liveTxt = '', liveErr = null, liveBusy = false, nextLive = 0, liveTry = 0;
+let live = null, liveMap = new Map(), liveTxt = '', liveErr = null, liveBusy = false, nextLive = 0, liveTry = 0, liveFails = 0;
 function setLive(j) { live = j; liveMap = new Map((j?.bosses || []).map(e => [e.id, e])); }
 function loadLive() {
 const l = store.get('hub-live', null);
@@ -55,6 +56,8 @@ if (res.r?.ok) try { j = JSON.parse(res.txt); } catch { /* abajo: como caído */
 const err = j?.bosses ? (j.stale ? 'stale' : null) : res.fail === 'TypeError' && await lnaBlocked() ? 'lna' : 'down';
 liveBusy = false;
 if (s !== srv()) return;                                // cambió el server mientras esperaba
+liveFails = err === 'down' || err === 'lna' ? liveFails + 1 : 0;
+if (liveFails) nextLive = Date.now() + (BACKOFF[liveFails - 1] || LIVE_POLL);
 const first = held, was = liveErr;
 held = false;
 liveErr = err;
@@ -128,6 +131,10 @@ const RANK = { alive: 0, window: 1, due: 1, spawns: 2, stale: 3, none: 4 };
 const viewFac = myFac;
 let nextChange = Infinity, roveId = 0, noneOpen = false, hidOpen = false;
 let held = false;
+function hold() {
+held = !!srv() && !live;
+if (held) setTimeout(() => { if (held) { held = false; paint(); paintSt(); } }, HOLD);
+}
 const SOON = 15 * MIN;                                   // "sale pronto": la cuenta regresiva se enciende
 const GROUPS = [['now', 'Para ir ahora'], ['soon', 'Próximos'], ['stale', 'Sin confirmar', 'hubo mantenimiento'], ['none', 'Sin datos']];
 const TIER_TXT = { 1: () => `Set ${gradeTxt('Unique')}`, 2: () => `Set ${gradeTxt('Legend')} o alma de pet`, 3: () => `Set ${gradeTxt('Rare')}` };
@@ -138,6 +145,7 @@ const cyc = (tm, b, now) => !tm || tm.stale ? 0 : tm.alive || now >= tm.start ? 
 const GRADE_ES = { Common: 'Común', Rare: 'Raro', Legend: 'Legendario', Unique: 'Único', Epic: 'Épico', Special: 'Especial' };
 const GEAR = { arma: 0, accesorio: 1, armadura: 2 };   // orden de la tira: armas, accesorios, armadura
 const IC = ROOT + 'assets/ic/';
+const TOUCH = matchMedia('(pointer: coarse)');
 const gradeTxt = g => (gameLang() === 'en' ? DR.gradeEn[g] : GRADE_ES[g]) || g;
 const qcls = g => 'q-' + String(g || 'common').toLowerCase();
 const grade = g => `<b class="jf-gq ${qcls(g)}">${esc(gradeTxt(g))}</b>`;   // el grado con su color, para los encabezados
@@ -252,7 +260,7 @@ const denyBtn = tm?.src === 'com' && s !== 'stale' && com() === 'compartir'
 ? '<button type="button" class="btn ghost jf-deny" data-deny title="Fuiste y no estaba muerto, o el reporte no cierra: le resta confianza">No estaba</button>' : '';
 const fix = tm?.src === 'vos';                         // con tu timer, el botón corrige (nunca lo pisa sin preguntar)
 const soon = s === 'spawns' && tm.start - now <= SOON ? ' is-soon' : '';
-const meta = [lv && `Nv ${b.level}`, tpTxt(gname(b, 'teleport')), b.top && `cada ${cycTxt(b.respawnMin)}`].filter(Boolean).map(esc).join(' · ');
+const meta = [lv && `Nivel ${b.level}`, tpTxt(gname(b, 'teleport')), b.top && `cada ${cycTxt(b.respawnMin)}`].filter(Boolean).map(esc).join(' · ');
 const info = `${galt(b) ? esc(galt(b)) + ' · ' : ''}Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)} (${b.respawnSource === 'oficial' ? 'oficial, parche Global' : 'medido por la comunidad'})`;
 return `<li class="jf-r s-${s}${tm ? ' src-' + tm.src : ''}${soon}${b.top ? ' jf-wc' : ''}" id="b-${b.id}" data-boss="${b.id}" data-lv="${b.level}" data-tier="${b.tier}" tabindex="-1">
 ${b.top ? pic(b, 192, 96) : pic(b, 80, 40)}
@@ -344,7 +352,7 @@ const end = tm.src === 'ql' && s !== 'spawns' ? (w && live ? Math.max(tm.end, li
 if (end <= now) continue;
 list.push({
 id: bellId(b), label: b.name, labelEn: b.nameEn, ...(w ? { short: /Gartua|Lagta|Dartan|Kashapa/.exec(b.name)?.[0], shortEn: /Gartua|Lagta|Dartan|Kashapa/.exec(b.nameEn)?.[0] } : {}), start: tm.start, end, ...(tm.maint ? { until: tm.maint } : {}), href: ROOT + 'jefes/#b-' + b.id,
-note: tpTxt(b.teleport), noteEn: tpTxt(b.teleportEn), nowText: 'Ya debería estar', src: SRC_TXT[tm.src], ...(tm.src === 'com' ? { approx: true } : {}),
+note: tpTxt(b.teleport), noteEn: tpTxt(b.teleportEn), pic: b.retrato, nowText: 'Ya debería estar', src: SRC_TXT[tm.src], ...(tm.src === 'com' ? { approx: true } : {}),
 ...(w ? { up: true } : {}), ...(s === 'alive' ? { liveText: 'vivo' } : tm.src === 'ql' ? { liveText: 'debería estar' } : {}),
 });
 }
@@ -356,12 +364,14 @@ if (s !== JSON.stringify(store.get('hub-timers', []))) setTimers(list);
 function paintSt() {
 const el = $('#jf-st'), s = srv();
 if (!s) { el.innerHTML = 'Para ver los timers en vivo, elegí tu server en <button type="button" class="linkbtn" data-hub="settings">Ajustes</button>. Mientras, anotá tus kills con <b>Lo maté</b>.'; return; }
-const warn = liveErr === 'lna' ? LNA_MSG : liveErr === 'down' ? 'Sin conexión con el servidor de la Bitácora: sigo con lo último que tenía y con tus kills. Reintento en 1 min.'
-: liveErr === 'stale' ? 'La fuente en vivo no responde: es lo último que hubo.' : '';
+const down = liveErr === 'lna' || liveErr === 'down';
+const warn = liveErr === 'lna' ? LNA_MSG + ' ' : liveErr === 'down' ? 'Sin conexión. ' : liveErr === 'stale' ? 'La fuente en vivo no responde: es lo último que hubo.' : '';
 el.classList.toggle('on', !!live && !liveErr);          // punto encendido: dato fresco
-el.innerHTML = (live ? 'En vivo · actualizado <span id="jf-age"></span>'
-: held ? `Buscando los timers de ${esc(serverName(s))}…` : 'Todavía no hay datos en vivo para tu server.') + (warn ? ` <span class="jf-warn">${esc(warn)}</span>` : '');
+el.innerHTML = (live ? `${liveErr ? 'Último dato:' : 'En vivo · actualizado'} <span id="jf-age"></span>${warn ? ' ·' : ''}`
+: held || liveBusy ? `Buscando los timers de ${esc(serverName(s))}…` : down ? '' : 'Todavía no hay datos en vivo para tu server.')
++ (warn ? ` <span class="jf-warn">${esc(warn)}${down ? '<span id="jf-retry"></span>' : ''}</span>` : '');
 if (live) bind($('#jf-age'), ago(live.fetchedAt));
+if (down) bind($('#jf-retry'), n => [liveBusy || n >= nextLive ? 'Reintentando…' : `Reintento en ${fmtLeft(nextLive - n)}.`, n + 1000]);
 }
 function paintCom() {
 const el = $('#jf-com-st'), c = com(), name = esc(serverName(srv()) || '');
@@ -545,7 +555,8 @@ const it = e.target.closest('button[data-it]');
 if (e.target.closest('[data-kill]')) kill(b);
 else if (e.target.closest('[data-menu]')) openMm(b);
 else if (e.target.closest('[data-deny]')) deny(b);
-else if (it) { if (tipFor === it && e.pointerType !== 'mouse') hideTip(); else showTip(it); }   // tira de los importantes: el toque muestra nombre, grado y chance (otro toque lo saca)
+else if (it && TOUCH.matches) openDrops(b);           // táctil: la tira entera abre "Ver drops" (íconos de 24 px no se tocan bien)
+else if (it) { if (tipFor === it && e.pointerType !== 'mouse') hideTip(); else showTip(it); }   // mouse o teclado: nombre, grado y chance
 else if (e.target.closest('[data-drops]') || !e.target.closest('button, a, input, select, .bell, .bellmenu')) openDrops(b);   // tocar la fila: sus drops
 });
 $('#jf-main').addEventListener('pointerover', e => { const el = e.target.closest('[data-it]'); if (e.pointerType === 'mouse' && el && el !== tipFor) showTip(el); });
@@ -559,7 +570,7 @@ IP.className = 'bellmenu jf-ipop';
 IP.popover = 'auto';
 IP.setAttribute('role', 'dialog');
 IP.setAttribute('aria-label', 'De dónde salen los horarios');
-IP.innerHTML = '<p>Datos de telemetría de jugadores y reportes; no son horarios oficiales.</p><button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button>';
+IP.innerHTML = '<p>Datos de telemetría de jugadores y reportes; no son horarios oficiales.</p><p><b>Teleport 6</b> es el punto de teletransporte más cercano al jefe, con su número del mapa.</p><button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button>';
 document.body.append(IP);
 $('#jf-i').addEventListener('click', () => { IP.showPopover(); placeAt(IP, $('#jf-i')); $('#jf-i').setAttribute('aria-expanded', 'true'); });
 IP.addEventListener('toggle', e => { if (e.newState === 'closed') $('#jf-i').setAttribute('aria-expanded', 'false'); });
@@ -605,7 +616,7 @@ function onProfile() {
 if (srv() === lastSrv) { paintBar(); paint(); return; }
 lastSrv = srv();
 loadLive();
-held = !!srv() && !live;
+hold();
 paintBar();
 paint();
 paintSt();
@@ -647,7 +658,7 @@ const m = location.hash.match(/^#b-(\d+)$/), b = m && BY.get(+m[1]);
 if (b) focusBoss(b);
 }
 loadLive();
-held = !!srv() && !live;
+hold();
 if (com() !== 'off') $('#jf-more').open = true;          // si la comunidad está prendida, que se vea
 paintBar();
 paint();

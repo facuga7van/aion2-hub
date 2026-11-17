@@ -1,7 +1,7 @@
 import {
 $, esc, ico, on, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal,
 characters, taskList, taskDone, setTaskDone, taskProgress, PJ, TK, profile, serverName, registerKey, confOf, confTag, clockLeft, gname, gclass, HOUR,
-} from './core.js?v=db50fa3fb7';
+} from './core.js?v=678c516c58';
 const PER = { daily: { t: 'Diarias', when: 'reset diario' }, weekly: { t: 'Semanales', when: 'reset del miércoles' } };
 let editing = false;
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -150,8 +150,8 @@ function qlModal() {
 const box = document.createElement('div'), win = /win/i.test(navigator.userAgentData?.platform || navigator.platform || '');
 box.className = 'ql';
 box.innerHTML = `<p class="lead">Si en esta PC usás la app de escritorio que registra tus combates de Aion 2, tus personajes ya están en un archivo, <b>characters.json</b>. Se lee en tu navegador, no se sube nada.</p>
-${win ? `<ol class="pasos">${QL_FIGS.map(([a, svg, cap], i) => `<li><figure><svg viewBox="0 0 160 96" role="img" aria-label="${a}">${svg}</svg><figcaption><b>${i + 1}</b><span>${cap}</span></figcaption></figure></li>`).join('')}</ol>
-<div class="ql-path"><code id="ql-dir">${esc(QL_DIR)}</code><button type="button" class="btn ghost" data-qlcopy>Copiar carpeta</button></div>`
+${win ? `<details class="ql-help"><summary>¿No lo encontrás?</summary><ol class="pasos">${QL_FIGS.map(([a, svg, cap], i) => `<li><figure><svg viewBox="0 0 160 96" role="img" aria-label="${a}">${svg}</svg><figcaption><b>${i + 1}</b><span>${cap}</span></figcaption></figure></li>`).join('')}</ol>
+<div class="ql-path"><code id="ql-dir">${esc(QL_DIR)}</code><button type="button" class="btn ghost" data-qlcopy>Copiar carpeta</button></div></details>`
 : '<p class="hint">Esa app es solo para Windows. Si tenés el archivo igual, elegilo.</p>'}
 <p class="ql-st" role="status"></p>
 <div class="ql-act"><button type="button" class="btn gold" data-qlpick>${ico('i-upload')}Elegir archivo</button></div>

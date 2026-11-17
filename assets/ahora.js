@@ -1,8 +1,8 @@
 import {
 $, $$, esc, ico, on, onTick, onStore, bind, countdown, fmtClock, fmtLeft, leftNext, schedule, upcoming, nextReset, renderUpcoming,
-nextBelled, bellButton, getBell, EVENTS, isLive, isVisible, catIcon, tzSentence, versioned, characters, taskList, taskDone, taskProgress,
+nextBelled, bellButton, getBell, bossPic, EVENTS, isLive, isVisible, catIcon, tzSentence, versioned, characters, taskList, taskDone, taskProgress,
 setTaskDone, toast, prefs, setPrefs, partsIn, displayTz, store, confTag, clockLeft, gname, galt, alertName, nextOcc, currentOcc, HOUR, MIN,
-} from './core.js?v=db50fa3fb7';
+} from './core.js?v=678c516c58';
 const html = document.documentElement;
 /* ---------- resets y mantenimiento ---------- */
 function paintResets() {
@@ -34,13 +34,13 @@ const same = nb && nb.item.id === ev.id, mine = getBell(ev.id);
 const nbName = nb && (nb.occ.ev ? gname(nb.occ.ev, 'short') || gname(nb.occ.ev) : alertName(nb.item));
 const hint = mine ? `${ico('i-bell-on')} <span>Te aviso ${leadsTxt(mine)}.${nb && !same ? ` Con campana: <b>${esc(nbName)}</b> <span class="cd" id="hero-nb"></span>` : ''}</span>`
 : nb ? `${ico('i-bell-on')} <span>Con campana: <b>${esc(nbName)}</b> <span class="cd" id="hero-nb"></span></span>`
-: `${ico('i-bell')} <span>Tocá la campana y te aviso antes. El permiso se pide recién ahí.</span>`;
+: `${ico('i-bell')} <span>Tocá la campana y te aviso antes.</span>`;
 box.innerHTML = `${cur ? `<p class="hero-now"><i class="st-dot" aria-hidden="true"></i>En curso: <b>${esc(gname(cur.ev, 'short') || gname(cur.ev))}</b> <span>hasta ${fmtClock(cur.end, { now, day: false })}</span></p>` : ''}
 <div class="hero-main"><p class="hero-k2">${ico(catIcon(ev))}${CAT[ev.category] || 'Evento'}</p><p class="hero-n"${galt(ev) ? ` title="${esc(galt(ev))}"` : ''}>${esc(name)}</p>${ev.what ? `<p class="hero-q">${esc(gname(ev, 'what'))}</p>` : ''}<p class="hero-l">${lbl}</p><p class="hero-c cd" id="hero-c"></p>
 <p class="hero-s"><time>${fmtClock(live ? occ.end : occ.start, { now })}${live ? ' fin' : ''}</time>${bits.map(b => `<span>${esc(b)}</span>`).join('')}${confTag(ev)}</p></div>
-<div class="hero-side"></div>
+<div class="hero-side">${bossPic(ev.retrato, 192, 'hero-p', 96)}</div>
 <p class="hero-hint">${hint}</p>`;
-$('.hero-side', box).prepend(bellButton(ev.id, name));
+$('.hero-side', box).append(bellButton(ev.id, name));
 bind($('#hero-c'), n => [fmtLeft(target - n), n + leftNext(target - n)]);
 const hn = $('#hero-nb');
 if (hn) bind(hn, nb.live ? () => 'ya empezó' : clockLeft(nb.occ.start));
@@ -87,6 +87,7 @@ for (let t = t0; t <= t1; t += HOUR) {
 const p = partsIn(t, tz);
 if (p.h % step === 0 && t > t0 && t < t1) axis.push(`<span style="left:${pct(t)}"${p.h === 0 ? ' class="d0"' : ''}>${p.h === 0 ? ['dom', 'lun', 'mar', 'mié', 'jue', 'vie', 'sáb'][p.wd] : fmtClock(t, { now, day: false })}</span>`);
 }
+let n = 0;
 const rows = evs.map(ev => {
 const bl = c.list.filter(o => o.id === ev.id && Math.max(o.end, o.start + 1) > t0 && o.start < t1).map(o => {
 const w = Math.max(o.end - o.start, 0), cls = ['tl-b', isLive(o, now) && 'live', o.maint === 'si' && 'skip', o.maint === 'quizas' && 'quizas', !w && 'pt'].filter(Boolean).join(' ');
@@ -94,12 +95,14 @@ const tip = `${gname(ev)} · ${fmtClock(o.start, { now, day: false })}${w ? '–
 const portal = o.entry && w ? `<b style="width:${(o.entry - o.start) / w * 100}%"></b>` : '';
 return `<i class="${cls}" style="left:${pct(o.start)};width:${w ? `calc(${pct(o.end)} - ${pct(o.start)})` : '0'}" title="${esc(tip)}">${portal}</i>`;
 }).join('');
-return `<div class="tl-row" id="tl-${ev.id}"><button type="button" class="tl-l" data-what="${esc(ev.id)}">${ico(catIcon(ev))}<span class="tl-nm">${esc((PH.matches && gname(ev, 'tiny')) || gname(ev, 'short') || gname(ev))}</span>${ev.what ? `<small>${esc(gname(ev, 'what'))}</small>` : ''}</button><div class="tl-tr">${bl}</div></div>`;
+if (!bl && PH.matches) return '';                   // celu: una fila vacía en la ventana que ves solo ocupa lugar
+n++;
+return `<div class="tl-row" id="tl-${ev.id}"><button type="button" class="tl-l" data-what="${esc(ev.id)}">${ico(catIcon(ev))}<span class="tl-nm">${esc(gname(ev, 'short') || gname(ev))}</span>${ev.what ? `<small>${esc(gname(ev, 'what'))}</small>` : ''}</button><div class="tl-tr">${bl}</div></div>`;
 }).join('');
 const resets = c.list.filter((o, i, L) => o.ev.category === 'reset' && o.start > t0 && o.start < t1 && !(o.id === 'reset-diario' && L.some(w => w.id === 'reset-semanal' && w.start === o.start)))
 .map(o => `<i class="tl-rs${o.id === 'reset-semanal' ? ' wk' : ''}" style="left:${pct(o.start)}"><span>${o.id === 'reset-semanal' ? 'Reset semanal' : 'Reset'}</span></i>`).join('');
 const maint = c.mw.filter(m => m.maxEnd > t0 && m.start < t1).map(m => `<i class="tl-mt" style="left:${pct(m.start)};width:calc(${pct(m.maxEnd)} - ${pct(m.start)})" title="Mantenimiento ${m.announced ? 'anunciado' : 'estimado'}"><span>Mantenimiento</span></i>`).join('');
-$('#tl').innerHTML = `<div class="tl" style="--rows:${evs.length}"><div class="tl-axis">${axis.join('')}</div><div class="tl-body">${rows}<div class="tl-ov">${maint}${resets}<i class="tl-now" id="tl-now"><span></span></i></div></div></div>`;
+$('#tl').innerHTML = `<div class="tl" style="--rows:${n}"><div class="tl-axis">${axis.join('')}</div><div class="tl-body">${rows}<div class="tl-ov">${maint}${resets}<i class="tl-now" id="tl-now"><span></span></i></div></div></div>`;
 tlNow = $('#tl-now');
 tlMin = -1;
 moveNow(now);
@@ -153,11 +156,8 @@ lock.addEventListener('release', () => { lock = null; paintWake(); });
 paintWake();
 }
 function paintWake() {
-const t = lock ? 'Pantalla encendida (tocá para soltar)' : 'Mantener la pantalla encendida';
 wakeBtn.setAttribute('aria-pressed', String(!!lock));
-wakeBtn.setAttribute('aria-label', t);
-wakeBtn.title = t;
-$('span', wakeBtn).textContent = lock ? 'Pantalla encendida' : 'Pantalla siempre encendida';
+wakeBtn.title = lock ? 'La pantalla no se apaga mientras tengas esto abierto (tocá para soltar)' : 'Que la pantalla no se apague mientras tengas esto abierto';
 }
 if ('wakeLock' in navigator) {
 wakeBtn.hidden = false;

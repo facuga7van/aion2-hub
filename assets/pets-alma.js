@@ -1,4 +1,3 @@
-const MISS = .96;
 const GR = 96, NP = GR * GR, SC = 1 / 1.3;
 const VS = `#version 300 es
 in vec4 a;
@@ -37,7 +36,7 @@ float a=vC.a*(1.-smoothstep(mix(.15,.85,uAs),1.,dot(q,q)*4.));
 o=vec4(vC.rgb*a,a);
 }`;
 let gl = null, cv, U, texA, texB, slot = null, raf = 0, last = 0, vis = true, onFail, io, ro;
-let count = NP, owned = false, mo = null, frames = 0, acc = 0, guard = 0, lastIn = 0;
+let count = NP, mo = null, frames = 0, acc = 0, guard = 0, shown = '';
 const S = { as: .85, asT: .85, jit: 1, jitT: 1, push: 0, pushT: 0, fl: 0, t: 0, px: 9, py: 9, fast: 0 };
 const tmp = document.createElement('canvas'); tmp.width = tmp.height = GR;
 const tc = tmp.getContext('2d');
@@ -104,9 +103,8 @@ kick();
 function onVis() { document.hidden ? stop() : kick(); }
 function stop() { cancelAnimationFrame(raf); raf = 0; }
 function kick() {
-lastIn = performance.now();
 if (raf || !gl || !slot || !vis || document.hidden) return;
-last = 0; slot.classList.add('alma');
+last = 0;
 raf = requestAnimationFrame(frame);
 }
 function frame(now) {
@@ -119,8 +117,10 @@ if (S.fast && Math.abs(S.asT - S.as) < .01) S.fast = 0;
 let m = 0;
 if (mo) {
 const p = Math.min(1, (now - mo.t0) / 1700); m = p;
-if (p >= 1) { [texA, texB] = [texB, texA]; bind(); m = 0; owned = mo.owned; S.asT = owned ? 1 : MISS; S.jitT = owned ? 0 : 1; mo = null; }
+if (p >= 1) { [texA, texB] = [texB, texA]; bind(); m = 0; mo = null; }
 }
+if (!mo && S.push < .01 && S.fl < .02 && S.as > .996 && S.jit < .01) { slot.classList.remove('alma'); return; }
+slot.classList.add('alma');
 gl.clear(gl.COLOR_BUFFER_BIT);
 gl.uniform1f(U.uT, S.t); gl.uniform1f(U.uM, m); gl.uniform1f(U.uAs, S.as); gl.uniform1f(U.uJ, S.jit);
 gl.uniform1f(U.uPush, S.push); gl.uniform1f(U.uFl, S.fl); gl.uniform2f(U.uP, S.px, S.py);
@@ -132,44 +132,43 @@ if (acc / 60 > .024) { if (guard === 0) { count = NP >> 1; size(); } else return
 guard++; frames = 0; acc = 0;
 }
 }
-const calm = !mo && S.push < .01 && S.fl < .02;
-if (owned && calm && S.as > .996) { slot.classList.remove('alma'); return; } // reposo: queda el <img>, cero batería
-if (!owned && calm && now - lastIn > 8000) { slot.classList.remove('alma'); return; } // 8 s quieto: vuelve el <img> nítido
 if (vis && !document.hidden) raf = requestAnimationFrame(frame);
 }
 function fail() { destroy(); onFail?.(); }
-export function mount(el, url, isOwned) {
+export function mount(el, url) {
 if (!gl) return;
 if (slot !== el) {
 unmount();
 slot = el; el.append(cv);
 io.observe(cv); ro.observe(el);
 }
-owned = isOwned; mo = null;
+mo = null;
+const again = url === shown; shown = url;
 load(url).then(img => {
 if (slot !== el || !gl) return;
 put(texA, img); put(texB, img); bind();
-S.as = isOwned ? .45 : .25; S.asT = isOwned ? 1 : MISS; S.jit = S.jitT = isOwned ? 0 : 1; S.fl = 0; S.fast = 0;
+S.as = again ? 1 : .25; S.asT = 1; S.jit = again ? 0 : 1; S.jitT = 0; S.fl = 0; S.fast = 0;
 size(); kick();
 }, () => {});
 }
-function morphTo(url, isOwned) {
+function morphTo(url) {
 if (!gl || !slot) return;
 const el = slot;
+shown = url;
 load(url).then(img => {
 if (slot !== el || !gl) return;
 put(texB, img); bind();
-mo = { t0: performance.now(), owned: isOwned };
-S.jitT = 1; kick();
+mo = { t0: performance.now() };
+S.jit = 1; kick();
 }, () => {});
 }
 export { morphTo as morph };
 export function capture() {
-owned = true; S.asT = 1; S.jitT = 0; S.fl = 1; S.fast = 1;
+S.asT = 1; S.jitT = 0; S.fl = 1; S.fast = 1;
 if (slot) { slot.classList.remove('flashing'); void slot.offsetWidth; slot.classList.add('flashing'); }
 kick();
 }
-export function release() { owned = false; S.as = Math.min(S.as, .55); S.asT = MISS; S.jitT = 1; kick(); }
+export function release() { S.as = Math.min(S.as, .55); S.jit = 1; kick(); }
 export function mountedIn() { return slot; }
 export function unmount() {
 stop();

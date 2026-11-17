@@ -68,7 +68,13 @@ if (x.base < BASE_CAP) return `${BASE_CAP - x.base} con puntos de skill (la base
 if (x.dae < x.daeMax) return `${x.daeMax - x.dae} con Daevanion: ${[...new Set(x.daeMiss)].join(', ')}`;
 return 'Lo que sigue sale de líneas de Arcana y de equipo';
 }
-export const topLevels = (T, k) => new Map(((T?.[k]?.skills?.length ? T[k] : k !== 'support' && T?.all)?.skills || []).map(s => [String(s.id), s.lvl]));
+export const topLevels = (T, k) => {
+const src = T?.[k]?.skills?.length ? T[k] : k !== 'support' && T?.all;
+const m = new Map((src?.skills || []).map(s => [String(s.id), s.lvl]));
+m.amp = Object.fromEntries(Object.entries(CSLOT).map(([p, s]) => [p, src?.slots?.[s]?.exceed]).filter(x => x[1] != null));
+return m;
+};
+export const CSLOT = { 1: 'weapon', 2: 'offhand', 3: 'helmet', 4: 'shoulder', 5: 'torso', 6: 'pants', 7: 'gloves', 8: 'boots', 19: 'cape', 10: 'necklace', 11: 'earring', 12: 'earring', 13: 'ring', 14: 'ring', 15: 'bracelet', 16: 'bracelet', 17: 'belt', 22: 'amulet', 23: 'rune', 24: 'rune' };
 const FIERCE = new Set(['311030002', '311040002', '311050002']);
 export function kindGuess(d, items, sets = {}) {
 const sup = new Set((sets.support || []).map(x => String(x.id))), pvpS = new Set((sets.pvp || []).map(x => String(x.id)));
@@ -102,15 +108,16 @@ const amp = (slots, what) => {
 const L = slots.map(s => by.get(s)).filter(e => e && items[e.slot]?.maxExceedEnchantLevel && (e.exceed || 0) < items[e.slot].maxExceedEnchantLevel);
 if (!L.length) return;
 const lv = Math.min(...L.map(e => e.exceed || 0)), at = L.filter(e => (e.exceed || 0) === lv), n = at.length, [st, kn] = AMP[lv] || AMP.at(-1);
-return { at, lv, n, st: st * n, kn: kn * n };
+const tv = at.map(e => top.amp?.[e.slot]).filter(v => v != null), tl = tv.length ? tv.reduce((x, y) => x + y, 0) / tv.length : null;
+return { at, lv, n, st: st * n, kn: kn * n, tl, past: tl != null && lv >= Math.round(tl), tg: tl == null ? [] : [lv >= Math.round(tl) ? `ya estás donde los top (+${fmt(tl)})` : `los top: +${fmt(tl)}`] };
 };
 const w = amp([1]), a = amp(ACC), r = amp(ARMOR);
-if (w) cand.push({ id: 'amp-arma', icon: by.get(1).icon, title: `Amplificá el arma a +${w.lv + 1}`, gain: ['+1 % de daño', '+12 de Ataque', '+5 de nivel de objeto'],
-cost: `~${Math.round(w.st)} piedras de amplificación y ~${fmt(w.kn)} M de kinah`, il: 5, dmg: 1 / w.st, sure: 'seguro' });
-if (a) cand.push({ id: 'amp-acc', icon: a.at[0].icon, title: `Amplificá ${names(a.at.map(e => e.slot))} a +${a.lv + 1}`, gain: [`+${fmt(0.5 * a.n)} % de daño`, `+${6 * a.n} de Ataque`, `+${5 * a.n} de nivel de objeto`],
-cost: `~${Math.round(a.st)} piedras de amplificación y ~${fmt(a.kn)} M de kinah`, il: 5 * a.n, dmg: (0.5 * a.n) / a.st, sure: 'seguro' });
-if (r) cand.push({ id: 'amp-arm', icon: r.at[0].icon, title: `Amplificá ${r.n > 4 ? 'la armadura' : names(r.at.map(e => e.slot))} a +${r.lv + 1}`, gain: ['solo defensa', `+${5 * r.n} de nivel de objeto`],
-cost: `~${Math.round(r.st)} piedras de amplificación y ~${fmt(r.kn)} M de kinah`, il: 5 * r.n, dmg: 0, sure: 'seguro' });
+if (w) cand.push({ id: 'amp-arma', icon: by.get(1).icon, title: `Amplificá el arma a +${w.lv + 1}`, gain: ['+1 % de daño', '+12 de Ataque', '+5 de nivel de objeto', ...w.tg],
+cost: `~${Math.round(w.st)} piedras de amplificación y ~${fmt(w.kn)} M de kinah`, il: 5, dmg: 1 / w.st, sure: 'seguro', past: w.past });
+if (a) cand.push({ id: 'amp-acc', icon: a.at[0].icon, title: `Amplificá ${names(a.at.map(e => e.slot))} a +${a.lv + 1}`, gain: [`+${fmt(0.5 * a.n)} % de daño`, `+${6 * a.n} de Ataque`, `+${5 * a.n} de nivel de objeto`, ...a.tg],
+cost: `~${Math.round(a.st)} piedras de amplificación y ~${fmt(a.kn)} M de kinah`, il: 5 * a.n, dmg: (0.5 * a.n) / a.st, sure: 'seguro', past: a.past });
+if (r) cand.push({ id: 'amp-arm', icon: r.at[0].icon, title: `Amplificá ${r.n > 4 ? 'la armadura' : names(r.at.map(e => e.slot))} a +${r.lv + 1}`, gain: ['solo defensa', `+${5 * r.n} de nivel de objeto`, ...r.tg],
+cost: `~${Math.round(r.st)} piedras de amplificación y ~${fmt(r.kn)} M de kinah`, il: 5 * r.n, dmg: 0, sure: 'seguro', past: r.past });
 const enc = eq.filter(e => !isArcana(e.slot) && items[e.slot]?.maxEnchantLevel > (e.enchant || 0));
 const encIl = enc.reduce((s, e) => s + items[e.slot].maxEnchantLevel - (e.enchant || 0), 0);
 if (enc.length) cand.push({ id: 'enc', icon: enc[0].icon, title: `Terminá de encantar ${names(enc.map(e => e.slot))}`, gain: [`+${encIl} de nivel de objeto`, 'más stats de la pieza'],
@@ -146,7 +153,7 @@ cost: '100 fragmentos = 1 cristal de Ariel, hasta 30 por personaje', il: 0, dmg:
 const P = kind === 'support'
 ? { dae: 100, pts: 90, arc: 80, enc: 70, 'amp-acc': 60, 'amp-arma': 55, ariel: 40, 'amp-arm': 20 }
 : { 'amp-acc': 100, 'amp-arma': 100, dae: 80, enc: 70, arc: 60, pts: 50, ariel: 40, 'amp-arm': 10 };
-const score = c => P[c.id] + (c.id.startsWith('amp') ? c.dmg * 100 : 0) - (c.id === 'dae' && !c.T ? 40 : 0);
+const score = c => P[c.id] + (c.id.startsWith('amp') ? c.dmg * 100 : 0) - (c.id === 'dae' && !c.T ? 40 : 0) - (c.past ? 70 : 0);
 const steps = cand.sort((x, y) => score(y) - score(x)).slice(0, 5);
 const ampAll = eq.reduce((s, e) => s + 5 * Math.max(0, (items[e.slot]?.maxExceedEnchantLevel || 0) - (e.exceed || 0)), 0);
 const daeAll = (d.daevanion || []).slice(0, 4).reduce((s, b) => s + nodesOf(boards[b.id]).filter(n => !n.open).reduce((t, n) => t + (NODE_COST[n.grade] || 0), 0), 0);

@@ -1,8 +1,8 @@
 import {
 $, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, setTitle, myChars, gname, galt, gclass, gameLang, on,
-} from './core.js?v=db50fa3fb7';
-import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=db50fa3fb7';
+} from './core.js?v=678c516c58';
+import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, isArcana } from './personaje-calc.js?v=678c516c58';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -166,9 +166,10 @@ selS.innerHTML = '<option value="">Todos los servers</option>' + ['elyos', 'asmo
 `<optgroup label="${FACCION[f]}">${L.filter(x => x.faccion === f).map(x => `<option value="${x.id}">${esc(x.name)}</option>`).join('')}</optgroup>`).join('');
 selS.value = String(s);
 }
+const mySrv = r => r === profile().region ? profile().server || '' : '';
 selR.value = profile().region;
-fillServers(selR.value);
-selR.addEventListener('change', () => fillServers(selR.value));
+fillServers(selR.value, mySrv(selR.value));
+selR.addEventListener('change', () => fillServers(selR.value, mySrv(selR.value)));
 let req = 0, last = null, retry = null, cur = null, again = false, TAB = 'pasos';
 form.addEventListener('submit', e => {
 e.preventDefault();

@@ -1,4 +1,4 @@
-import { $, $$, esc, ico, store, toast, modal, announce, gname, galt, gameLang } from './core.js?v=db50fa3fb7';
+import { $, $$, esc, ico, store, toast, modal, announce, gname, galt, gameLang } from './core.js?v=678c516c58';
 let X;                                         // {nf, IC} que pasa personaje.js
 export const init = ctx => { X = ctx; };
 const VQ = new URL(import.meta.url).search;
@@ -177,8 +177,8 @@ const before = store.get('pets-questlog-sync', 0) ? 'Es el mismo archivo que ya 
 const node = document.createElement('div');
 node.className = 'ql lg-ql';
 node.innerHTML = `<p class="lead">${before}Si usás la app de DPS en esta PC, tus títulos y tu Panteón ya están en un archivo, <b>characters.json</b>. Se lee en tu navegador, no se sube nada.</p>
-${win ? `<ol class="lg-steps"><li>Copiá la carpeta: <span class="ql-path"><code id="lg-dir">${esc(QL_DIR)}</code><button type="button" class="btn ghost" data-lgcopy>Copiar carpeta</button></span></li>
-<li>Tocá <b>Elegir archivo</b> y pegala en la barra de arriba (<kbd>Ctrl</kbd>+<kbd>V</kbd>, Enter).</li><li>Doble clic en <b>characters.json</b>.</li></ol>`
+${win ? `<details class="ql-help"><summary>¿No lo encontrás?</summary><ol class="lg-steps"><li>Copiá la carpeta: <span class="ql-path"><code id="lg-dir">${esc(QL_DIR)}</code><button type="button" class="btn ghost" data-lgcopy>Copiar carpeta</button></span></li>
+<li>Tocá <b>Elegir archivo</b> y pegala en la barra de arriba (<kbd>Ctrl</kbd>+<kbd>V</kbd>, Enter).</li><li>Doble clic en <b>characters.json</b>.</li></ol></details>`
 : '<p class="hint">La app de DPS es solo para Windows. Si tenés el archivo igual, elegilo.</p>'}
 <p class="ql-st" role="status"></p>
 <div class="ql-act"><button type="button" class="btn gold" data-lgpick>${ico('i-upload')}Elegir archivo</button></div>

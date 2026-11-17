@@ -1,4 +1,4 @@
-import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=db50fa3fb7';
+import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=678c516c58';
 const VQ = new URL(import.meta.url).search;  // ?v=<hash>: los módulos lazy van con la misma versión
 const D = JSON.parse($('#pets-data').textContent);
 const ALL = D.pets, BY = new Map(ALL.map(p => [p.id, p]));
@@ -219,7 +219,7 @@ const co = $('#cOwn'); if (co) co.textContent = own;
 document.documentElement.toggleAttribute('data-pnew', !owned.size);  // primer paso (el HTML lo pone antes de pintar, sin saltos)
 $('#hBak').hidden = !own;
 dirtyUI();
-plan?.refresh();
+if (plan) plan.refresh(); else planTabs();  // sin el mapa montado, las pestañas igual llevan la cuenta (y la facción)
 }
 function refresh(id) { paint(id); counts(); if (id === presaId) presaLabel(); }
 function refreshAll() { for (const id of CARD.keys()) paint(id); counts(); presaLabel(); if (dlg.open && cur) renderFicha(BY.get(cur), true); }
@@ -317,7 +317,7 @@ presaId = p.id;
 presaVit.dataset.g = p.genusKey;
 presaVit.classList.toggle('dk', $('.pl', CARD.get(p.id)).classList.contains('dk'));
 const url = imgUrl(p.id);
-if (anim && almaOn(presaVit)) A.morph(url, owned.has(p.id));
+if (anim && almaOn(presaVit)) A.morph(url);
 else if (anim) { presaVit.classList.remove('swap'); void presaVit.offsetWidth; presaVit.classList.add('swap'); }
 presaImg.src = url;
 $('#presaName').href = $('#presaGo').href = '#pet-' + p.id;
@@ -334,8 +334,8 @@ $('#plumaje').addEventListener('pointerleave', () => tip.classList.remove('on'))
 let cur = null, mapa = null;
 function sorted(p) { return p.routes.filter(r => r.kind !== 'shop').sort((a, b) => far(a) - far(b) || (b.spawns || 0) - (a.spawns || 0)); }
 const SUBL = { normal: 'normal', elite: 'élite', boss: 'boss' };
-const TIP_INF = 'La dungeon la deduje por el rango de IDs y el nivel, porque los datos no le asignan dungeon al trash.';
-const TIP_UNID = 'Los datos tienen el mob pero no dicen en qué instancia aparece.';
+const TIP_INF = 'La dungeon la deduje por el nivel y el número del monstruo, porque los datos no dicen en cuál aparece.';
+const TIP_UNID = 'Los datos tienen el monstruo pero no dicen en qué instancia aparece.';
 const duda = t => `<button type="button" class="duda" data-tip="${esc(t)}" aria-label="${esc(t)}">${ico('i-help')}</button>`;
 function secRutas(p) {
 const o = owned.has(p.id), lv = level[p.id] || 0, s = G[p.genusKey].souls, [l2, l3] = s.levels.map(x => x.souls);
@@ -349,11 +349,11 @@ const k = r.kind === 'field' ? (far(r) ? ['c-grieta', 'var(--c-grieta)'] : ['c-m
 const sub = r.kind === 'fboss' ? '<span class="tag boss">boss de campo</span>' : r.sub !== 'normal' ? `<span class="tag ${r.sub}">${SUBL[r.sub]}</span>` : '';
 const where = r.kind === 'dungeon' ? (r.unidentified ? 'Instancia sin identificar' + duda(TIP_UNID) : esc(PLACE(r.place)) + (r.inferred ? ' (inferido)' + duda(TIP_INF) : ''))
 : esc(PLACE(r.place)) + zoneTxt(r.zone);
-const n = r.spawns ? `<span class="n">${r.spawns}<small>spawn${r.spawns > 1 ? 's' : ''}</small></span>` : '<span></span>';
-return `<li style="--rc:${k[1]}">${ico(k[0], 'ri')}<div><b>${esc(MOB(r))}</b>${sub}${many && r === top ? '<span class="tag top">Más spawns</span>' : ''}<small>nv ${nv(r.lvl)} · ${where}</small></div>${n}</li>`;
+const n = r.spawns ? `<span class="n">${r.spawns}<small>${r.spawns > 1 ? 'apariciones' : 'aparición'}</small></span>` : '<span></span>';
+return `<li style="--rc:${k[1]}">${ico(k[0], 'ri')}<div><b>${esc(MOB(r))}</b>${sub}${many && r === top ? '<span class="tag top">Donde más aparece</span>' : ''}<small>nv ${nv(r.lvl)} · ${where}</small></div>${n}</li>`;
 }).join('');
 return `<section class="f-sec" id="fRutas"><h3>${o && lv !== 3 ? 'Dónde farmear almas' : 'Cómo conseguirla'}</h3><p class="souls">${lead}</p>` +
-(rows ? `<ol class="rutas">${rows}</ol>` : `<p class="souls">Ningún mob la suelta: mirá la ficha de ruta${p.chests.length ? ' y los cofres' : ''}.</p>`) + '</section>';
+(rows ? `<ol class="rutas">${rows}</ol>` : `<p class="souls">Ningún monstruo la suelta: mirá la ficha de ruta${p.chests.length ? ' y los cofres' : ''}.</p>`) + '</section>';
 }
 function secFicha(p) {
 const out = [], seen = new Set();
@@ -383,7 +383,7 @@ cd = d < 0 ? `<p class="big">Ya no disponible</p><p>Se retiró en el mantenimien
 out.push(`<div class="fr${r.until ? ' ucd' : ''}${r.until && daysTo(r.until) < 0 ? ' gone' : ''}"><h4>${esc(r.shop)}</h4>${bits ? `<p>${bits}</p>` : ''}${cd}</div>`);
 }
 }
-if (!p.routes.length) out.push('<div class="fr"><h4>Solo cofres</h4><p>Ningún mob la suelta y no está en tienda: sale de los cofres de abajo.</p></div>');
+if (!p.routes.length) out.push('<div class="fr"><h4>Solo cofres</h4><p>Ningún monstruo la suelta y no está en tienda: sale de los cofres de abajo.</p></div>');
 if (!out.length) return '';
 const dg = p.routes.some(r => r.kind === 'dungeon'), sh = p.routes.some(r => r.kind === 'shop');
 return `<section class="f-sec"><h3>${!p.hasMap ? 'Ficha de ruta' : dg && sh ? 'Dungeon y tienda' : dg ? (seen.size > 1 ? 'Dungeons' : 'Dungeon') : 'Tienda'}</h3><div class="fruta">${out.join('')}</div></section>`;
@@ -407,7 +407,7 @@ const list = navList(), i = Math.max(0, list.indexOf(p.id)), prev = BY.get(list[
 const top = fBody.scrollTop;
 mapa?.destroy(); mapa = null;
 dlg.dataset.g = p.genusKey; dlg.dataset.cat = p.cat;
-const other = inF(p) ? `<p class="f-otra">Esquiva para ${FNAME[FAC]}: ningún mob de tu mapa la suelta.</p>` : '';
+const other = inF(p) ? `<p class="f-otra">Esquiva para ${FNAME[FAC]}: ningún monstruo de tu mapa la suelta.</p>` : '';
 const pn = PN(p), pa = galt({ name: p.name, nameEn: p.en });
 fBody.innerHTML = `<div class="f-top" aria-hidden="true"><span>${esc(pn)}</span></div><div class="f-vit"><div class="vitrina pl${$('.pl', card).classList.contains('dk') ? ' dk' : ''}" id="fVit" data-g="${p.genusKey}"><img src="${imgUrl(p.id)}" width="256" height="256" alt="${esc(pn)}"><span class="flash" aria-hidden="true"></span></div>` +
 `<h2 id="fN">${esc(pn)}</h2>${pa ? `<p class="en">${esc(pa)}</p>` : ''}` +
@@ -416,14 +416,14 @@ fBody.innerHTML = `<div class="f-top" aria-hidden="true"><span>${esc(pn)}</span>
 `<div class="nivel" role="group" aria-label="Nivel"><span>Nv</span>${[1, 2, 3].map(n => `<button type="button" data-lv="${n}" aria-pressed="${o && lv === n}" aria-label="Nivel ${n}">${n}</button>`).join('')}</div>` +
 `<button type="button" class="iconbtn" id="fShare" aria-label="Compartir">${ico('i-share')}</button></div>` +
 secRutas(p) +
-(p.hasMap ? `<section class="f-sec" aria-labelledby="fMapT"><h3 id="fMapT">Mapa de spawns</h3><div id="fMapa"><div class="mesa-skel"><span>Desplegando el mapa…</span></div></div></section>` : '') +
+(p.hasMap ? `<section class="f-sec" aria-labelledby="fMapT"><h3 id="fMapT">Dónde aparece</h3><div id="fMapa"><div class="mesa-skel"><span>Desplegando el mapa…</span></div></div></section>` : '') +
 secFicha(p) + secCofres(p) + secDale(p) +
 `<footer class="f-pie"><button type="button" data-nav="-1" aria-label="Anterior: ${esc(PN(prev))}">${ico('i-l')}<span>${esc(PN(prev))}</span></button>` +
 `<button type="button" data-hub="credits">Fuentes${ico('i-ext')}</button>` +
 `<button type="button" data-nav="1" aria-label="Siguiente: ${esc(PN(next))}"><span>${esc(PN(next))}</span>${ico('i-r')}</button></footer>`;
 fBody.scrollTop = keepScroll ? top : 0;
 if (p.hasMap) mesa().then(m => { if (cur === p.id && $('#fMapa')) mapa = m.petMap($('#fMapa'), p, { mode, saveData, fac: () => FAC, rift: () => D.fac[FAC].rift, pn: PN, gn: gname }); }).catch(() => { const el = $('#fMapa'); if (el) el.innerHTML = '<p class="souls">No pude cargar el mapa.</p>'; });
-alma().then(a => { if (a && cur === p.id && dlg.open) a.mount($('#fVit'), imgUrl(p.id), o); });
+alma().then(a => { if (a && cur === p.id && dlg.open) a.mount($('#fVit'), imgUrl(p.id)); });
 }
 function openPet(id, { push = true, vt = true } = {}) {
 const p = BY.get(id); if (!p) return;
@@ -515,6 +515,14 @@ grip.addEventListener('pointermove', e => { if (y0 == null) return; dy = Math.ma
 const end = () => { if (y0 == null) return; y0 = null; dlg.style.transition = ''; if (dy > 110) dlg.close(); else dlg.style.transform = ''; };
 grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
 }
+/* ---------- saltos a las secciones de abajo (menú, riel, paleta, "Ver la guía") ---------- */
+const DEEP = /^#(mapa|coleccion|genus|bak)/;
+const deep = () => document.documentElement.setAttribute('data-deep', '');
+document.addEventListener('click', e => { const a = e.target.closest('a[href*="#"]'); if (a && a.pathname === location.pathname && DEEP.test(a.hash)) deep(); }, true);
+addEventListener('hashchange', () => {
+if (!DEEP.test(location.hash) || document.documentElement.hasAttribute('data-deep')) return;
+deep(); document.querySelector(location.hash.split(/[?&]/)[0])?.scrollIntoView();
+});
 /* ---------- colección: pets-coleccion.js se carga al primer gesto que lo necesita ---------- */
 const QL_DIR = '%APPDATA%\\Questlog\\aion-2';
 const MOBILE = /Android|iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1);
@@ -526,7 +534,7 @@ m.init({ D, PETS, BY, get N() { return N; }, owned, level, save, paint, counts, 
 catLabel, cico, inF, PN, base: () => location.origin + location.pathname, VQ });
 return colM = m;
 });
-function goBackup() { $('#bak').scrollIntoView({ block: 'center' }); $('#exCopy').focus({ preventScroll: true }); }
+function goBackup() { deep(); $('#bak').scrollIntoView({ block: 'center' }); $('#exCopy').focus({ preventScroll: true }); }
 document.addEventListener('click', e => {
 const b = e.target.closest('[data-col]'); if (!b) return;
 const k = b.dataset.col;
@@ -555,7 +563,7 @@ addEventListener('keydown', e => { if (e.key === 'Escape' && !ov.hidden) off(); 
 new IntersectionObserver((es, o) => { if (es.some(e => e.isIntersecting)) { o.disconnect(); col(); } }, { rootMargin: '600px 0px' }).observe($('#coleccion'));
 if (!WIN) {
 $('#qlLead').textContent = MOBILE ? 'La app de DPS es solo para Windows. Desde el celu, usá la Carga rápida o abrí tu link de respaldo.' : 'La app de DPS es solo para Windows.';
-for (const x of ['#qlSteps', '.ql-path', '#qlDir', '#qlDrop']) $(x).hidden = true;
+for (const x of ['#qlHelp', '#qlDrop']) $(x).hidden = true;
 $('#qlLoad').classList.remove('gold'); $('#qlLoad').lastChild.textContent = MOBILE ? 'Restaurar un respaldo (.json)' : 'Tengo el archivo igual';
 }
 function dirtyUI() {
@@ -601,12 +609,18 @@ const mesa = () => mesaP ||= import('./pets-mesa.js' + VQ);
 const onlyIn = (id, rid) => { const p = BY.get(id); return !!p?.routes.length && p.routes.every(r => r.regionId === rid); };
 const solo = { get: () => ls.get('pets-mapa-solo', false), set: v => ls.set('pets-mapa-solo', v) };
 const missingIn = rid => PETS.filter(p => !owned.has(p.id) && p.routes.some(r => r.regionId === rid) && (!solo.get() || onlyIn(p.id, rid))).length;
+const planStart = () => D.regions.some(r => r.id === U.get('mapa')) ? U.get('mapa') : D.fac[FAC].main;
+const regTabs = rid => D.regions.map(r => {
+const n = missingIn(r.id), l = esc(gname(r) + (r.id === D.fac[FAC].rift ? ' · Grieta' : ''));
+return `<button type="button" data-reg="${r.id}" aria-pressed="${r.id === rid}"${n ? ` aria-label="${l}: te faltan ${n}"` : ''}>${l}${n ? ` <b>${n}</b>` : ''}</button>`;
+}).join('');
+function planTabs() { $('#grReg').innerHTML = regTabs(planStart()); $('#grNote').hidden = planStart() !== D.fac[FAC].rift; }
 function mountPlan() {
 plan?.destroy(); plan = null;
 const f = D.fac[FAC];
 mesa().then(m => {
-plan = m.plan($('#grMap'), $('#grList'), { BY, owned, isMax, mode, saveData, ver: $('#grVer'), tabs: $('#grReg'), cap: $('#grCap'), fac: FAC, ex: $('#grEx'), onlyIn, solo,
-regions: D.regions, rl: r => gname(r) + (r.id === f.rift ? ' · Grieta' : ''), pn: PN, gn: gname, start: D.regions.some(r => r.id === U.get('mapa')) ? U.get('mapa') : f.main, count: missingIn,
+plan = m.plan($('#grMap'), $('#grList'), { BY, owned, isMax, mode, saveData, ver: $('#grVer'), tabs: $('#grReg'), tabsHtml: regTabs, cap: $('#grCap'), fac: FAC, ex: $('#grEx'), onlyIn, solo,
+regions: D.regions, pn: PN, gn: gname, start: planStart(),
 onRegion: rid => { $('#grNote').hidden = rid !== f.rift; } });
 }).catch(() => { $('#grMap').innerHTML = '<p class="gr-empty">No pude cargar el mapa.</p>'; });
 }
@@ -639,7 +653,7 @@ const almaOn = slot => A?.mountedIn?.() === slot;
 let heroSeen = false;
 function heroAlma() {
 if (!heroSeen || dlg.open || !presaId) { A?.unmount(); return; }
-alma().then(a => { if (a && !dlg.open) a.mount(presaVit, imgUrl(presaId), owned.has(presaId)); });
+alma().then(a => { if (a && !dlg.open) a.mount(presaVit, imgUrl(presaId)); });
 }
 new IntersectionObserver(es => { heroSeen = es[0].isIntersecting; if (heroSeen && !A && !almaP) idle(heroAlma); else if (heroSeen && A && !dlg.open && !almaOn(presaVit)) heroAlma(); else if (!heroSeen && almaOn(presaVit)) A.unmount(); }, { threshold: .25 }).observe(presaVit);
 function fxUI() { $('#fxOn').setAttribute('aria-pressed', fxPref()); $('#fxOff').setAttribute('aria-pressed', !fxPref()); }
