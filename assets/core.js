@@ -4,7 +4,7 @@ export const $$ = (s, r = document) => [...r.querySelectorAll(s)];
 export const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 export const ico = (id, c = '') => `<svg class="${c}" aria-hidden="true"><use href="#${id}"/></svg>`;
 export const norm = s => String(s ?? '').replace(/<[^>]+>/g, '').normalize('NFD').replace(/\p{M}/gu, '').toLowerCase();
-export const isTyping = t => !!t?.closest?.('input,textarea,select,[contenteditable]');
+export const isTyping = t => !!t?.closest?.('input:not([type=checkbox],[type=radio],[type=range],[type=button]),textarea,select,[contenteditable]');
 export const MIN = 60e3, HOUR = 36e5, DAY = 864e5;
 const pad = n => String(n).padStart(2, '0');
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
@@ -350,11 +350,12 @@ tT = setTimeout(hideToast, ms);
 export function hideToast() { clearTimeout(tT); $('#hub-toast')?.classList.remove('on'); }
 export function announce(text) { const l = $('#hub-live'); if (l) { l.textContent = ''; setTimeout(() => { l.textContent = text; }, 30); } }
 export const CREDITS = [
-['Horarios y eventos', 'Notas y avisos oficiales de PLAYNC (NCSOFT). Lo que no tiene aviso oficial lo midieron jugadores y se cruzó con questlog.gg y shugo.gg; va rotulado.'],
+['Horarios y eventos', 'Notas y avisos oficiales de PLAYNC (NCSOFT). Lo que no tiene aviso oficial sale de los datos del cliente Global que publica aion2data.com (https://aion2data.com/timers), cruzados con questlog.gg; va rotulado "Datos del juego".', 'Datos al parche del 11-nov · revisado el 17-nov'],
+['Tareas', 'Cuántas llaves, intentos y premios da cada cosa: datos del cliente Global que publica aion2data.com (https://aion2data.com/checklist), con las notas oficiales de PLAYNC. Lo que tiene una sola fuente lleva un punto que la muestra.', 'Datos al parche del 11-nov · revisado el 17-nov'],
 ['Jefes en vivo', 'Telemetría de jugadores: la app de escritorio de questlog.gg ve los jefes en las partidas de sus usuarios. Llega a través del servidor de la Bitácora. Si activás los reportes de la comunidad, también lo que avisan otros jugadores de tu server ("Estimado").'],
-['Jefes: nombres, teleports y retratos', 'Base de datos de Aion 2 de questlog.gg. Los ciclos "medidos" los midió la comunidad de jugadores; los oficiales, del parche Global.'],
-['Jefes: drops', 'Qué suelta cada jefe y con qué chance: base de datos de questlog.gg cruzada con los datos del cliente Global que publica aion2data.com (https://aion2data.com/monsters). Íconos del CDN oficial de PLAYNC, re-guardados chicos.'],
-['Personaje', 'Ficha pública de PLAYNC (equipo, skills, Daevanion, nivel de objeto) e íconos del CDN oficial de PLAYNC, re-guardados chicos. Nombres de skills en inglés, tablas de amplificación y builds de la comunidad: questlog.gg. Lo que usan los top: el armory público de PLAYNC sobre la lista de mayor CP de questlog.gg. Guías de builds: aion2data.com (https://aion2data.com). Puertas de contenido: notas oficiales de parche de PLAYNC; las de Expedición y Trascendencia, de guías de la comunidad.'],
+['Jefes: nombres, teleports y retratos', 'Base de datos de Aion 2 de questlog.gg. Ciclos: los de Gartua y Lagta, del parche Global oficial; los demás, los que usa la telemetría de questlog.gg, sin contradicciones en tres servers de regiones distintas. El juego no los publica.', 'Revisado el 17-nov'],
+['Jefes: drops', 'Qué suelta cada jefe y con qué chance: base de datos de questlog.gg cruzada con los datos del cliente Global que publica aion2data.com (https://aion2data.com/monsters). Íconos del CDN oficial de PLAYNC, re-guardados chicos.', 'Datos al parche del 11-nov · revisado el 17-nov'],
+['Personaje', 'Ficha pública de PLAYNC (equipo, skills, Daevanion, nivel de objeto) e íconos del CDN oficial de PLAYNC, re-guardados chicos. Nombres de skills en inglés, tablas de amplificación y builds de la comunidad: questlog.gg. Lo que usan los top: el armory público de PLAYNC sobre la lista de mayor CP de questlog.gg. Guías de builds: aion2data.com (https://aion2data.com). Puertas de contenido: notas oficiales de parche de PLAYNC y los datos del cliente Global de aion2data.com (https://aion2data.com/item-level).'],
 ['Personaje: títulos y logros', 'Conteo y títulos equipados: ficha pública de PLAYNC. Catálogo de títulos y logros (pasos, metas, recompensas, estatuas del Panteón): base de datos de questlog.gg, cruzada con los datos del cliente de aion2data.com (https://aion2data.com). Qué es "importante": criterio propio con lo que equipan los top. La lista de tus títulos y tu Panteón se carga desde characters.json de la app de escritorio de questlog.gg, en tu navegador. Íconos: CDN oficial de PLAYNC.'],
 ['Pets', 'Datos, mapas, coordenadas de spawns y retratos: base de datos y mapa interactivo de questlog.gg (Aion 2 global). Tiendas y eventos de las Especiales: aion2vault.com, wikily.gg y notas de NCSOFT. Grieta (Spacetime Rift): guía de expcarry.com. La colección se carga desde characters.json de la app de escritorio de questlog.gg.'],
 ['Aion 2', 'Nombres, imágenes y marcas de Aion 2 son de NCSOFT. Bitácora Daeva es un sitio de fans, sin relación con NCSOFT: sin anuncios, sin cookies, sin rastreo.'],
@@ -362,7 +363,7 @@ export const CREDITS = [
 export function openCredits() {
 const box = document.createElement('dl');
 box.className = 'credits';
-box.innerHTML = CREDITS.map(([t, d]) => `<dt>${esc(t)}</dt><dd>${esc(d)}</dd>`).join('');
+box.innerHTML = CREDITS.map(([t, d, f]) => `<dt>${esc(t)}</dt><dd>${esc(d)}${f ? `<small class="cr-f">${esc(f)}</small>` : ''}</dd>`).join('');
 return modal({ title: 'Fuentes y créditos', node: box, cls: 'credits-m', actions: [{ label: 'Listo', value: 'ok', primary: true }] });
 }
 export function modal({ title, html = '', node = null, actions = [{ label: 'Cerrar', value: null }], cls = '' }) {
@@ -626,8 +627,8 @@ $('[data-lead]', m)?.focus();
 /* ---------- confianza: un solo vocabulario en todo el sitio (revisión UX P1) ---------- */
 export const CONF_TXT = {
 oficial: ['Oficial', 'Sale de notas o avisos oficiales del juego.'],
-comunidad: ['Medido por la comunidad', 'No hay aviso oficial: lo midieron jugadores y coinciden varias fuentes (detalle en Fuentes y créditos, en el pie).'],
-sin: ['Sin confirmar', 'Una sola fuente, o un dato que todavía no pudimos cruzar. Tomalo como aproximado.'],
+comunidad: ['Datos del juego', 'El dato sale de los datos del cliente del juego, cruzados con otra fuente cuando la hay (detalle en Fuentes y créditos, en el pie).'],
+sin: ['Sin confirmar', 'Todavía no hay una fuente firme, o las fuentes no coinciden. Tomalo como aproximado.'],
 };
 export const confOf = x => x.confidence === 'baja' ? 'sin' : (x.basis ? x.basis === 'oficial' : x.confidence === 'alta') ? 'oficial' : 'comunidad';
 export function confTag(x, { lv = confOf(x), note = '', label = '', dot = false } = {}) {

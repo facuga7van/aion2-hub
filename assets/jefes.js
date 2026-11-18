@@ -2,7 +2,7 @@ import {
 $, esc, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, toast, announce, store, versioned, norm, profile, setProfile, serverName, serverList,
 FACCION, serverFaccion, setFaccion, ROOT, SCHEDULE, maintWindows, bellButton, getBell, setTimers, registerPalette, registerKey, partsIn, wallToUtc, displayTz,
 HUB_API, LNA_MSG, lnaBlocked, gname, galt, gboth, gameLang, modal, DATA, MIN, HOUR, DAY,
-} from './core.js?v=24f9f11d47';
+} from './core.js?v=0cfa7eaaad';
 const D = JSON.parse($('#page-data').textContent), WIN = D.windowMin * MIN, KEEP = 30 * MIN, TOL = 3 * MIN;
 const DR = D.drops, IT = DR.items;
 const BOSSES = D.bosses.map(b => ({ ...b, fac: b.faction === 'Elyos' ? 'elyos' : 'asmodian', cyc: b.respawnMin * MIN, tier: DR.bosses[b.id]?.t || 3, top: DR.bosses[b.id]?.t === 1, hay: norm(`${gboth(b)} ${gboth(b, 'teleport')}`) }));
@@ -262,7 +262,7 @@ const denyBtn = tm?.src === 'com' && s !== 'stale' && com() === 'compartir'
 const fix = tm?.src === 'vos';                         // con tu timer, el botón corrige (nunca lo pisa sin preguntar)
 const soon = s === 'spawns' && tm.start - now <= SOON ? ' is-soon' : '';
 const meta = [lv && `Nivel ${b.level}`, tpTxt(gname(b, 'teleport')) || 'Ubicación sin confirmar', b.top && (tm || srv()) && `cada ${cycTxt(b.respawnMin)}`].filter(Boolean).map(esc).join(' · ');
-const info = `${galt(b) ? esc(galt(b)) + ' · ' : ''}Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)} (${b.respawnSource === 'oficial' ? 'oficial, parche Global' : 'medido por la comunidad'})`;
+const info = `${galt(b) ? esc(galt(b)) + ' · ' : ''}Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)}${b.respawnSource === 'oficial' ? ' (oficial, parche Global)' : ''}`;
 return `<li class="jf-r s-${s}${tm ? ' src-' + tm.src : ''}${soon}${b.top ? ' jf-wc' : ''}" id="b-${b.id}" data-boss="${b.id}" data-lv="${b.level}" data-tier="${b.tier}" tabindex="-1">
 ${b.top ? pic(b, 192, 96) : pic(b, 80, 40)}
 <span class="jf-n" title="${info}"><b>${esc(gname(b))}</b><small>${meta}</small></span>${b.top ? cardDrops(b) : rowDrops(b)}
@@ -460,7 +460,7 @@ function openMm(b) {
 mmB = b;
 const fav = favs().has(b.id), oc = ocultos().has(b.id);
 MM.setAttribute('aria-label', gname(b));
-MM.innerHTML = `<p class="bm-t"><b>${esc(gname(b))}</b></p><p class="jf-mi">Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)} (${b.respawnSource === 'oficial' ? 'oficial' : 'medido por la comunidad'})</p>
+MM.innerHTML = `<p class="bm-t"><b>${esc(gname(b))}</b></p><p class="jf-mi">Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)}${b.respawnSource === 'oficial' ? ' (oficial)' : ''}</p>
 <div class="jf-mm-b"><button type="button" class="btn ghost" data-dv>Ver drops</button>${oc ? '' : `<button type="button" class="btn ghost" data-fav>${fav ? 'Quitar de fijados' : 'Fijar arriba'}</button>`}<button type="button" class="btn ghost" data-ocu>${oc ? 'Mostrar en la lista' : 'Ocultar'}</button></div>`;
 MM.showPopover();
 placeAt(MM, $(`#b-${b.id} [data-menu]`));
@@ -578,7 +578,7 @@ IP.className = 'bellmenu jf-ipop';
 IP.popover = 'auto';
 IP.setAttribute('role', 'dialog');
 IP.setAttribute('aria-label', 'De dónde salen los horarios');
-IP.innerHTML = '<p>Datos de telemetría de jugadores y reportes; no son horarios oficiales.</p><p><b>Teleport 6</b> es el punto de teletransporte más cercano al jefe, con su número del mapa.</p><button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button>';
+IP.innerHTML = '<p>Datos de telemetría de jugadores y reportes; no son horarios oficiales.</p><p>Ciclos: parche oficial (Gartua y Lagta) y telemetría; pueden variar unos minutos.</p><p><b>Teleport 6</b> es el punto de teletransporte más cercano al jefe, con su número del mapa.</p><button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button>';
 document.body.append(IP);
 $('#jf-i').addEventListener('click', () => { IP.showPopover(); placeAt(IP, $('#jf-i')); $('#jf-i').setAttribute('aria-expanded', 'true'); });
 IP.addEventListener('toggle', e => { if (e.newState === 'closed') $('#jf-i').setAttribute('aria-expanded', 'false'); });

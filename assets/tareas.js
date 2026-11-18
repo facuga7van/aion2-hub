@@ -1,7 +1,7 @@
 import {
 $, esc, ico, on, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal, evPic,
 characters, taskList, taskDone, setTaskDone, taskProgress, PJ, TK, profile, serverName, registerKey, confOf, confTag, clockLeft, gname, gclass, HOUR,
-} from './core.js?v=24f9f11d47';
+} from './core.js?v=0cfa7eaaad';
 const PER = { daily: { t: 'Diarias', when: 'reset diario' }, weekly: { t: 'Semanales', when: 'reset del miércoles' } };
 let editing = false;
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -32,8 +32,8 @@ if (el && o) { const cl = clockLeft(o.start); el.classList.toggle('pronto', o.st
 const lvOf = t => t.custom ? 'oficial' : t.unverified?.length ? 'sin' : confOf(t);
 function legend(items) {
 const has = new Set(items.map(lvOf));
-const L = [has.has('sin') && '<span><i class="cfl c-sin"></i>sin confirmar</span>', has.has('comunidad') && '<span><i class="cfl c-comunidad"></i>medido por la comunidad</span>'].filter(Boolean);
-return L.length ? `<p class="tk-cfl">${L.join('')}<span>tocá el punto para ver qué falta</span></p>` : '';
+const L = [has.has('sin') && '<span><i class="cfl c-sin"></i>sin confirmar</span>', has.has('comunidad') && '<span><i class="cfl c-comunidad"></i>datos del juego</span>'].filter(Boolean);
+return L.length ? `<p class="tk-cfl">${L.join('')}<span>tocá el punto para ver la fuente</span></p>` : '';
 }
 const nowrapEnd = (txt, tail) => { const s = String(txt || ''), i = s.lastIndexOf(' '); return tail ? `${esc(s.slice(0, i + 1))}<span class="nw">${esc(s.slice(i + 1))}${tail}</span>` : esc(s); };
 function row(t, per, done) {

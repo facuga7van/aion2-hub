@@ -1,4 +1,4 @@
-import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=24f9f11d47';
+import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=0cfa7eaaad';
 const VQ = new URL(import.meta.url).search;  // ?v=<hash>: los módulos lazy van con la misma versión
 const D = JSON.parse($('#pets-data').textContent);
 const ALL = D.pets, BY = new Map(ALL.map(p => [p.id, p]));
@@ -344,9 +344,9 @@ function secRutas(p) {
 const o = owned.has(p.id), lv = level[p.id] || 0, s = G[p.genusKey].souls, [l2, l3] = s.levels.map(x => x.souls);
 const rs = sorted(p), many = rs.filter(r => r.spawns).length > 1, top = rs.reduce((a, r) => (r.spawns || 0) > (a?.spawns || 0) ? r : a, null);
 let lead;
-if (!o) lead = `Necesitás <b>${s.unlock} almas</b> para desbloquearla <span class="q">(según los datos del juego)</span>.`;
+if (!o) lead = `Necesitás <b>${s.unlock} almas</b> para desbloquearla.`;
 else if (lv === 3) lead = 'Está al máximo. Si sale otra alma, no la necesitás.';
-else lead = (lv === 2 ? `Para nivel 3 te faltan <b>${l3} almas</b>` : `${lv ? 'Para' : 'Si está en nivel 1, para'} nivel 3 te faltan <b>${l2 + l3} almas</b> (${l2} + ${l3})`) + ' <span class="q">(según los datos del juego)</span>.';
+else lead = (lv === 2 ? `Para nivel 3 te faltan <b>${l3} almas</b>` : `${lv ? 'Para' : 'Si está en nivel 1, para'} nivel 3 te faltan <b>${l2 + l3} almas</b> (${l2} + ${l3})`) + '.';
 const rows = rs.map((r, i) => {
 const k = r.kind === 'field' ? (far(r) ? ['c-grieta', 'var(--c-grieta)'] : ['c-mapa', 'var(--c-mapa)']) : r.kind === 'fboss' ? ['c-worldboss', 'var(--c-worldboss)'] : [r.sub === 'boss' ? 'c-dboss' : 'c-dungeon', r.sub === 'boss' ? 'var(--c-dboss)' : 'var(--c-dungeon)'];
 const sub = r.kind === 'fboss' ? '<span class="tag boss">jefe de campo</span>' : r.sub !== 'normal' ? `<span class="tag ${r.sub}">${SUBL[r.sub]}</span>` : '';
@@ -607,7 +607,7 @@ const x = G[b.dataset.g], s = x.slots[b.dataset.n - 1], t = x.slotTypes.find(t =
 $$('#genus .s').forEach(o => o.setAttribute('aria-pressed', o === b));
 const top = Math.max(...t.top.map(o => o.pct));
 const box = $('#gslot'); box.style.setProperty('--sc', `var(--s-${t.key})`);
-box.innerHTML = `<div class="gs-h"><h3><i></i>${x.plural} · casilla ${s.n}</h3><span>${esc(t.label)} · nivel de desbloqueo ${s.openLevel} <span class="q">(según los datos del juego)</span></span></div>` +
+box.innerHTML = `<div class="gs-h"><h3><i></i>${x.plural} · casilla ${s.n}</h3><span>${esc(t.label)} · nivel de desbloqueo ${s.openLevel}</span></div>` +
 `<ul class="gs-top">${t.top.map(o => `<li style="--w:${o.pct / top * 100}%"><b>${esc(o.label)}</b><span>hasta +${num(o.max)} · ${pct(o.pct)}%</span><i></i></li>`).join('')}</ul>` +
 `<p class="gs-meta">Puede tirar <b>${t.nStats}</b> stats distintos · <b>${pct(t.fillerPct || 0)}%</b> de las tiradas son HP/MP máx. · ` +
 (s.lock.crystals ? `Bloquearla: <b>${num(s.lock.crystals)}</b> cristales + <b>${num(s.lock.gold)}</b> de oro.` : 'Esta casilla no se bloquea.') + '</p>';

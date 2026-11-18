@@ -89,6 +89,7 @@ m.il = src?.ilvlMedian || 0;
 m.gods = src?.theostones?.list || []; m.godPair = src?.theostones?.pairs?.[0] || null;
 m.ms = Object.fromEntries(Object.entries(CSLOT).map(([p, s]) => [p, src?.slots?.[s]?.stones]).filter(x => x[1]?.length));
 m.dae = src?.daevanion || null;
+m.arc = src?.arcana || null;   // el set de cada carta en los top (estilo: tu carta del otro set)
 return m;
 };
 export const CSLOT = { 1: 'weapon', 2: 'offhand', 3: 'helmet', 4: 'shoulder', 5: 'torso', 6: 'pants', 7: 'gloves', 8: 'boots', 19: 'cape', 10: 'necklace', 11: 'earring', 12: 'earring', 13: 'ring', 14: 'ring', 15: 'bracelet', 16: 'bracelet', 17: 'belt', 22: 'amulet', 23: 'rune', 24: 'rune' };
@@ -112,6 +113,21 @@ if (pvp >= 2) return { kind: 'pvp', sig };
 if (sup.size && ss >= Math.min(2, sup.size)) return { kind: 'support', sig: [`${ss} estigmas de curación subidas`] };
 return { kind: 'pve', sig: sig.length ? [...sig, 'no alcanzan para JcJ'] : [] };
 }
+const hybrid = (d, items) => { const g = kindGuess(d, items); return g.kind === 'pve' && g.sig.length > 0; };
+const ARC_C = ['chalice', 'parchment', 'compass', 'bell', 'mirror'];
+export function estilo(d, items = {}, top = new Map()) {
+const out = new Set(), st = top.stig || [], tieK = st.length === 4 ? st[3].k : undefined;
+const main = new Set([...st, ...(top.stigAlt || []).filter(x => tieK != null && x.k === tieK)].map(x => String(x.id)));
+if (main.size) for (const s of d.skills || []) if (s.category === 'Dp' && s.equipped && s.level >= 10 && !main.has(String(s.id))) out.add('stig:' + s.id);
+const G = top.gods || [];
+if (G.length) for (const sl of [1, 2]) for (const g of items[sl]?.godStoneStat || []) { const f = godFam(g.icon); if (f && !G.some(x => x.f === f)) out.add('gs:' + f); }
+ARC_C.forEach((c, i) => {
+const e = (d.equipment || []).find(x => x.slot === 41 + i), t = top.arc?.[c]?.[0]?.set?.[0], my = /PveSet/.test(e?.icon || '') ? 'V' : /DefenceSet/.test(e?.icon || '') ? 'M' : null;
+if (t && my && my !== t && (e.enchant || 0) >= 3) out.add('arc:' + c);
+});
+if (Object.values(items).some(it => (it?.magicStoneStat || []).some(m => pvpId(m.id))) && hybrid(d, items)) out.add('ms');
+return out;
+}
 const AMP = [[8.8, 0.88], [16.9, 1.69], [32.1, 3.75], [51.4, 6.86], [87.1, 13.07]];
 const WPN = [1, 2], ACC = [10, 11, 12, 13, 14], BRAC = [15, 16], ARMOR = [3, 4, 5, 6, 7, 8, 19];
 const LBL = { 1: 'arma', 2: 'secundaria', 3: 'casco', 4: 'hombreras', 5: 'pechera', 6: 'piernas', 7: 'guantes', 8: 'botas', 19: 'capa', 10: 'collar', 11: 'aro', 12: 'aro', 13: 'anillo', 14: 'anillo', 15: 'brazalete', 16: 'brazalete', 17: 'cinturón', 22: 'amuleto', 23: 'runa', 24: 'runa' };
@@ -134,7 +150,7 @@ for (const x of g) left.splice(left.indexOf(x), 1);
 }
 return list([...out, ...left.map(x => `${x.name} (${Math.round(x.share * 100)} %)`)]);
 }
-export function plan(d, items, boards, kind = 'pve', top = new Map()) {
+export function plan(d, items, boards, kind = 'pve', top = new Map(), mine = new Set()) {
 const eq = d.equipment || [], by = new Map(eq.map(e => [e.slot, e])), il = d.profile.itemLevel || 0, cand = [];
 const lv = d.profile.level;
 if (lv && lv < LEVEL_CAP) return { low: 1, path: { il, ways: [], roof: il }, steps: [{ id: 'lvl', icon: null, title: `Subí a nivel ${LEVEL_CAP}: seguí la historia`,
@@ -176,12 +192,12 @@ cost: 'Una piedra sagrada (Theostone)', il: gil, dmg: 0.3, sure: 'seguro', cheap
 }
 const pvMs = kind === 'pvp' ? [] : eq.map(e => [e, (items[e.slot]?.magicStoneStat || []).filter(m => pvpId(m.id)).length]).filter(x => x[1]);
 const msN = pvMs.reduce((t, x) => t + x[1], 0);
-if (msN) {
-const c = {};
+if (msN && !mine.has('ms')) {
+const c = {}, hyb = hybrid(d, items);
 for (const [e] of pvMs) { const st = (top.ms?.[e.slot] || []).find(x => !pvpId(x.id)); if (st) c[st.name] = (c[st.name] || 0) + 1; }
 const best = Object.entries(c).sort((x, y) => y[1] - x[1])[0]?.[0];
-cand.push({ id: 'ms', icon: pvMs[0][0].icon, title: msN > 1 ? `Cambiá tus ${msN} piedras de maná JcJ` : 'Cambiá tu piedra de maná JcJ', gain: ['solo suman contra jugadores', ...(best ? [`los top ponen ${best}`] : [])],
-cost: `${names(pvMs.map(x => x[0].slot)).replace(/^./, ch => ch.toUpperCase())}: piedras de maná, de lo más barato para mejorar`, il: 0, dmg: 0.3, sure: 'seguro', cheap: 1 });
+cand.push({ id: 'ms', icon: pvMs[0][0].icon, title: msN > 1 ? `Cambiá tus ${msN} piedras de maná JcJ` : 'Cambiá tu piedra de maná JcJ', gain: ['solo suman contra jugadores', ...(hyb ? ['Si también hacés PvP, dejalas'] : []), ...(best ? [`los top ponen ${best}`] : [])],
+cost: `${names(pvMs.map(x => x[0].slot)).replace(/^./, ch => ch.toUpperCase())}: piedras de maná, de lo más barato para mejorar`, il: 0, dmg: 0.3, sure: 'seguro', cheap: 1, past: hyb, ch: 'ms' });
 }
 const parts = skillParts(d, items, boards), daeN = [], tD = top.dae && Object.values(top.dae).some(x => x?.nodes?.length) ? top.dae : null;
 for (const b of tD ? (d.daevanion || []).slice(0, 4) : d.daevanion || []) {
@@ -189,7 +205,7 @@ const W = tD ? new Set((tD[b.name]?.nodes || []).map(String)) : null;
 for (const n of nodesOf(boards[b.id])) {
 if (n.open || n.type === 'Start' || (W ? !W.has(String(n.nodeId)) : n.type !== 'SkillLevel')) continue;
 const m = n.type === 'SkillLevel' && String(n.effectList?.[0]?.desc || '').match(/^(.+) \+(\d+)$/), s = m ? (d.skills || []).find(x => x.name === m[1]) : null;
-if (W || (s && useful(s, parts.get(String(s.id))))) daeN.push({ s, board: b.name, cost: NODE_COST[n.grade] || 0 });
+if (n.type === 'SkillLevel' ? s && useful(s, parts.get(String(s.id))) : W) daeN.push({ s, board: b.name, cost: NODE_COST[n.grade] || 0 });
 }
 }
 if (daeN.length) {
@@ -215,24 +231,26 @@ skills: low.slice(0, 4).map(({ s, n }) => ({ icon: s.icon, name: s.name, n })), 
 const ar = (d.daevanion || [])[4];
 if (ar && ar.open < ar.total && il >= 2600 && kind !== 'pvp') cand.push({ id: 'ariel', icon: null, board: 1, title: 'Juntá Fragmentos de Ariel en Expedición difícil', gain: ['daño a jefes y amplificación JcE', `${ar.total - ar.open} nodos por abrir`],
 cost: '100 fragmentos = 1 cristal de Ariel, hasta 30 por personaje', il: 0, dmg: 0.02, sure: 'estimado' });
-const sMain = new Map((top.stig || []).map(x => [String(x.id), x]));
-const stg = (d.skills || []).filter(s => s.category === 'Dp' && s.equipped && s.level > 0 && sMain.has(String(s.id))).map(s => {
-const tl = Math.min(STIG_CAP, Math.round(sMain.get(String(s.id)).lvl || 0)), T = SPEC.Dp.find(t => t > s.level && t <= tl);
-return { s, tl, T, to: T || tl };
-}).filter(x => x.s.level < x.tl);
-if (stg.length) {
-const allT = stg.every(x => x.T), oneT = allT && new Set(stg.map(x => x.T)).size === 1, oneTl = new Set(stg.map(x => x.tl)).size === 1, [s0] = stg;
-cand.push({ id: 'stig', icon: s0.s.icon, T: s0.T, title: stg.length > 1 ? `Subí ${stg.length} estigmas ${oneT ? `a ${s0.T}` : allT ? 'a su próxima especialización' : 'al nivel de los top'}` : s0.T ? `${s0.s.name} a ${s0.T}: nueva especialización` : `Subí ${s0.s.name} a ${s0.tl}`,
-gain: [`+${stg.reduce((t, x) => t + x.to - x.s.level, 0)} niveles de estigma`, ...(oneTl ? [`los top: ${s0.tl}`] : [])], skills: stg.slice(0, 4).map(x => ({ icon: x.s.icon, name: x.s.name, n: x.to - x.s.level, T: x.T })),
-cost: 'Fragmentos de Estigma', il: 0, dmg: 0.5, sure: 'seguro', heal: 1 });
-}
+const sMain = new Map((top.stig || []).map(x => [String(x.id), x])), myOwn = s => mine.has('stig:' + s.id);
 const myStg = (d.skills || []).filter(s => s.category === 'Dp' && s.equipped && s.level > 0), myIds = new Set(myStg.map(s => String(s.id)));
 const main = top.stig || [], tieK = main[3]?.k, tie = main.length === 4 ? (top.stigAlt || []).filter(x => x.k === tieK) : [];
 const miss = main.find((x, i) => x.share >= 0.5 && !myIds.has(String(x.id)) && !(i === 3 && tie.some(t => myIds.has(String(t.id)))));
-const altOf = new Map((top.stigAlt || []).map(x => [String(x.id), x])), mine = myStg.filter(s => !sMain.has(String(s.id))).sort((a, b) => (altOf.get(String(a.id))?.share || 0) - (altOf.get(String(b.id))?.share || 0));
-const out = mine[0], outA = out ? altOf.get(String(out.id)) : null, outS = outA?.share || 0, missS = (d.skills || []).find(s => String(s.id) === String(miss?.id)), free = myStg.length < STIG_SLOTS;
+const altOf = new Map((top.stigAlt || []).map(x => [String(x.id), x])), sh = s => altOf.get(String(s?.id))?.share || 0;
+const others = myStg.filter(s => !sMain.has(String(s.id))).sort((a, b) => sh(a) - sh(b)), out = others.find(s => !myOwn(s)), kept = others.find(myOwn);
+const outA = out ? altOf.get(String(out.id)) : null, outS = outA?.share || 0, missS = (d.skills || []).find(s => String(s.id) === String(miss?.id)), free = myStg.length < STIG_SLOTS;
 const of = miss?.of ? ` de ${miss.of} top` : ' % de los top', cnt = x => miss.of ? x?.k ?? 0 : Math.round((x?.share || 0) * 100), swap = !free && out;
-if (miss && missS && (free || !(out && outS >= miss.share - 0.25))) cand.push({ id: 'stig-swap', icon: missS.icon,
+const keep = miss && missS && !free && !out && kept && !(sh(kept) >= miss.share - 0.25) ? `Tu elección: ${kept.name}. Los top usan ${missS.name} (${cnt(miss)}${miss.of ? ` de ${miss.of}` : ' %'})` : '';
+const stg = (d.skills || []).filter(s => s.category === 'Dp' && s.equipped && s.level > 0 && (sMain.has(String(s.id)) || myOwn(s))).map(s => {
+const own = !sMain.has(String(s.id)), tl = own ? STIG_CAP : Math.min(STIG_CAP, Math.round(sMain.get(String(s.id)).lvl || 0)), T = SPEC.Dp.find(t => t > s.level && t <= tl);
+return { s, tl, T, to: T || tl, own };
+}).filter(x => x.s.level < x.tl).sort((a, b) => a.own - b.own);
+if (stg.length) {
+const allT = stg.every(x => x.T), oneT = allT && new Set(stg.map(x => x.T)).size === 1, tls = new Set(stg.filter(x => !x.own).map(x => x.tl)), [s0] = stg;
+cand.push({ id: 'stig', icon: s0.s.icon, T: s0.T, title: stg.length > 1 ? `Subí ${stg.length} estigmas ${oneT ? `a ${s0.T}` : allT ? 'a su próxima especialización' : 'al nivel de los top'}` : s0.T ? `${s0.s.name} a ${s0.T}: nueva especialización` : `Subí ${s0.s.name} a ${s0.tl}`,
+gain: [`+${stg.reduce((t, x) => t + x.to - x.s.level, 0)} niveles de estigma`, ...(tls.size === 1 ? [`los top: ${[...tls][0]}`] : [])], skills: stg.slice(0, 4).map(x => ({ icon: x.s.icon, name: x.s.name, n: x.to - x.s.level, T: x.T })),
+cost: 'Fragmentos de Estigma', il: 0, dmg: 0.5, sure: 'seguro', heal: 1, ...(keep ? { detail: keep, own: 'stig:' + kept.id } : {}) });
+}
+if (miss && missS && (free || (out && !(outS >= miss.share - 0.25)))) cand.push({ id: 'stig-swap', icon: missS.icon, ...(swap ? { ch: 'stig:' + out.id } : {}),
 title: swap ? `Cambiá ${out.name} por ${missS.name}` : free && missS.equipped ? `Subí ${missS.name} (la tenés en ${missS.level || 0})` : `Poné ${missS.name} en tus estigmas`,
 gain: [`${missS.name}: la suben ${cnt(miss)}${of}`, ...(swap ? [`${out.name} (la tenés en ${out.level}): ${cnt(outA)}${miss.of ? ` de ${miss.of}` : ' %'}`] : [])],
 cost: `Fragmentos de Estigma para subirla (los top la llevan a ${Math.round(miss.lvl || STIG_CAP)}; la tenés en ${missS.level || 0})`, il: 0, dmg: 0.4, sure: 'seguro', heal: 1 });

@@ -1,14 +1,14 @@
 import {
 $, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION, viewFaccion,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, setTitle, myChars, gname, galt, gclass, gameLang, on,
-} from './core.js?v=24f9f11d47';
-import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, LEVEL_CAP, isArcana } from './personaje-calc.js?v=24f9f11d47';
+} from './core.js?v=0cfa7eaaad';
+import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, estilo, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, LEVEL_CAP, isArcana } from './personaje-calc.js?v=0cfa7eaaad';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
 return /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/.test(v) ? v : DEF_API;     // nunca un host ajeno desde un link
 })();
-const REC = 'hub-pj-recientes', FAV = 'hub-pj-favoritos', BLD = 'hub-pj-build';
+const REC = 'hub-pj-recientes', FAV = 'hub-pj-favoritos', BLD = 'hub-pj-build', EST = 'hub-pj-estilo';
 const SK = (() => { try { return JSON.parse($('#page-data')?.textContent || '{}'); } catch { return {}; } })();   // {skillId: [nombre EN, ícono]}
 const NAME = /^[\p{L}\p{N}]{2,16}$/u;
 const REGS = Object.keys(SERVERS.regions);
@@ -402,6 +402,15 @@ CUR.set(cls, v); paint();
 }
 const curated = c => CUR.get(CLS_KEY[c.d.profile.class]) || null;
 const topSkills = (c, k) => topLevels(curated(c)?.top, k);
+const estStored = ref => ({ si: [], no: [], ...store.get(EST, {})[ref.k.toLowerCase()] });
+const styleOf = (c, k) => { const s = estStored(c.ref), no = new Set(s.no); return new Set([...estilo(c.d, c.x?.items || {}, topSkills(c, k)), ...s.si].filter(x => !no.has(x))); };
+function setEst(ref, key, v) {
+const m = store.get(EST, {}), lk = ref.k.toLowerCase(), e = estStored(ref);
+for (const l of ['si', 'no']) e[l] = e[l].filter(x => x !== key);
+if (v) e[v].push(key);
+if (e.si.length || e.no.length) m[lk] = e; else delete m[lk];
+store.set(EST, Object.fromEntries(Object.entries(m).slice(-60)));
+}
 /* ---------- build que sigue (Estándar / Healer / PvP), guardada por personaje ---------- */
 const kindStored = ref => store.get(BLD, {})[ref.k.toLowerCase()] || null;
 const okKind = (c, k) => kindsOf(c).some(([v]) => v === k) ? k : null;
@@ -413,7 +422,7 @@ const box = $('#pj-bld');
 if (!box || !cur) return;
 const g = guess(cur), k = kindOf(cur), st = okKind(cur, kindStored(cur.ref));
 box.innerHTML = `<span class="pj-bl-l"><span id="pj-bl-l">Build</span>${gl('build')}</span>
-<div class="seg" role="group" aria-labelledby="pj-bl-l">${kindsOf(cur).map(([v, l]) => `<button type="button" data-kind="${v}" aria-pressed="${v === k}">${l}${v === g.kind ? ' <small>sugerida</small>' : ''}</button>`).join('')}</div>
+<div class="seg" role="group" aria-labelledby="pj-bl-l">${kindsOf(cur).map(([v, l]) => `<button type="button" data-kind="${v}" aria-pressed="${v === k}">${l}${v === g.kind && !st ? ' <small>sugerida</small>' : ''}</button>`).join('')}</div>
 <small class="pj-bl-why"${g.sig.length && !st ? ` title="${esc(g.sig.join(', '))}"` : ''}>${st ? 'La elegiste vos.' : own() ? 'Sugerida por lo que tenés puesto.' : 'Sugerida por lo que lleva puesto.'}</small>`;
 }
 /* ---------- ficha ---------- */
@@ -511,12 +520,14 @@ return `<section class="wh" aria-labelledby="wh-h"><h3 class="wh-h" id="wh-h">D�
 <p class="wh-t">Lo que más rinde ahora es subir de nivel con la historia. En nivel ${LEVEL_CAP}, acá ${y ? 'vas' : 'va'} a ver qué mejorar primero y cómo ${y ? 'estás' : 'está'} contra los mejores.</p></section>`;
 }
 const ST_VIS = 5;
+const estBtn = (key, v, t, cls = '') => `<button type="button" class="linkbtn est${cls ? ' ' + cls : ''}" data-est="${esc(key)}" data-v="${v}">${t}</button>`;
 function stepsHtml() {
-const k = kindOf(cur), P = plan(cur.d, cur.x.items, cur.x.boards, k, topSkills(cur, k)), st = stations(cur.d, cur.x.items, cur.x.boards), y = own();
+const k = kindOf(cur), P = plan(cur.d, cur.x.items, cur.x.boards, k, topSkills(cur, k), styleOf(cur, k)), st = stations(cur.d, cur.x.items, cur.x.boards), y = own();
 const C = curated(cur), noTop = !P.low && C?.top && !C.top[k]?.slots;
 const note = !noTop ? '' : `Sin top ${KIND_ES[k]} esta semana: ${y ? 'te comparamos' : 'lo comparamos'} con los top de toda la clase${k === 'support' ? ', que pegan y no curan. Tomalo como orientación.' : '.'}`;
 const by = new Map((cur.d.equipment || []).map(e => [e.slot, e]));
-const act = P.steps.filter(s => s.id !== 'gear'), gear = P.steps.find(s => s.id === 'gear'), nVis = gear ? ST_VIS - 1 : ST_VIS;
+const hid = new Set(estStored(cur.ref).no.filter(x => x.startsWith('paso:')).map(x => x.slice(5))), on = P.steps.filter(s => !hid.has(s.id)), off = P.steps.filter(s => hid.has(s.id));
+const act = on.filter(s => s.id !== 'gear'), gear = on.find(s => s.id === 'gear'), nVis = gear ? ST_VIS - 1 : ST_VIS;
 const more = act.slice(nVis), cheapN = more.filter(s => s.cheap).length;
 const li = (s, i) => `<li class="st" data-step="${s.id}">
 <span class="st-n">${i + 1}</span>
@@ -525,7 +536,8 @@ ${s.icon ? gameIcon(s.icon, 48) : s.board ? icoGame('board_icon_unique_open', 48
 <ul class="st-g">${s.gain.map(t => `<li>${esc(t)}</li>`).join('')}</ul>
 ${s.skills ? `<ul class="st-sk2">${s.skills.map(x => `<li>${img(x.icon, 24)}<span>${esc(x.name)} <b>+${x.n}</b>${x.T ? ` <em>llega a ${x.T}</em>` : ''}</span></li>`).join('')}</ul>` : ''}
 ${s.cost || s.sure !== 'seguro' ? `<small class="st-c">${esc(s.cost || '')}${s.sure === 'seguro' ? '' : ' <em class="st-s" title="Depende de cosas que la ficha no muestra o de promedios">aprox.</em>'}</small>` : ''}
-${s.detail ? `<details class="st-d"><summary>Ver el detalle</summary><small>${esc(s.detail)}</small></details>` : ''}</div></li>`;
+${s.detail ? `<details class="st-d"><summary>Ver el detalle</summary><small>${esc(s.detail)}</small>${s.own ? estBtn(s.own, 'no', 'Sugerime lo de los top') : ''}</details>` : ''}
+${P.low ? '' : `<p class="st-x">${s.ch ? estBtn(s.ch, 'si', 'Es mi elección') : ''}${estBtn('paso:' + s.id, 'no', `${ico('i-x')}<span class="sr">No me interesa</span>`, 'st-no')}</p>`}</div></li>`;
 const steps = act.slice(0, nVis).map(li).join('')
 + (more.length ? `<li class="st-more"><details><summary>Ver ${more.length} paso${more.length > 1 ? 's' : ''} más${cheapN ? ` <small>· ${cheapN} barato${cheapN > 1 ? 's' : ''}</small>` : ''}</summary><ol class="st-l">${more.map((s, i) => li(s, nVis + i)).join('')}</ol></details></li>` : '')
 + (gear ? li(gear, act.length) : '');
@@ -539,7 +551,8 @@ return `<div class="st-w">
 ${P.low ? levelHtml(cur.d.profile.level) : whereHtml(P)}
 <section class="pj-sec st-m" aria-labelledby="st-h"><h3 id="st-h" class="pj-h">Qué hacer ahora <small>${P.low ? `hasta nivel ${LEVEL_CAP}` : `para ${y ? 'tu' : 'la'} build ${esc(KIND_ES[k])}, de lo que más rinde a lo que menos`}</small></h3>
 ${note ? `<p class="st-note" role="note">${esc(note)}</p>` : ''}
-${P.steps.length ? `<ol class="st-l">${steps}</ol>` : '<p class="pj-empty">No veo pasos con lo que muestra la ficha: equipo, amplificación, Arcanas y Daevanion están al tope. Lo que sigue es cambiar de equipo.</p>'}</section>
+${on.length ? `<ol class="st-l">${steps}</ol>` : off.length ? '' : '<p class="pj-empty">No veo pasos con lo que muestra la ficha: equipo, amplificación, Arcanas y Daevanion están al tope. Lo que sigue es cambiar de equipo.</p>'}
+${off.length ? `<details class="st-off"><summary>Pasos que apagaste (${off.length})</summary><ul>${off.map(s => `<li data-step="${s.id}"><span>${esc(s.title)}</span>${estBtn('paso:' + s.id, '', 'Volver a mostrar')}</li>`).join('')}</ul></details>` : ''}</section>
 ${P.low ? '' : `<section class="rt-w" aria-labelledby="rt-h"><h3 class="wh-h" id="rt-h">Cómo vas <small>lo que se sube sin cambiar de equipo</small></h3><ol class="rt-l">${route}</ol></section>`}
 </div>`;
 }
@@ -604,18 +617,19 @@ if (!g) return;
 if (!t) { g.innerHTML = '<p class="tip-err">No pude leer este tablero.</p>'; return; }
 const nodes = (t.nodeList || []).filter(n => n.type !== 'None'), rows = nodes.map(n => n.row), cols = nodes.map(n => n.col);
 const r0 = Math.min(...rows) - 1, c0 = Math.min(...cols) - 1, R = Math.max(...rows) - r0, C = Math.max(...cols) - c0;
-const icons = new Map((cur.d.skills || []).map(s => [s.name, s.icon]));
+const icons = new Map((cur.d.skills || []).map(s => [s.name, s.icon])), byName = new Map((cur.d.skills || []).map(s => [s.name, s])), parts = skillParts(cur.d, cur.x.items, cur.x.boards);
+const uses = n => { if (n.type !== 'SkillLevel') return true; const s = byName.get(String(n.effectList?.[0]?.desc || '').replace(/ \+\d+$/, '')); return !!s && useful(s, parts.get(String(s.id))); };
 const want = new Set((curated(cur)?.top?.[kindOf(cur)]?.daevanion?.[b.name]?.nodes || []).map(String));
 const cls = CLS_KEY[cur.d.profile.class] || 'chanter';
 g.style.setProperty('--c', C);
 g.style.setProperty('--r', R);
 g.innerHTML = nodes.map(n => {
 const eff = (n.effectList || []).map(x => x.desc).join(', '), sk = n.type === 'SkillLevel' && icons.get(String(n.effectList?.[0]?.desc || '').replace(/ \+\d+$/, ''));
-const file = n.type === 'Start' ? `board_icon_start_${cls}` : `board_icon_${String(n.grade).toLowerCase()}${n.open ? '_open' : ''}`, rec = !n.open && want.has(String(n.nodeId));
+const file = n.type === 'Start' ? `board_icon_start_${cls}` : `board_icon_${String(n.grade).toLowerCase()}${n.open ? '_open' : ''}`, rec = !n.open && want.has(String(n.nodeId)) && uses(n);
 return `<button type="button" class="dn${n.open ? ' o' : ''}${rec ? ' rec' : ''}${n.type === 'SkillLevel' ? ' s' : ''}" data-node="${n.nodeId}" style="grid-area:${n.row - r0}/${n.col - c0};--bg:url(${IC}${file}.webp)" aria-label="${esc(eff || n.name)}${n.open ? ', abierto' : ', cerrado'}${rec ? ', lo abren los top' : ''}" title="${esc(eff || n.name)}">${sk ? img(sk, 24, 'dn-sk') : ''}</button>`;
 }).join('');
 const open = nodes.filter(n => n.open && n.type !== 'Start'), shut = nodes.filter(n => !n.open && n.type !== 'Start');
-const pts = l => l.reduce((s, n) => s + (NODE_COST[n.grade] || 0), 0), recN = shut.filter(n => want.has(String(n.nodeId))).length;
+const pts = l => l.reduce((s, n) => s + (NODE_COST[n.grade] || 0), 0), recN = shut.filter(n => want.has(String(n.nodeId)) && uses(n)).length;
 $('#dae-s').innerHTML = `<p class="dae-c"><b>${open.length}</b> de ${open.length + shut.length} nodos abiertos · faltan <b>${pts(shut)}</b> puntos</p>
 <div class="dae-node" id="dae-node" aria-live="polite"><p class="pj-empty">Tocá un nodo.</p></div>
 <ul class="dae-k"><li>${icoGame('board_icon_legend_open', 22)}Skill activa (+1 nivel)</li><li>${icoGame('board_icon_rare_open', 22)}Skill pasiva o stat raro</li><li>${icoGame('board_icon_unique_open', 22)}Stat único</li><li>${icoGame('board_icon_common_open', 22)}Stat común</li><li><span class="dae-kc">${icoGame('board_icon_common', 22)}</span>Cerrado</li>${want.size ? `<li><span class="dae-kr"></span>Lo abren los top ${esc(KIND_ES[kindOf(cur)])} y vos no (${recN})</li>` : ''}</ul>
@@ -639,6 +653,7 @@ else if (t.closest('#pj-mio')) toggleMine();
 else if (t.closest('#pj-main')) { const undo = setMain(ref); paintChar(); toast(`<b>${esc(ref.n)}</b> es tu principal: la Bitácora quedó en <b>${esc(serverName(ref.s))} · ${FACCION[ref.f]}</b>.`, { ms: 8000, action: { label: 'Deshacer', run: () => { undo(); if (cur) paintChar(); } } }); }
 else if (t.closest('#pj-ref')) openChar({ r: ref.r, s: ref.s, n: ref.n }, true);
 else if (t.closest('#pj-xretry')) { cur.err = null; paintPanel(); loadDetail(cur); }
+else if (t.closest('[data-est]')) est(t.closest('[data-est]'));
 else if (t.closest('[data-kind]')) {
 const k = t.closest('[data-kind]').dataset.kind, m = store.get(BLD, {});
 m[ref.k.toLowerCase()] = k;
@@ -673,6 +688,15 @@ const undo = () => { setProfile(prof); PJ.set(pjBefore); TK.set(tkBefore); if (c
 toast(main ? `<b>${esc(ref.n)}</b> es tu personaje principal: la Bitácora quedó en <b>${esc(regName(ref.r))} · ${esc(serverName(ref.s))} · ${FACCION[ref.f]}</b>. También está en Tareas.`
 : `Sumé a <b>${esc(ref.n)}</b> a tus personajes y a Tareas.`, { ms: 8000, action: { label: 'Deshacer', run: undo } });
 }
+function est(b) {
+const { ref } = cur, key = b.dataset.est, v = b.dataset.v, before = store.get(EST, {});
+const repaint = () => { const x = $('#pj-x'); if (TAB === 'builds' && x?._paint) x._paint(); else paintPanel(); };
+setEst(ref, key, v);
+repaint();
+$(`[data-est="${CSS.escape(key)}"]`)?.focus();
+toast(v === 'si' ? 'Listo: queda como tu elección.' : !key.startsWith('paso:') ? 'Listo: te sugerimos lo de los top.' : v ? 'Paso apagado: queda abajo, en «Pasos que apagaste».' : 'El paso volvió a la lista.',
+{ ms: 6000, action: { label: 'Deshacer', run: () => { store.set(EST, before); if (cur) repaint(); } } });
+}
 function toggleFav() {
 if (!cur) return;
 const { ref } = cur, on = !isFav(ref);
@@ -685,7 +709,7 @@ toast(on ? `<b>${esc(ref.n)}</b> quedó en favoritos.` : `Saqué a <b>${esc(ref.
 /* ---------- builds de los top (lazy: personaje-builds.js) ---------- */
 const VQ = new URL(import.meta.url).search;              // ?v=<hash>: el módulo lazy va con la misma versión
 let modP = null;
-const mod = () => modP ||= import('./personaje-builds.js' + VQ).then(m => { m.init({ api, MSG, img, gcls, GRADE, nf, curated: c => c && curated(c), CLS_KEY, gl }); return m; }, e => { modP = null; throw e; });
+const mod = () => modP ||= import('./personaje-builds.js' + VQ).then(m => { m.init({ api, MSG, img, gcls, GRADE, nf, curated: c => c && curated(c), CLS_KEY, gl, mine: styleOf, estBtn }); return m; }, e => { modP = null; throw e; });
 let lgP = null;
 const lgMod = () => lgP ||= import('./personaje-logros.js' + VQ).then(m => { m.init({ nf, IC }); return m; }, e => { lgP = null; throw e; });
 addEventListener('storage', e => { if (cur && TAB === 'logros' && String(e.key).startsWith('hub-logros-')) paintPanel(); });
