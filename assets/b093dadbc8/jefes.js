@@ -2,8 +2,8 @@ import {
 $, esc, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, toast, announce, store, versioned, norm, profile, setProfile, serverName, serverList,
 FACCION, serverFaccion, setFaccion, ROOT, bellButton, registerPalette, registerKey, partsIn, wallToUtc, displayTz,
 LNA_MSG, gname, galt, gboth, gameLang, modal, DATA, MIN, HOUR,
-} from './core.js?v=8486b92432';
-import { V, KILLS, KEEP, WIN, timer, state, setKill, publish, api, srv, kkey, bellId, tpTxt, SRC_TXT } from './vivo.js?v=8486b92432';
+} from './core.js';
+import { V, KILLS, KEEP, WIN, timer, state, setKill, publish, api, srv, kkey, bellId, tpTxt, SRC_TXT } from './vivo.js';
 const D = JSON.parse($('#page-data').textContent);
 const DR = D.drops, IT = DR.items;
 const BOSSES = D.bosses.map(b => ({ ...b, fac: b.faction === 'Elyos' ? 'elyos' : 'asmodian', cyc: b.respawnMin * MIN, tier: DR.bosses[b.id]?.t || 3, top: DR.bosses[b.id]?.t === 1, hay: norm(`${gboth(b)} ${gboth(b, 'teleport')}`) }));

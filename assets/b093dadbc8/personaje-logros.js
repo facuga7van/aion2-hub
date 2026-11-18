@@ -1,7 +1,6 @@
-import { $, $$, esc, ico, store, toast, modal, announce, gname, galt, gameLang } from './core.js?v=8486b92432';
+import { $, $$, esc, ico, store, toast, modal, announce, gname, galt, gameLang } from './core.js';
 let X;                                         // {nf, IC} que pasa personaje.js
 export const init = ctx => { X = ctx; };
-const VQ = new URL(import.meta.url).search;
 const CDN = 'https://assets.playnccdn.com/static-aion2-gamedata/resources/';
 const ARMORY = 'https://assets.playnccdn.com/static-aion2/characters/img/info/';
 const QL_DIR = '%APPDATA%\\Questlog\\aion-2';
@@ -12,7 +11,7 @@ const PROG = { genus: 'Razas en nivel 10', skins: 'Apariencias', wings: 'Alas', 
 const gimg = (n, sz, cls = '', base = CDN) => n ? `<img class="${cls}" src="${X.IC}${esc(n)}.webp" data-fb="${esc(base + n)}.png" width="${sz}" height="${sz}" loading="lazy" decoding="async" alt="" referrerpolicy="no-referrer">` : '';
 /* ---------- datos ---------- */
 let P = null;
-const load = () => P ||= Promise.all(['titulos.json', 'logros.json'].map(f => fetch(new URL('./' + f + VQ, import.meta.url)).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })))
+const load = () => P ||= Promise.all(['titulos.json', 'logros.json'].map(f => fetch(new URL('./' + f, import.meta.url)).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); })))
 .then(([T, L]) => {
 const cols = T.cols, titles = T.titles.map(r => Object.fromEntries(cols.map((c, i) => [c, r[i]])));
 return { T, L, titles, byId: new Map(titles.map(t => [t.id, t])) };

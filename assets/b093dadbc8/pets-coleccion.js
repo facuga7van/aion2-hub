@@ -1,6 +1,6 @@
 let C, cssP;
 const css = () => cssP ||= new Promise(r => document.head.append(Object.assign(document.createElement('link'),
-{ rel: 'stylesheet', href: new URL('./pets-coleccion.css' + new URL(import.meta.url).search, import.meta.url).href, onload: r, onerror: r })));
+{ rel: 'stylesheet', href: new URL('./pets-coleccion.css', import.meta.url).href, onload: r, onerror: r })));
 const $ = s => document.querySelector(s);
 export function init(ctx) {
 C = ctx;

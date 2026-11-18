@@ -1,8 +1,8 @@
 import {
 $, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION, viewFaccion,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, setTitle, myChars, gname, galt, gclass, gameLang, on,
-} from './core.js?v=8486b92432';
-import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, estilo, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, LEVEL_CAP, isArcana } from './personaje-calc.js?v=8486b92432';
+} from './core.js';
+import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, estilo, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, LEVEL_CAP, isArcana } from './personaje-calc.js';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -707,11 +707,10 @@ b.innerHTML = ico(on ? 'i-star-on' : 'i-star');
 toast(on ? `<b>${esc(ref.n)}</b> quedó en favoritos.` : `Saqué a <b>${esc(ref.n)}</b> de favoritos.`);
 }
 /* ---------- builds de los top (lazy: personaje-builds.js) ---------- */
-const VQ = new URL(import.meta.url).search;              // ?v=<hash>: el módulo lazy va con la misma versión
 let modP = null;
-const mod = () => modP ||= import('./personaje-builds.js' + VQ).then(m => { m.init({ api, MSG, img, gcls, GRADE, nf, curated: c => c && curated(c), CLS_KEY, gl, mine: styleOf, estBtn }); return m; }, e => { modP = null; throw e; });
+const mod = () => modP ||= import('./personaje-builds.js').then(m => { m.init({ api, MSG, img, gcls, GRADE, nf, curated: c => c && curated(c), CLS_KEY, gl, mine: styleOf, estBtn }); return m; }, e => { modP = null; throw e; });
 let lgP = null;
-const lgMod = () => lgP ||= import('./personaje-logros.js' + VQ).then(m => { m.init({ nf, IC }); return m; }, e => { lgP = null; throw e; });
+const lgMod = () => lgP ||= import('./personaje-logros.js').then(m => { m.init({ nf, IC }); return m; }, e => { lgP = null; throw e; });
 addEventListener('storage', e => { if (cur && TAB === 'logros' && String(e.key).startsWith('hub-logros-')) paintPanel(); });
 /* ---------- detalle de pieza (popover): líneas con su calidad y si la usan los top de tu build ---------- */
 const tip = Object.assign(document.createElement('div'), { id: 'pj-tip', className: 'pj-tip', tabIndex: -1 });

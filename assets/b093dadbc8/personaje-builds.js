@@ -1,8 +1,7 @@
-import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js?v=8486b92432';
-import { useful, skillParts, CSLOT, GOD, godFam, GR_F, GR_N } from './personaje-calc.js?v=8486b92432';
+import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js';
+import { useful, skillParts, CSLOT, GOD, godFam, GR_F, GR_N } from './personaje-calc.js';
 let X;                                         // {api, MSG, img, gcls, GRADE, nf, curated, CLS_KEY, gl} que pasa personaje.js
 export const init = ctx => { X = ctx; };
-const VQ = new URL(import.meta.url).search;   // ?v=<hash>: assets/pj-items.json con la misma versión
 const SK = (() => { try { return JSON.parse(document.getElementById('page-data')?.textContent || '{}'); } catch { return {}; } })();
 /* ---------- tablas ---------- */
 const CLASSES = [['gladiator', 'Gladiador'], ['templar', 'Templario'], ['ranger', 'Arquero'], ['assassin', 'Asesino'], ['sorcerer', 'Hechicero'], ['elementalist', 'Espiritualista'], ['cleric', 'Clérigo'], ['chanter', 'Cantor']];
@@ -80,7 +79,7 @@ const HEAL = new Set(['cleric', 'chanter']);   // Healer solo para las clases qu
 const CDN = 'https://assets.playnccdn.com/static-aion2-gamedata/resources/';
 const gi = (n, sz) => X.img(n ? CDN + n + '.png' : '', sz);
 let IT = {};
-const getItems = () => once('items', () => fetch(new URL('./pj-items.json' + VQ, import.meta.url)).then(r => r.ok ? r.json() : {}, () => ({})));
+const getItems = () => once('items', () => fetch(new URL('./pj-items.json', import.meta.url)).then(r => r.ok ? r.json() : {}, () => ({})));
 const ARC_EN = { chalice: ['Chalice', 'Grail'], parchment: ['Parchment', 'Parchment'], compass: ['Compass', 'Compass'], bell: ['Bell', 'Bell'], mirror: ['Mirror', 'Mirror'] };
 const arcIco = (c, set) => `Icon_Arcana_Card_${ARC_EN[c][1]}_u_${set === 'Magic' ? 'DefenceSet2' : 'PveSet2'}`;
 const NOBRAND = /\s*\b(en|de|desde)\s+(questlog|plaync|kisk|aion2data)\b/gi;   // los motivos del curado a veces nombran la fuente

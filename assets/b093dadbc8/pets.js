@@ -1,5 +1,4 @@
-import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=8486b92432';
-const VQ = new URL(import.meta.url).search;  // ?v=<hash>: los módulos lazy van con la misma versión
+import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js';
 const D = JSON.parse($('#pets-data').textContent);
 const ALL = D.pets, BY = new Map(ALL.map(p => [p.id, p]));
 document.addEventListener('contentvisibilityautostatechange', e => { if (e.skipped) for (const a of e.target.getAnimations({ subtree: true })) a.finish(); }, true);
@@ -544,9 +543,9 @@ const MOBILE = /Android|iP(hone|ad|od)/.test(navigator.userAgent) || (navigator.
 const IOS = MOBILE && !/Android/.test(navigator.userAgent) && !navigator.standalone;
 const WIN = !MOBILE && /win/i.test(navigator.userAgentData?.platform || navigator.platform || navigator.userAgent);
 let colM = null, colP = null, qlAuto = false;
-const col = () => colP ||= import('./pets-coleccion.js' + VQ).then(m => {
+const col = () => colP ||= import('./pets-coleccion.js').then(m => {
 m.init({ D, PETS, BY, get N() { return N; }, owned, level, save, paint, counts, refreshAll, apply, toast, copy, esc, ico, norm, ls, isMax, imgUrl, RM, WIN, QL_DIR, dirtyUI,
-catLabel, cico, inF, PN, nudge, fac: () => FAC, base: () => location.origin + location.pathname, VQ });
+catLabel, cico, inF, PN, nudge, fac: () => FAC, base: () => location.origin + location.pathname });
 return colM = m;
 });
 function goBackup() { deep(); $('#bak').scrollIntoView({ block: 'center' }); $('#exCopy').focus({ preventScroll: true }); }
@@ -621,7 +620,7 @@ $$('#genus .s').forEach(b => b.setAttribute('aria-pressed', 'false'));
 const saveData = !!navigator.connection?.saveData;
 const mode = { get: () => ls.get('pets-mapa', RM ? 'plano' : 'mesa'), set: v => ls.set('pets-mapa', v) };
 let mesaP = null, plan = null, planOn = false;
-const mesa = () => mesaP ||= import('./pets-mesa.js' + VQ);
+const mesa = () => mesaP ||= import('./pets-mesa.js');
 const onlyIn = (id, rid) => { const p = BY.get(id); return !!p?.routes.length && p.routes.every(r => r.regionId === rid); };
 const solo = { get: () => ls.get('pets-mapa-solo', false), set: v => ls.set('pets-mapa-solo', v) };
 const missingIn = rid => PETS.filter(p => !owned.has(p.id) && p.routes.some(r => r.regionId === rid) && (!solo.get() || onlyIn(p.id, rid))).length;
@@ -663,7 +662,7 @@ const fxPref = () => ls.get('pets-fx', 1) !== 0;
 const fxOK = () => fxPref() && !RM && !saveData && !(navigator.deviceMemory <= 2) && 'WebGL2RenderingContext' in window;
 function alma() {
 if (!fxOK()) return Promise.resolve(null);
-return almaP ||= import('./pets-alma.js' + VQ).then(m => m.init({ onFail: () => { A = null; } }) ? (A = m) : null).catch(() => null);
+return almaP ||= import('./pets-alma.js').then(m => m.init({ onFail: () => { A = null; } }) ? (A = m) : null).catch(() => null);
 }
 const almaOn = slot => A?.mountedIn?.() === slot;
 let heroSeen = false;

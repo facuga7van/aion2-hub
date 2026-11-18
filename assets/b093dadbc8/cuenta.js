@@ -1,5 +1,4 @@
-import { $, $$, esc, store, on, emit, modal, toast, bind, myChars, HUB_API, lnaBlocked, LNA_MSG, PAGE } from './core.js?v=8486b92432';
-const VQ = new URL(import.meta.url).search;
+import { $, $$, esc, store, on, emit, modal, toast, bind, myChars, HUB_API, lnaBlocked, LNA_MSG, PAGE } from './core.js';
 const NO_SYNC = new Set(['hub-cuenta', 'hub-sync', 'hub-live', 'hub-api', 'hub-pj-api', 'hub-alertas-log', 'hub-cid', 'hub-ahora-tl',
 'pets-backup', 'pets-bak-t', 'pets-dirty', 'pets-fx', 'pets-questlog-char', 'pets-questlog-sync']);
 const syncable = k => /^(hub|pets)-[A-Za-z0-9_.:-]{1,60}$/.test(k) && !NO_SYNC.has(k);
@@ -10,7 +9,7 @@ const S = 'hub-cuenta', M = 'hub-sync';   // {user, id, token} · {id, rev, h: {
 const RELOAD = { pets: /^(pets-|hub-pets-)/, personaje: /^hub-(pj-|personajes$)/ };
 const session = () => store.get(S, null);
 let cssP;
-const css = () => cssP ||= new Promise(r => document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href: new URL('cuenta.css' + VQ, import.meta.url).href, onload: r, onerror: r })));
+const css = () => cssP ||= new Promise(r => document.head.append(Object.assign(document.createElement('link'), { rel: 'stylesheet', href: new URL('cuenta.css', import.meta.url).href, onload: r, onerror: r })));
 async function api(path, { method = 'GET', body, headers = {} } = {}) {
 const s = session();
 try {

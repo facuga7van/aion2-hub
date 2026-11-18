@@ -11,7 +11,7 @@ const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 /* ---------- datos (inline en cada página por build.py) ---------- */
 export const DATA = JSON.parse(document.getElementById('hub-data').textContent);
 export const SCHEDULE = DATA.schedule, TASKS = DATA.tasks, SERVERS = DATA.servers, NAV = DATA.nav;
-export const ROOT = new URL('../', import.meta.url).href;      // core.js vive en assets/
+export const ROOT = new URL('../../', import.meta.url).href;   // core.js vive en assets/<V>/ (decisions.md "Assets con versión en la ruta")
 const siteHref = h => { try { const u = new URL(h, location.href); return u.href.startsWith(ROOT) ? u.href : ROOT; } catch { return ROOT; } };
 export const PAGE = document.documentElement.dataset.page;
 const REG = SCHEDULE.regions, EVS = SCHEDULE.events;
@@ -431,7 +431,7 @@ o.start(d); o.stop(d + 1.2);
 });
 return true;
 }
-const ICON = new URL('icon-192.png', import.meta.url).href;
+const ICON = ROOT + 'assets/icon-192.png';
 export function notify(title, opts = {}) {
 if (!('Notification' in window) || Notification.permission !== 'granted') return false;
 const o = { icon: ICON, badge: ICON, lang: 'es-AR', silent: !!(AC && AC.state === 'running' && A.sound), ...opts };
@@ -863,7 +863,7 @@ const rows = [['1 – 5', 'Ir a ' + NAV.map(n => n.label).join(', ')], ['/  o  C
 modal({ title: 'Teclado', cls: 'help', html: `<dl class="keys">${rows.map(([k, v]) => `<dt>${k.split('  ').map(x => `<kbd>${esc(x)}</kbd>`).join(' ')}</dt><dd>${esc(v)}</dd>`).join('')}</dl>` });
 }
 /* ---------- cuenta y sync (src/cuenta.js, lazy) ---------- */
-export const loadCuenta = () => import('./cuenta.js' + new URL(import.meta.url).search);
+export const loadCuenta = () => import('./cuenta.js');
 const CUENTA_OFF = 'Sin conexión: la cuenta se carga cuando vuelva.';
 function cuentaBox() {
 const f = Object.assign(document.createElement('fieldset'), { className: 's-cuenta', innerHTML: '<legend>Cuenta</legend>' });

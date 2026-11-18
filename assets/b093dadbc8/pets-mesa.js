@@ -3,8 +3,7 @@ const BAND = ['#A6D9A0', '#EBC57A', '#F0878D'];
 const TILT = 40, KY = 1 / Math.cos(TILT * Math.PI / 180);
 const RM = matchMedia('(prefers-reduced-motion: reduce)').matches;
 const cssP = new Promise(r => document.head.append(Object.assign(document.createElement('link'),
-{ rel: 'stylesheet', href: new URL('./pets-mesa.css' + new URL(import.meta.url).search, import.meta.url).href, onload: r, onerror: r })));
-const VQ = new URL(import.meta.url).search;
+{ rel: 'stylesheet', href: new URL('./pets-mesa.css', import.meta.url).href, onload: r, onerror: r })));
 const esc = s => String(s ?? '').replace(/[&<>"']/g, c => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' })[c]);
 const ico = id => `<svg aria-hidden="true"><use href="#${id}"/></svg>`;
 const clamp = (x, a, b) => Math.min(b, Math.max(a, x));
@@ -170,7 +169,7 @@ return out.sort((a, b) => b.count - a.count);
 const FN = { elyos: 'Elyos', asmodian: 'Asmodian' };
 export function petMap(host, pet, { mode, saveData, fac, rift, pn, gn }) {
 let dead = false, m = null;
-Promise.all([fetch(`assets/spawns/${pet.id}.json${VQ}`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }), cssP]).then(([data]) => {
+Promise.all([fetch(`assets/spawns/${pet.id}.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); }), cssP]).then(([data]) => {
 if (dead) return;
 const own = data.regions.findIndex(r => r.zone === fac()), ab = data.regions.findIndex(r => r.zone === 'abismo');
 let reg = own >= 0 ? own : ab >= 0 ? ab : 0, mob = -1;
@@ -299,7 +298,7 @@ m?.destroy(); m = null;
 mapEl.innerHTML = '<div class="mesa-skel"><span>Desplegando el mapa…</span></div>'; listEl.innerHTML = '';
 tabsUI();
 const asked = rid;
-files[rid] ||= fetch(`assets/spawns/region-${rid}.json${VQ}`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
+files[rid] ||= fetch(`assets/spawns/region-${rid}.json`).then(r => { if (!r.ok) throw new Error(r.status); return r.json(); });
 Promise.all([files[rid], cssP]).then(([d]) => {
 if (dead || asked !== rid) return;
 data = d; d.entries.forEach((e, i) => { e.i = i; });
