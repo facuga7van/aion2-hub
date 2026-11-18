@@ -2,7 +2,7 @@ import {
 $, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION, viewFaccion,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, setTitle, myChars, gname, galt, gclass, gameLang, on,
 } from './core.js';
-import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, estilo, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, LEVEL_CAP, isArcana } from './personaje-calc.js';
+import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, estilo, estOf, estSet, estEmpty, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, LEVEL_CAP, isArcana } from './personaje-calc.js';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -55,7 +55,7 @@ stig: ['Estigmas', 'Skills especiales que van en 4 espacios aparte. Suben solo c
 ariel: ['Ariel', 'El quinto tablero de Daevanion: da daño contra jefes. Sus nodos se abren con Fragmentos de Ariel de Expedición difícil (100 fragmentos = 1 cristal, hasta 30 por personaje).'],
 lineas: ['Líneas', 'Los stats extra de cada pieza, que salen al azar. Los mejores buscan ciertas líneas en cada pieza. En Equipo, tocá una pieza para ver qué tan alto te salió cada una.'],
 };
-const STEP_GL = { 'amp-arma': 'amp', 'amp-acc': 'amp', 'amp-arm': 'amp', 'amp-brac': 'amp', enc: 'enc', arc: 'arc', dae: 'dae', pts: 'pts', ariel: 'ariel', gear: 'il', gs: 'gs', ms: 'ms' };
+const STEP_GL = { 'amp-arma': 'amp', 'amp-acc': 'amp', 'amp-arm': 'amp', 'amp-brac': 'amp', enc: 'enc', arc: 'arc', dae: 'dae', pts: 'pts', ariel: 'ariel', gear: 'il', gs: 'gs', 'gs-up': 'gs', ms: 'ms' };
 const gl = k => GL[k] ? `<button type="button" class="gl" data-que="${k}" aria-label="¿Qué es ${esc(GL[k][0].toLowerCase())}?" aria-expanded="false" aria-controls="pj-gl"></button>` : '';
 const glTip = Object.assign(document.createElement('div'), { id: 'pj-gl', className: 'pj-gl' });
 glTip.setAttribute('popover', 'auto');
@@ -403,12 +403,10 @@ CUR.set(cls, v); paint();
 const curated = c => CUR.get(CLS_KEY[c.d.profile.class]) || null;
 const topSkills = (c, k) => topLevels(curated(c)?.top, k);
 const estStored = ref => ({ si: [], no: [], ...store.get(EST, {})[ref.k.toLowerCase()] });
-const styleOf = (c, k) => { const s = estStored(c.ref), no = new Set(s.no); return new Set([...estilo(c.d, c.x?.items || {}, topSkills(c, k)), ...s.si].filter(x => !no.has(x))); };
-function setEst(ref, key, v) {
-const m = store.get(EST, {}), lk = ref.k.toLowerCase(), e = estStored(ref);
-for (const l of ['si', 'no']) e[l] = e[l].filter(x => x !== key);
-if (v) e[v].push(key);
-if (e.si.length || e.no.length) m[lk] = e; else delete m[lk];
+const styleOf = (c, k) => { const s = estOf(estStored(c.ref), k), no = new Set(s.no); return new Set([...estilo(c.d, c.x?.items || {}, topSkills(c, k)), ...s.si].filter(x => !no.has(x))); };
+function setEst(ref, key, v, k) {
+const m = store.get(EST, {}), lk = ref.k.toLowerCase(), e = estSet(estStored(ref), key, v, k);
+if (!estEmpty(e)) m[lk] = e; else delete m[lk];
 store.set(EST, Object.fromEntries(Object.entries(m).slice(-60)));
 }
 /* ---------- build que sigue (Estándar / Healer / PvP), guardada por personaje ---------- */
@@ -520,7 +518,7 @@ return `<section class="wh" aria-labelledby="wh-h"><h3 class="wh-h" id="wh-h">D�
 <p class="wh-t">Lo que más rinde ahora es subir de nivel con la historia. En nivel ${LEVEL_CAP}, acá ${y ? 'vas' : 'va'} a ver qué mejorar primero y cómo ${y ? 'estás' : 'está'} contra los mejores.</p></section>`;
 }
 const ST_VIS = 5;
-const estBtn = (key, v, t, cls = '') => `<button type="button" class="linkbtn est${cls ? ' ' + cls : ''}" data-est="${esc(key)}" data-v="${v}">${t}</button>`;
+const estBtn = (key, v, t, cls = '', tt = '') => `<button type="button" class="linkbtn est${cls ? ' ' + cls : ''}" data-est="${esc(key)}" data-v="${v}"${tt ? ` title="${esc(tt)}"` : ''}>${t}</button>`;
 function stepsHtml() {
 const k = kindOf(cur), P = plan(cur.d, cur.x.items, cur.x.boards, k, topSkills(cur, k), styleOf(cur, k)), st = stations(cur.d, cur.x.items, cur.x.boards), y = own();
 const C = curated(cur), noTop = !P.low && C?.top && !C.top[k]?.slots;
@@ -537,7 +535,7 @@ ${s.icon ? gameIcon(s.icon, 48) : s.board ? icoGame('board_icon_unique_open', 48
 ${s.skills ? `<ul class="st-sk2">${s.skills.map(x => `<li>${img(x.icon, 24)}<span>${esc(x.name)} <b>+${x.n}</b>${x.T ? ` <em>llega a ${x.T}</em>` : ''}</span></li>`).join('')}</ul>` : ''}
 ${s.cost || s.sure !== 'seguro' ? `<small class="st-c">${esc(s.cost || '')}${s.sure === 'seguro' ? '' : ' <em class="st-s" title="Depende de cosas que la ficha no muestra o de promedios">aprox.</em>'}</small>` : ''}
 ${s.detail ? `<details class="st-d"><summary>Ver el detalle</summary><small>${esc(s.detail)}</small>${s.own ? estBtn(s.own, 'no', 'Sugerime lo de los top') : ''}</details>` : ''}
-${P.low ? '' : `<p class="st-x">${s.ch ? estBtn(s.ch, 'si', 'Es mi elección') : ''}${estBtn('paso:' + s.id, 'no', `${ico('i-x')}<span class="sr">No me interesa</span>`, 'st-no')}</p>`}</div></li>`;
+${P.low ? '' : `<p class="st-x">${s.ch ? estBtn(s.ch, 'si', 'Es mi elección') : ''}${estBtn('paso:' + s.id, 'no', `${ico('i-x')}<span class="sr">No me interesa</span>`, 'st-no', 'No me interesa')}</p>`}</div></li>`;
 const steps = act.slice(0, nVis).map(li).join('')
 + (more.length ? `<li class="st-more"><details><summary>Ver ${more.length} paso${more.length > 1 ? 's' : ''} más${cheapN ? ` <small>· ${cheapN} barato${cheapN > 1 ? 's' : ''}</small>` : ''}</summary><ol class="st-l">${more.map((s, i) => li(s, nVis + i)).join('')}</ol></details></li>` : '')
 + (gear ? li(gear, act.length) : '');
@@ -551,7 +549,7 @@ return `<div class="st-w">
 ${P.low ? levelHtml(cur.d.profile.level) : whereHtml(P)}
 <section class="pj-sec st-m" aria-labelledby="st-h"><h3 id="st-h" class="pj-h">Qué hacer ahora <small>${P.low ? `hasta nivel ${LEVEL_CAP}` : `para ${y ? 'tu' : 'la'} build ${esc(KIND_ES[k])}, de lo que más rinde a lo que menos`}</small></h3>
 ${note ? `<p class="st-note" role="note">${esc(note)}</p>` : ''}
-${on.length ? `<ol class="st-l">${steps}</ol>` : off.length ? '' : '<p class="pj-empty">No veo pasos con lo que muestra la ficha: equipo, amplificación, Arcanas y Daevanion están al tope. Lo que sigue es cambiar de equipo.</p>'}
+${on.length ? `<ol class="st-l">${steps}</ol>` : off.length ? '<p class="pj-empty">Apagaste todos los pasos. Si querés volver a ver alguno, está acá abajo.</p>' : '<p class="pj-empty">No veo pasos con lo que muestra la ficha: equipo, amplificación, Arcanas y Daevanion están al tope. Lo que sigue es cambiar de equipo.</p>'}
 ${off.length ? `<details class="st-off"><summary>Pasos que apagaste (${off.length})</summary><ul>${off.map(s => `<li data-step="${s.id}"><span>${esc(s.title)}</span>${estBtn('paso:' + s.id, '', 'Volver a mostrar')}</li>`).join('')}</ul></details>` : ''}</section>
 ${P.low ? '' : `<section class="rt-w" aria-labelledby="rt-h"><h3 class="wh-h" id="rt-h">Cómo vas <small>lo que se sube sin cambiar de equipo</small></h3><ol class="rt-l">${route}</ol></section>`}
 </div>`;
@@ -691,7 +689,7 @@ toast(main ? `<b>${esc(ref.n)}</b> es tu personaje principal: la Bitácora qued�
 function est(b) {
 const { ref } = cur, key = b.dataset.est, v = b.dataset.v, before = store.get(EST, {});
 const repaint = () => { const x = $('#pj-x'); if (TAB === 'builds' && x?._paint) x._paint(); else paintPanel(); };
-setEst(ref, key, v);
+setEst(ref, key, v, (TAB === 'builds' && $('#cu-kd [aria-pressed="true"]')?.dataset.ck) || kindOf(cur));
 repaint();
 $(`[data-est="${CSS.escape(key)}"]`)?.focus();
 toast(v === 'si' ? 'Listo: queda como tu elección.' : !key.startsWith('paso:') ? 'Listo: te sugerimos lo de los top.' : v ? 'Paso apagado: queda abajo, en «Pasos que apagaste».' : 'El paso volvió a la lista.',

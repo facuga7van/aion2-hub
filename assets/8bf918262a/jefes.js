@@ -1,7 +1,7 @@
 import {
 $, esc, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, toast, announce, store, versioned, norm, profile, setProfile, serverName, serverList,
 FACCION, serverFaccion, setFaccion, ROOT, bellButton, ruleBox, registerPalette, registerKey, partsIn, wallToUtc, displayTz,
-LNA_MSG, gname, galt, gboth, gameLang, modal, DATA, MIN, HOUR,
+LNA_MSG, gname, galt, gboth, gameLang, modal, maintWindows, DATA, MIN, HOUR,
 } from './core.js';
 import { V, KILLS, KEEP, WIN, timer, state, setKill, publish, api, srv, kkey, bellId, tpTxt, SRC_TXT } from './vivo.js';
 const D = JSON.parse($('#page-data').textContent);
@@ -86,6 +86,9 @@ const NEAR = 60 * MIN;                                   // importantes: a más 
 const GROUPS = [['now', 'Para ir ahora'], ['soon', 'Próximos'], ['stale', 'Sin confirmar', 'hubo mantenimiento'], ['none', 'Sin datos']];
 const TIER_TXT = { 1: () => `Set ${gradeTxt('Unique')}`, 2: () => `Set ${gradeTxt('Legend')} o alma de pet`, 3: () => `Set ${gradeTxt('Rare')}` };
 const grpOf = s => s === 'alive' || s === 'window' || s === 'due' ? 'now' : s === 'spawns' ? 'soon' : s;
+let mant = null;
+const maintNow = now => maintWindows(now, now)[0] || null;
+const untilTxt = (w, now) => (w.announced ? '' : '~') + fmtClock(w.maxEnd, { now, day: false });
 const pic = (b, sz, px) => `<img class="jf-p" src="${ROOT}assets/jefes/${b.retrato}-${sz}.webp" width="${px}" height="${px}" alt="" loading="lazy">`;
 const cyc = (tm, b, now) => !tm || tm.stale ? 0 : tm.alive || now >= tm.start ? 1 : Math.max(0, Math.min(1, 1 - (tm.start - now) / b.cyc));
 /* ---------- drops: qué suelta cada jefe (boss-drops.json; criterio en decisions.md, "Drops de jefes") ---------- */
@@ -199,7 +202,8 @@ alive: ['<b class="jf-big">Vivo</b>', `<span data-ago="${tm?.start}"></span>`, `
 due: ['<b class="jf-big">Debería estar</b>', `<span data-ago="${tm?.start}"></span>`, `Debería estar desde ${at} (nadie lo confirmó)`],
 window: ['<b class="jf-big">Puede estar</b>', `cierra en <span class="cd" data-left="${tm?.end}"></span>`, `Puede salir entre ${win}`],
 spawns: [`<span class="jf-l">Sale en</span> <b class="jf-big cd" data-left="${tm?.start}"></b>`, `<i class="jf-sep">· </i>${at}`, tm?.src === 'ql' ? `Sale ${at}` : `Sale entre ${win}`],
-stale: [`<s class="jf-big">${at}</s>`, 'Sin confirmar', 'Hubo mantenimiento después de este dato: puede no valer'],
+stale: mant ? ['<b class="jf-big">En pausa</b>', '', `Mantenimiento en curso hasta ${untilTxt(mant, now)}: el jefe reaparece después`]
+: [`<s class="jf-big">${at}</s>`, 'Sin confirmar', 'Hubo mantenimiento después de este dato: puede no valer'],
 none: srv() ? ['<b class="jf-big">Sin datos</b>', '', 'Sin dato en vivo de este jefe en tu server']
 : [`<span class="jf-l">Sale cada</span> <b class="jf-cyc">${cycTxt(b.respawnMin)}</b>`, '', 'Elegí tu server arriba para ver cuándo sale'],
 wait: ['<b class="jf-big">Buscando…</b>', '', 'Buscando el dato en vivo de tu server'],
@@ -211,7 +215,7 @@ const soon = s === 'spawns' && tm.start - now <= SOON ? ' is-soon' : '';
 const far = b.top && !(s === 'alive' || s === 'due' || s === 'window' || (s === 'spawns' && tm.start - now <= NEAR)) ? ' is-far' : '';
 const meta = [lv && `Nivel ${b.level}`, tpTxt(gname(b, 'teleport')) || 'Ubicación sin confirmar', b.top && (tm || srv()) && `cada ${cycTxt(b.respawnMin)}`].filter(Boolean).map(esc).join(' · ');
 const info = `${galt(b) ? esc(galt(b)) + ' · ' : ''}Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)}${b.respawnSource === 'oficial' ? ' (oficial, parche Global)' : ''}`;
-return `<li class="jf-r s-${s}${tm ? ' src-' + tm.src : ''}${soon}${far}${b.top ? ' jf-wc' : ''}" id="b-${b.id}" data-boss="${b.id}" data-lv="${b.level}" data-tier="${b.tier}" tabindex="-1">
+return `<li class="jf-r s-${s}${tm ? ' src-' + tm.src : ''}${s === 'stale' && mant ? ' is-mant' : ''}${soon}${far}${b.top ? ' jf-wc' : ''}" id="b-${b.id}" data-boss="${b.id}" data-lv="${b.level}" data-tier="${b.tier}" tabindex="-1">
 ${b.top ? pic(b, 192, 96) : pic(b, 80, 40)}
 <span class="jf-n" title="${info}"><b>${esc(gname(b))}</b><small>${meta}</small></span>${b.top ? cardDrops(b) : rowDrops(b)}
 <span class="jf-w" title="${esc(tip)}"><span class="jf-s">${st}</span><span class="jf-t">${when}${src}</span></span>
@@ -224,8 +228,10 @@ const fe = document.activeElement, fb = fe?.closest?.('[data-boss]')?.dataset.bo
 const fsel = !fb ? null : fe.matches('[data-kill]') ? '[data-kill]' : fe.matches('.bell') ? '.bell' : fe.matches('[data-deny]') ? '[data-deny]' : fe.matches('[data-menu]') ? '[data-menu]'
 : fe.matches('[data-drops]') ? '[data-drops]' : fe.matches('[data-it]') ? `[data-it="${fe.dataset.it}"]` : null;
 hideTip();
-const world = [], rest = [];
-nextChange = Infinity;
+const world = [], rest = [], was = !!mant;
+mant = maintNow(now);
+nextChange = mant ? mant.maxEnd : Infinity;
+if (!!mant !== was) paintSt();                         // empieza o termina el mantenimiento: cambia el aviso de arriba
 for (const b of BOSSES) {
 const tm = timer(b, now, K);
 if (tm) for (const x of [tm.start - SOON, tm.start, tm.end, tm.end + KEEP, tm.maint, b.top ? tm.start - NEAR : 0]) if (x > now && x < nextChange) nextChange = x;
@@ -254,7 +260,7 @@ if (g === 'none' && !srv() && !fold) return `<section class="jf-grp g-${g}" aria
 return `<section class="jf-grp g-${g}" aria-label="${label}"><h3 class="jf-gh">${h}</h3><ul class="jf-list" id="jf-g-${g}"${tog && !open ? ' hidden' : ''}>${L.map(([b, tm]) => row(b, tm, now, { lv })).join('')}</ul></section>`;
 };
 const html = [pins.length && grp('fav', 'Fijados', pins),
-...(o === 'spawn' ? GROUPS.filter(([g]) => by[g].length).map(([g, label, sub]) => grp(g, label, by[g], { tog: g === 'none' && fold, sub }))
+...(o === 'spawn' ? GROUPS.filter(([g]) => by[g].length).map(([g, label, sub]) => grp(g, label, by[g], { tog: g === 'none' && fold, sub: g === 'stale' && mant ? 'hay mantenimiento' : sub }))
 : o === 'importancia' ? [1, 2, 3].map(t => [t, loose.filter(([b]) => b.tier === t)]).filter(([, L]) => L.length).map(([t, L]) => grp('t' + t, TIER_TXT[t](), L))
 : [loose.length && grp('all', o === 'nivel' ? 'Por nivel' : 'Por nombre', loose)]),
 hidOpen && hid.length && grp('hid', 'Ocultos', hid)].filter(Boolean).join('');
@@ -294,14 +300,16 @@ if (i) i.style.setProperty('--p', cyc(timer(b, now), b, now).toFixed(4));
 function paintSt() {
 const el = $('#jf-st'), s = srv();
 el.classList.toggle('jf-nosrv', !s);
+el.classList.toggle('jf-mant', !!mant && !!s);
 if (!s) { el.innerHTML = 'y te digo cuándo salen.'; return; }
 const { live, err, busy, next } = V, down = err === 'lna' || err === 'down';
-const warn = err === 'lna' ? LNA_MSG + ' ' : err === 'down' ? 'Sin conexión. ' : err === 'stale' ? 'La fuente en vivo no responde: es lo último que hubo.' : '';
-el.classList.toggle('on', !!live && !err);              // punto encendido: dato fresco
-el.innerHTML = (live ? `${err ? 'Último dato:' : 'En vivo · actualizado'} <span id="jf-age"></span>${warn ? ' ·' : ''}`
+const warn = err === 'lna' ? LNA_MSG + ' ' : err === 'down' ? 'Sin conexión. ' : err === 'stale' && !mant ? 'La fuente en vivo no responde: es lo último que hubo.' : '';
+el.classList.toggle('on', !!live && !err && !mant);     // punto encendido: dato fresco
+el.innerHTML = (mant ? `<b>Mantenimiento en curso</b> · hasta ${untilTxt(mant, Date.now())}; los jefes reaparecen después.`
+: live ? `${err ? 'Último dato:' : 'En vivo · actualizado'} <span id="jf-age"></span>${warn ? ' ·' : ''}`
 : held || busy ? `Buscando los timers de ${esc(serverName(s))}…` : down ? '' : 'Todavía no hay datos en vivo para tu server.')
 + (warn ? ` <span class="jf-warn">${esc(warn)}${down ? '<span id="jf-retry"></span>' : ''}</span>` : '');
-if (live) bind($('#jf-age'), ago(live.fetchedAt));
+if (live && !mant) bind($('#jf-age'), ago(live.fetchedAt));
 if (down) bind($('#jf-retry'), n => [V.busy || n >= next ? 'Reintentando…' : `Reintento en ${fmtLeft(next - n)}.`, n + (V.busy || n >= next ? 1000 : leftNext(next - n))]);
 }
 function paintCom() {

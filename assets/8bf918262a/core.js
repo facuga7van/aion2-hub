@@ -163,10 +163,16 @@ if (start >= w.start && start <= w.maxEnd) return 'quizas';
 }
 return null;
 }
-export function occurrences(ev, reg, from, to, mw) {
+export const GRUPO_TXT = 'puede empezar 5 o 10 min después según tu grupo';
+export function groupOff(s = store.get('hub-server', null)) {
+const g = store.get('hub-group', null);
+return g?.server === s && [0, 5, 10].includes(g.off) ? g.off : SCHEDULE.groupOffset?.[s] ?? null;
+}
+export function occurrences(ev, reg, from, to, mw, go = ev.group ? groupOff() : null) {
 const rule = ev.rules[reg] || ev.rules.global;
 if (!rule) return [];
 mw ??= maintWindows(from - DAY, to);
+const gx = ev.group === 'exact' ? (go || 0) * MIN : 0, approx = ev.group === 'exact' ? go == null && 'grupo' : ev.group === 'approx' && go !== 0 && 'est';
 const tz = !rule.tz || rule.tz === 'server' ? REG[reg].tz : rule.tz;
 const slots = rule.windows ? rule.windows.map(([a, b]) => [hm(a), (hm(b) - hm(a) + 1440) % 1440 || 1440])
 : rule.minute != null ? Array.from({ length: 24 }, (_, h) => [h * 60 + rule.minute, ev.duration || 0])
@@ -177,19 +183,19 @@ const dt = new Date(Date.UTC(p.y, p.mo - 1, p.d + i)), y = dt.getUTCFullYear(), 
 if (wallToUtc(y, mo, d, 0, 0, tz) > to) break;
 if (rule.days && !rule.days.includes(dt.getUTCDay())) continue;
 for (const [m, dur] of slots) {
-const start = wallToUtc(y, mo, d, Math.floor(m / 60), m % 60, tz), end = start + dur * MIN;
+const start = wallToUtc(y, mo, d, Math.floor(m / 60), m % 60, tz) + gx, end = start + dur * MIN;
 if ((dur ? end : start + 1) <= from || start > to) continue;
-out.push({ ev, id: ev.id, start, end, entry: ev.entry ? start + ev.entry * MIN : 0, maint: ev.maint === false || !SCHEDULE.maintenance?.skipEvents ? null : maintFlag(start, mw) });
+out.push({ ev, id: ev.id, start, end, entry: ev.entry ? start + ev.entry * MIN : 0, maint: ev.maint === false || !SCHEDULE.maintenance?.skipEvents ? null : maintFlag(start, mw), ...(approx ? { approx } : {}) });
 }
 }
 return out.sort((a, b) => a.start - b.start);
 }
 let CACHE = null;
 export function schedule(now = Date.now()) {
-const reg = region();
-if (!CACHE || CACHE.reg !== reg || now > CACHE.from + DAY || now < CACHE.from) {
+const reg = region(), go = groupOff();
+if (!CACHE || CACHE.reg !== reg || CACHE.go !== go || now > CACHE.from + DAY || now < CACHE.from) {
 const from = now - DAY / 2, to = now + 9 * DAY, mw = maintWindows(from - DAY, to);
-CACHE = { reg, from, to, mw, list: EVS.flatMap(e => occurrences(e, reg, from, to, mw)).sort((a, b) => a.start - b.start) };
+CACHE = { reg, go, from, to, mw, list: EVS.flatMap(e => occurrences(e, reg, from, to, mw)).sort((a, b) => a.start - b.start) };
 }
 return CACHE;
 }
@@ -295,6 +301,7 @@ const c = schedule(now);
 nextB = now + HOUR;
 for (const o of c.list) for (const t of [o.start, o.entry, o.end]) if (t > now && t < nextB) nextB = t;
 for (const o of storedTimers(now)) for (const t of [o.start, o.end]) if (t > now && t < nextB) nextB = t;
+for (const w of c.mw) for (const t of [w.start, w.maxEnd]) if (t > now && t < nextB) nextB = t;   // "Mantenimiento en curso" entra y sale a horario
 const d = lastReset('daily', now), w = lastReset('weekly', now);
 const rd = nextReset('daily', now);
 nextB = Math.min(nextB, rd, nextReset('weekly', now), rd - 2 * HOUR > now ? rd - 2 * HOUR : Infinity);   // a 2 h del reset la tira avisa las diarias
@@ -351,8 +358,8 @@ tT = setTimeout(hideToast, ms);
 export function hideToast() { clearTimeout(tT); $('#hub-toast')?.classList.remove('on'); }
 export function announce(text) { const l = $('#hub-live'); if (l) { l.textContent = ''; setTimeout(() => { l.textContent = text; }, 30); } }
 export const CREDITS = [
-['Horarios y eventos', 'Notas y avisos oficiales de PLAYNC (NCSOFT). Lo que no tiene aviso oficial sale de los datos del cliente Global que publica aion2data.com (https://aion2data.com/timers), cruzados con questlog.gg; va rotulado "Datos del juego".', 'Datos al parche del 11-nov · revisado el 17-nov'],
-['Tareas', 'Cuántas llaves, intentos y premios da cada cosa: datos del cliente Global que publica aion2data.com (https://aion2data.com/checklist), con las notas oficiales de PLAYNC. Lo que tiene una sola fuente lleva un punto que la muestra.', 'Datos al parche del 11-nov · revisado el 17-nov'],
+['Horarios y eventos', 'Notas y avisos oficiales de PLAYNC (NCSOFT). Lo que no tiene aviso oficial sale de los datos del cliente Global que publica aion2data.com (https://aion2data.com/timers), cruzados con questlog.gg; va rotulado "Datos del juego". El minuto de Nahma y de los jefes de artefacto según el grupo de emparejamiento: questlog.gg en vivo, cruzado con el aviso oficial de emparejamiento y aion2status.com (https://aion2status.com/en/abyss-bosses). Duración del Festival de Shugo: aion2.gg y metabot.', 'Datos al parche del 18-nov · revisado el 18-nov'],
+['Tareas', 'Cuántas llaves, intentos y premios da cada cosa: datos del cliente Global que publica aion2data.com (https://aion2data.com/checklist), con las notas oficiales de PLAYNC. La Energía de Odyle además coincide con metabot.gg y las guías de allthings.how y daevaguides.com. Lo que tiene una sola fuente lleva un punto que la muestra.', 'Datos al parche del 18-nov · revisado el 18-nov'],
 ['Jefes en vivo', 'Telemetría de jugadores: la app de escritorio de questlog.gg ve los jefes en las partidas de sus usuarios. Llega a través del servidor de la Bitácora. Si activás los reportes de la comunidad, también lo que avisan otros jugadores de tu server ("Estimado").'],
 ['Jefes: nombres, teleports y retratos', 'Base de datos de Aion 2 de questlog.gg. Ciclos: los de Gartua y Lagta, del parche Global oficial; los demás, los que usa la telemetría de questlog.gg, sin contradicciones en tres servers de regiones distintas. El juego no los publica.', 'Revisado el 17-nov'],
 ['Jefes: drops', 'Qué suelta cada jefe y con qué chance: base de datos de questlog.gg cruzada con los datos del cliente Global que publica aion2data.com (https://aion2data.com/monsters). Íconos del CDN oficial de PLAYNC, re-guardados chicos.', 'Datos al parche del 11-nov · revisado el 17-nov'],
@@ -746,17 +753,19 @@ const draw = () => {
 const now = Date.now(), seen = new Set();
 let L = upcoming(now, { count: count * 3, minor }).filter(o => o.ev.kind !== 'hourly' || (!seen.has(o.id) && seen.add(o.id)));
 const soon = within && L.filter(o => o.start < now + within || isLive(o, now));
-L = (soon?.length ? soon : L).slice(0, count);
+L = soon?.length ? soon : L;
 const ol = doc.createElement('ol');
 ol.className = 'up';
 const k = (live, start) => live ? 0 : start;
-const rows = [...L.map(o => [k(isLive(o, now), o.start), o]), ...storedTimers(now).filter(t => t.up).map(t => [k(now >= t.start, t.start), null, t])].sort((a, b) => minorLast && (!!a[1]?.ev.minor - !!b[1]?.ev.minor) || a[0] - b[0]);
+const rows = [...L.map(o => [k(isLive(o, now), o.start), o]), ...storedTimers(now).filter(t => t.up && (!within || t.start < now + within)).map(t => [k(now >= t.start, t.start), null, t])].sort((a, b) => a[0] - b[0]).slice(0, count)
+.sort((a, b) => minorLast && (!!a[1]?.ev.minor - !!b[1]?.ev.minor));   // primero los `count` por hora; después, los menores al final
 for (const [, o, t] of rows) {
 if (t) {
 const li = doc.createElement('li'), live = now >= t.start;
 li.className = 'up-r up-tm' + (live ? ' live' : '');
 li.dataset.tm = t.id;
-li.innerHTML = `${bossPic(t.pic) || ico('i-boss', 'up-i')}<span class="up-n"><span class="up-nt">${t.approx ? '≈ ' : ''}${esc(alertName(t))}</span>${t.src ? `<small class="up-st">${esc(t.src)}</small>` : ''}</span><time class="up-t" datetime="${new Date(t.start).toISOString()}">${live ? 'desde ' + fmtClock(t.start, { now, day: false }) : fmtClock(t.start, { now })}</time><span class="up-c cd"></span>`;
+const st = t.src === 'En vivo' ? gname(t, 'note') : t.src;   // (vivo.js SRC_TXT)
+li.innerHTML = `${bossPic(t.pic) || ico('i-boss', 'up-i')}<span class="up-n"><span class="up-nt">${t.approx ? '≈ ' : ''}${esc(alertName(t))}</span>${st ? `<small class="up-st">${esc(st)}</small>` : ''}</span><time class="up-t" datetime="${new Date(t.start).toISOString()}">${live ? 'desde ' + fmtClock(t.start, { now, day: false }) : fmtClock(t.start, { now })}</time><span class="up-c cd"></span>`;
 if (bells) li.append(bellButton(t.id, gname(t, 'label')));
 bind($('.up-c', li), timerText(t));
 ol.append(li);
@@ -768,14 +777,14 @@ li.dataset.ev = o.id;
 const tags = [o.maint === 'quizas' && '<em class="tag warn" title="Puede caer dentro del mantenimiento del miércoles">¿mantenimiento?</em>',
 confOf(o.ev) === 'sin' && confTag(o.ev)].filter(Boolean).join('');
 const edge = portal ? o.entry : live ? o.end : o.start;
-const when = portal ? `cierra ${fmtClock(o.entry, { now, day: false })}` : live ? `hasta ${fmtClock(o.end, { now, day: false })}` : fmtClock(o.start, { now });
-const st = live ? (portal ? esc(o.ev.entryLabel) : 'en curso') : o.ev.kind === 'hourly' ? 'cada hora' : '';
-li.innerHTML = `${evPic(o.ev) || ico(catIcon(o.ev), 'up-i')}<span class="up-n"><span class="up-nt">${esc(gname(o.ev, 'short') || gname(o.ev))}</span>${tags}${st ? `<small class="up-st${live ? '' : ' up-ev'}">${st}</small>` : ''}</span><time class="up-t" datetime="${new Date(edge).toISOString()}">${when}</time><span class="up-c cd"></span>`;
+const when = portal ? `cierra ${fmtClock(o.entry, { now, day: false })}` : live ? `hasta ${o.ev.durTxt ? '≈' : ''}${fmtClock(o.end, { now, day: false })}` : fmtClock(o.start, { now });
+const st = live ? (portal ? esc(o.ev.entryLabel) : 'en curso') : o.ev.kind === 'hourly' ? 'cada hora' : o.approx === 'grupo' ? GRUPO_TXT : '';
+li.innerHTML = `${evPic(o.ev) || ico(catIcon(o.ev), 'up-i')}<span class="up-n"><span class="up-nt">${o.approx ? '≈ ' : ''}${esc(gname(o.ev, 'short') || gname(o.ev))}</span>${tags}${st ? `<small class="up-st${live ? '' : ' up-ev'}">${st}</small>` : ''}</span><time class="up-t" datetime="${new Date(edge).toISOString()}">${when}</time><span class="up-c cd"></span>`;
 if (bells) li.append(bellButton(o.id, gname(o.ev)));
 countdown($('.up-c', li), edge);
 ol.append(li);
 }
-if (!L.length) ol.innerHTML = '<li class="up-empty">No hay eventos visibles. Activalos en Ajustes.</li>';
+if (!rows.length) ol.innerHTML = '<li class="up-empty">No hay eventos visibles. Activalos en Ajustes.</li>';
 box.replaceChildren(ol);
 };
 draw();
@@ -792,6 +801,8 @@ a.innerHTML = `${live ? '<i class="st-dot" aria-hidden="true"></i>' : ''}<b>${es
 bindStatus($('.cd', a), o);
 return a;
 }
+export const maintNow = (now = Date.now()) => schedule(now).mw.find(w => w.start <= now && now < w.maxEnd) || null;
+export const maintEnd = (w, now = Date.now()) => (w.announced ? '' : '~') + fmtClock(w.maxEnd, { now, day: false });
 const dailyLeft = now => { const c = characters().activo, p = taskProgress(c, now).daily; return p.total - p.done; };
 function renderStrip() {
 const el = $('#hub-strip');
@@ -813,8 +824,16 @@ const lab = document.createElement('span');
 lab.className = 'st-lab';
 lab.textContent = 'Ahora';
 box.append(lab);
+const mw = maintNow(now);   // mantenimiento en curso: primero, corto ("Mantenimiento · hasta 10:00")
+if (mw) {
+const m = document.createElement('a');
+m.className = 'st-i st-mant';
+m.href = ROOT + '#resets';
+m.innerHTML = `<i class="st-dot" aria-hidden="true"></i><b>Mantenimiento</b><span>hasta ${maintEnd(mw, now)}</span>`;
+box.append(m);
+}
 if (live) box.append(stripItem(live, now, 'st-live'));
-next.forEach((o, i) => box.append(stripItem(o, now, 'st-next' + (i ? ' st-2' : ''))));
+const seq = next.map((o, i) => [o.start, stripItem(o, now, 'st-next' + (i ? ' st-2' : ''))]);
 const tm = storedTimers(now).sort((a, b) => (a.start <= now) - (b.start <= now) || a.start - b.start)[0];
 if (tm) {
 const a = document.createElement('a');
@@ -822,8 +841,9 @@ a.className = 'st-i st-timer';
 a.href = siteHref(tm.href || ROOT);
 a.innerHTML = `<b>${tm.approx ? '≈ ' : ''}${esc(alertName(tm))}</b><small>${fmtClock(tm.start, { now })}</small><span class="cd"></span>`;
 bind($('.cd', a), n => { const [t, d] = timerText(tm)(n); return [n < tm.start ? 'en ' + t : t, d]; });
-box.append(a);
+seq.push([tm.start > now ? tm.start : Infinity, a]);
 }
+seq.sort((x, y) => x[0] - y[0]).forEach(([, el]) => box.append(el));
 const rd = nextReset('daily', now), rs = document.createElement('a'), left = rd - now < 2 * HOUR ? dailyLeft(now) : 0;
 rs.className = 'st-i st-reset' + (left ? ' st-due' : '');
 rs.href = left ? ROOT + 'tareas/' : ROOT + '#resets';
@@ -1160,7 +1180,7 @@ return 'popup';
 /* ---------- arranque ---------- */
 const html = document.documentElement;
 const FORCED_MINI = new URLSearchParams(location.search).has('mini');
-const mqMini = matchMedia('(max-width: 480px) and (pointer: fine)');
+const mqMini = matchMedia('(max-width: 480px) and (max-height: 640px) and (pointer: fine)');   // alto: a 480x900 con mouse va el layout angosto (con héroe, resets y Ajustes)
 const setMini = () => {
 const m = FORCED_MINI || mqMini.matches;
 if (m !== html.classList.contains('mini')) { html.classList.toggle('mini', m); renderStrip(); }
@@ -1238,6 +1258,7 @@ html.dataset.gl = GL;
 on('gamelang', () => { renderStrip(); titleAndFavicon(Date.now()); });
 syncTimers();
 onStore('hub-timers', syncTimers);
+onStore('hub-group', syncTimers); on('store', k => k === 'hub-group' && syncTimers());   // grupo nuevo: avisos y listas con la hora corrida
 for (const k of ['hub-region', 'hub-server', 'hub-faccion']) onStore(k, () => { CACHE = null; emit('profile', profile()); });
 paintFac();
 on('profile', paintFac);
@@ -1262,6 +1283,10 @@ else if (e.target.closest('#hub-warn [data-x]')) $('#hub-warn').hidden = true;
 });
 startClock();
 tick();
+try {   // sin sessionStorage (bloqueado): sin aviso, nada más
+addEventListener('pagehide', () => { if (pipWin) sessionStorage.setItem('hub-pip', '1'); });
+if (sessionStorage.getItem('hub-pip')) { sessionStorage.removeItem('hub-pip'); toast('Se cerró la ventana flotante ·', { ms: 12000, action: { label: 'Reabrir', run: popOut } }); }
+} catch { /* */ }
 if (!store.get('hub-onboarded', 0) && !html.classList.contains('mini') && !store.get('hub-server', null)) openSettings({ welcome: true });
 else if (!store.get('hub-cuenta', null) && !store.get('hub-cuenta-ofrecida', 0) && !html.classList.contains('mini') && hasData()) {
 store.set('hub-cuenta-ofrecida', 1);

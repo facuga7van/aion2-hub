@@ -1,7 +1,14 @@
 import {
 $, esc, ico, on, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal, evPic,
 characters, taskList, taskDone, setTaskDone, taskProgress, PJ, TK, profile, serverName, registerKey, confOf, confTag, clockLeft, gname, gclass, HOUR,
+lastReset, versioned,
 } from './core.js';
+const OD = versioned('hub-odyle', 1, { c: {} });
+function odyle(m, s, now) {
+const cap = s.sub ? m.capSub : m.cap, A = lastReset('daily', now), P = m.hours * HOUR, k = x => Math.floor((x - A) / P);
+const v = s.e >= cap ? s.e : Math.min(cap, s.e + m.amount * Math.max(0, k(now) - k(s.at)));
+return { v, cap, full: v >= cap ? 0 : A + (k(now) + Math.ceil((cap - v) / m.amount)) * P, next: A + (k(now) + 1) * P };
+}
 const PER = { daily: { t: 'Diarias', when: 'reset diario' }, weekly: { t: 'Semanales', when: 'reset del miércoles' } };
 let editing = false;
 const uid = () => Math.random().toString(36).slice(2, 9);
@@ -11,6 +18,7 @@ const now = Date.now(), { list, activo } = characters(), focusId = document.acti
 setHtml($('#pj-tabs'), list.map(c => { const d = taskProgress(c.id, now).daily, all = d.total && d.done >= d.total;
 return `<button type="button" data-pj="${esc(c.id)}" aria-pressed="${c.id === activo}"><span class="pj-nm">${esc(c.name)}</span>${c.clase ? `<small>${esc(gclass(c.clase))}</small>` : ''}<span class="pj-p${all ? ' all' : ''}" title="Diarias hechas">${all ? ico('i-check') : ''}${d.done}/${d.total}</span>${editing && c.id !== 'main' ? `<span class="pj-x" data-pjdel="${esc(c.id)}" role="button" tabindex="0" aria-label="Quitar ${esc(c.name)}">${ico('i-x')}</span>` : ''}</button>`; }).join(''));
 for (const per of ['daily', 'weekly']) paintGroup(per, activo, now);
+setHtml($('#tk-pie'), pie());
 $('#tk-edit').setAttribute('aria-pressed', String(editing));
 document.body.classList.toggle('tk-editing', editing);
 if (focusId) document.getElementById(focusId)?.focus();
@@ -18,37 +26,63 @@ if (focusId) document.getElementById(focusId)?.focus();
 function paintGroup(per, ch, now) {
 const g = $('#g-' + per), items = taskList().filter(t => t.period === per), done = taskDone(ch, per, now);
 const req = items.filter(t => !t.optional), n = req.filter(t => (done[t.id] || 0) >= (t.count || 1)).length;
+const met = items.filter(t => t.meter), opt = items.filter(t => t.optional && !t.meter);
 const pct = req.length ? Math.round(n / req.length * 100) : 0, rs = nextReset(per, now);
 setHtml(g, `<div class="tk-h"><h2 id="h-${per}">${PER[per].t}</h2><span class="tk-n"><b>${n}</b>/${req.length}</span>
 <span class="tk-r">se limpian en <span class="cd" id="rs-${per}"></span> <small>${fmtClock(rs, { now })}</small></span></div>
 <div class="bar" role="progressbar" aria-label="${PER[per].t} hechas" aria-valuemin="0" aria-valuemax="${req.length}" aria-valuenow="${n}"><i style="--w:${pct}%"></i></div>
-<ul class="tk-list">${items.filter(t => !t.optional).map(t => row(t, per, done)).join('')}${items.some(t => t.optional) ? `<li class="tk-sep">Si te sobra tiempo</li>${items.filter(t => t.optional).map(t => row(t, per, done)).join('')}` : ''}${items.length ? '' : '<li class="tk-empty">Sin tareas. Sumá una con el lápiz.</li>'}</ul>
-${legend(items)}<form class="tk-add" data-per="${per}"><input type="text" name="n" maxlength="60" placeholder="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" aria-label="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" required><button class="btn">${ico('i-plus')}Agregar</button></form>`);
+<ul class="tk-list">${req.map(t => row(t, per, done)).join('')}${met.map(t => meterRow(t, ch)).join('')}${opt.length ? `<li class="tk-sep">Si te sobra tiempo</li>${opt.map(t => row(t, per, done)).join('')}` : ''}${items.length ? '' : '<li class="tk-empty">Sin tareas. Sumá una con el lápiz.</li>'}</ul>
+<form class="tk-add" data-per="${per}"><input type="text" name="n" maxlength="60" placeholder="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" aria-label="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" required><button class="btn">${ico('i-plus')}Agregar</button></form>`);
 bind($('#rs-' + per), n2 => [fmtLeft(rs - n2), n2 + leftNext(rs - n2)]);
+for (const t of met) {   // estimado y "se llena en": cambian solos con el reloj (bind), el HTML no
+const s = OD.get().c[ch], v = $(`#od-v-${CSS.escape(t.id)}`), f = $(`#od-f-${CSS.escape(t.id)}`);
+if (!s || !v || !f) continue;
+bind(v, n2 => { const o = odyle(t.meter, s, n2); return [`~${o.v}/${o.cap}`, o.full && o.next]; });
+bind(f, n2 => { const o = odyle(t.meter, s, n2); return o.full ? [`se llena en ${fmtLeft(o.full - n2)} · ${fmtClock(o.full, { now: n2 })}`, n2 + Math.min(leftNext(o.full - n2), 60000)] : [`llena (tope ${o.cap})`, 0]; });
+}
 for (const t of items) if (t.event) {
 const el = $(`#ev-${per}-${CSS.escape(t.id)}`), o = currentOcc(t.event, now) || nextOcc(t.event, now);
 if (el && o) { const cl = clockLeft(o.start); el.classList.toggle('pronto', o.start - now < 2 * HOUR); bind(el, n2 => isLive(o, n2) ? statusText(o, n2) : cl(n2)); }
 }
 }
 const lvOf = t => t.custom ? 'oficial' : t.unverified?.length ? 'sin' : confOf(t);
-function legend(items) {
-const has = new Set(items.map(lvOf));
-const L = [has.has('sin') && '<span><i class="cfl c-sin"></i>sin confirmar</span>', has.has('comunidad') && '<span><i class="cfl c-comunidad"></i>datos del juego</span>'].filter(Boolean);
-return L.length ? `<p class="tk-cfl">${L.join('')}<span>tocá el punto para ver la fuente</span></p>` : '';
-}
+const pie = () => `${taskList().some(t => lvOf(t) === 'sin') ? '<span><i class="cfl c-sin"></i>sin confirmar: tocá el punto</span>' : ''}<span>Cantidades y horarios: datos del juego.</span>`;
 const nowrapEnd = (txt, tail) => { const s = String(txt || ''), i = s.lastIndexOf(' '); return tail ? `${esc(s.slice(0, i + 1))}<span class="nw">${esc(s.slice(i + 1))}${tail}</span>` : esc(s); };
 function row(t, per, done) {
 const v = done[t.id] || 0, max = t.count || 1, ok = v >= max, id = `t-${esc(t.id)}`;
 const tags = [t.custom && '<em class="tag gold">tuya</em>'].filter(Boolean).join('');
 const lv = lvOf(t);
-const conf = lv === 'oficial' ? '' : confTag(t, { lv, note: (t.unverified || []).join(' · '), dot: true });
+const conf = lv === 'sin' ? confTag(t, { lv, note: (t.unverified || []).join(' · '), dot: true }) : '';
 const ctrl = max > 1
 ? `<span class="tk-step" role="group" aria-label="${esc(gname(t))}: ${v} de ${max}"><button type="button" class="iconbtn" data-dec="${esc(t.id)}" aria-label="Una menos"${v ? '' : ' disabled'}>${ico('i-minus')}</button><output id="${id}" tabindex="-1">${v}/${max}</output><button type="button" class="iconbtn" data-inc="${esc(t.id)}" aria-label="Una más"${ok ? ' disabled' : ''}>${ico('i-plus')}</button></span>`
 : `<input type="checkbox" id="${id}" data-chk="${esc(t.id)}"${ok ? ' checked' : ''}>`;
 return `<li class="tk-row${ok ? ' ok' : ''}${t.optional ? ' opt' : ''}" data-t="${esc(t.id)}" data-per="${per}">
-${max > 1 ? '' : ctrl}<label class="tk-txt" ${max > 1 ? '' : `for="${id}"`}>${evPic(t, 80, 'tk-ic', 36) || ico('i-tareas', 'tk-ic')}<span class="tk-name">${esc(gname(t))}${tags}</span>${t.detail || conf ? `<small>${nowrapEnd(gname(t, 'detail'), conf)}</small>` : ''}</label>
+${max > 1 ? '' : ctrl}<label class="tk-txt" ${max > 1 ? '' : `for="${id}"`}>${evPic(t, 80, 'tk-ic', 36) || ico('i-tareas', 'tk-ic')}<span class="tk-name">${esc(gname(t))}${tags}</span>${t.detail || conf ? `<small${t.source ? ` title="Fuente: ${esc(t.source)}"` : ''}>${nowrapEnd(gname(t, 'detail'), conf)}</small>` : ''}</label>
 ${t.event ? `<span class="tk-ev cd" id="ev-${per}-${esc(t.id)}"></span>` : ''}${max > 1 ? ctrl : ''}
 <button type="button" class="iconbtn tk-del" data-del="${esc(t.id)}" aria-label="Quitar ${esc(gname(t))}" title="${t.custom ? 'Borrar' : 'Ocultar'}">${ico('i-trash')}</button></li>`;
+}
+function meterRow(t, ch) {
+const s = OD.get().c[ch], id = esc(t.id), nm = esc(gname(t));
+return `<li class="tk-row tk-meter" data-t="${id}" data-per="${t.period}">
+<label class="tk-txt" for="t-${id}">${evPic(t, 80, 'tk-ic', 36) || ico('i-tareas', 'tk-ic')}<span class="tk-name">${nm}</span><small title="${esc(gname(t, 'detail'))} · Fuente: ${esc(t.source || '')}">${s ? `<span class="cd" id="od-f-${id}"></span>` : esc(gname(t, 'detail'))}${lvOf(t) === 'sin' ? confTag(t, { lv: 'sin', note: t.unverified.join(' · '), dot: true }) : ''}</small></label>
+<span class="tk-step"><button type="button" class="btn ghost tk-od" id="t-${id}" data-od="${id}" title="Anotar cuánta tenés">${s ? `<span id="od-v-${id}"></span>` : 'Anotar'}</button></span>
+<button type="button" class="iconbtn tk-del" data-del="${id}" aria-label="Quitar ${nm}" title="Ocultar">${ico('i-trash')}</button></li>`;
+}
+async function odModal(t) {
+const ch = active(), D = OD.get(), s = D.c[ch], m = t.meter, box = document.createElement('div');
+const sub = s ? s.sub : Object.values(D.c).some(x => x.sub);   // la suscripción del último que anotaste
+box.innerHTML = `<label>¿Cuánta tenés ahora?<input type="number" id="od-n" min="0" max="${m.max}" inputmode="numeric" value="${s ? odyle(m, s, Date.now()).v : ''}"></label>
+<label class="chk" style="margin-top:12px"><input type="checkbox" id="od-s"${sub ? ' checked' : ''}> <span>Tengo suscripción (tope ${m.capSub})</span></label>
+<p class="hint" style="margin-top:10px">Con eso calculo cuánta vas a tener: ${esc(gname(t, 'detail'))}.</p>`;
+setTimeout(() => $('#od-n', box)?.select(), 30);
+box.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'od-n') { e.preventDefault(); box.closest('form').querySelector('.btn.gold').click(); } });
+const ok = await modal({ title: gname(t), node: box, actions: [{ label: 'Cancelar', value: null }, { label: 'Guardar', value: 'ok', primary: true }] });
+const e = parseInt($('#od-n', box).value, 10);
+if (ok !== 'ok' || !(e >= 0)) return;
+D.c = { ...D.c, [ch]: { e: Math.min(m.max, e), at: Date.now(), sub: $('#od-s', box).checked } };
+OD.set(D);
+paint();
+document.getElementById('t-' + t.id)?.focus();
 }
 /* ---------- acciones ---------- */
 const active = () => characters().activo;
@@ -59,10 +93,11 @@ if (!c) return;
 set(c.closest('[data-per]').dataset.per, c.dataset.chk, c.checked ? 1 : 0);
 });
 $('#tk-cols').addEventListener('click', e => {
-const b = e.target.closest('[data-inc],[data-dec],[data-del]');
+const b = e.target.closest('[data-inc],[data-dec],[data-del],[data-od]');
 if (!b) return;
 const li = b.closest('[data-t]'), per = li.dataset.per, id = li.dataset.t;
 if (b.dataset.del) { removeTask(id); return; }
+if (b.dataset.od) { odModal(taskList().find(x => x.id === id)); return; }
 const t = taskList().find(x => x.id === id), v = taskDone(active(), per)[id] || 0;
 set(per, id, Math.max(0, Math.min(t.count || 1, v + (b.dataset.inc ? 1 : -1))));
 document.getElementById('t-' + id)?.focus();
@@ -110,6 +145,8 @@ if (!added.length) return added;
 if (wasEmpty) {                                   // lo marcado en "Mi personaje" pasa al primero que sumás
 const t = TK.get();
 if (t.done.main) { t.done = { ...t.done, [added[0].id]: t.done.main }; delete t.done.main; TK.set(t); }
+const o = OD.get();
+if (o.c.main) { o.c = { ...o.c, [added[0].id]: o.c.main }; delete o.c.main; OD.set(o); }
 }
 p.activo = added[0].id;
 PJ.set(p);
@@ -118,7 +155,7 @@ return added;
 $('#pj-add').onclick = async () => {
 const pr = profile(), box = document.createElement('div');
 box.innerHTML = `<label>Nombre<input type="text" id="pj-n" maxlength="24" autocomplete="off" required></label><p class="hint" style="margin-top:10px">Solo para separar las marcas de cada personaje. ${pr.server ? `Queda en ${esc(serverName(pr.server))}.` : ''}</p>
-<p class="hint pj-ql-l">¿Usás la app de DPS (el medidor de daño de PC)? <button type="button" class="linkbtn" id="pj-ql">Traé tus personajes de ahí</button></p>`;
+<p class="hint pj-ql-l">¿Usás la app de DPS? <button type="button" class="linkbtn" id="pj-ql">Traé tus personajes de ahí</button></p>`;
 $('#pj-ql', box).onclick = () => { box.closest('dialog')?.close(); qlModal(); };
 setTimeout(() => $('#pj-n', box)?.focus(), 30);
 box.addEventListener('keydown', e => { if (e.key === 'Enter' && e.target.id === 'pj-n') { e.preventDefault(); box.closest('form').querySelector('.btn.gold').click(); } });
@@ -139,6 +176,8 @@ PJ.set(p);
 const t = TK.get();
 delete t.done[id];
 TK.set(t);
+const o = OD.get();
+if (o.c[id]) { delete o.c[id]; OD.set(o); }
 paint();
 }
 const QL_DIR = '%APPDATA%\\Questlog\\aion-2';
@@ -195,9 +234,8 @@ const m = location.hash.match(/^#t-(.+)$/), li = m && $(`[data-t="${CSS.escape(d
 if (!li) return;
 li.scrollIntoView({ block: 'center' });
 li.classList.remove('flash'); void li.offsetWidth; li.classList.add('flash');
-$('input,output', li)?.focus();
+$('input,output,[data-od]', li)?.focus();
 }
-$('#tk-lead').textContent = `Lo que conviene hacer cada día y cada semana. Marcalo; en cada reset se limpia solo.`;
 paint();
 on('reset', e => { paint(); toast(e.period === 'weekly' ? 'Reset semanal: tareas semanales y diarias limpias.' : 'Reset diario: las diarias quedaron limpias.'); });
 on('profile', paint);
@@ -207,5 +245,6 @@ on('structure', paint);
 on('tasks', paint);
 onStore('hub-tareas', paint);
 onStore('hub-personajes', paint);
+onStore('hub-odyle', paint);
 addEventListener('hashchange', focusHash);
 if (location.hash) setTimeout(focusHash, 60);

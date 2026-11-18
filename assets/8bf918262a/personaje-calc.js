@@ -8,7 +8,7 @@ export const GATES = [
 { il: 2500, name: 'Trascendencia 4', ok: 0 },
 { il: 2600, name: 'Cueva de Krao y Draupnir difícil', short: 'Krao y Draupnir difícil', ok: 1 },
 { il: 2700, name: 'Cañón de Urugugu e Isla Aérea de Vakron difícil', short: 'Urugugu y Vakron difícil', ok: 1 },
-{ il: 2800, name: 'Templo de Fuego y Caverna del Cuerno Feroz difícil · Forja Abismal: Ludra', short: 'Templo de Fuego difícil y Ludra', ok: 1 },
+{ il: 2800, name: 'Templo de Fuego y Caverna del Cuerno Feroz difícil · Forja Abismal: Ludra (fácil y normal)', short: 'Templo de Fuego difícil y Ludra', ok: 1 },
 { il: 3000, name: 'Forja Abismal: Ludra difícil', short: 'Ludra difícil', ok: 1 },
 ];
 export function gateOf(il) {
@@ -86,6 +86,7 @@ const st = own || k !== 'support' ? src?.stigmas || [] : [];
 m.stig = src?.stigmaAlt ? st : st.slice(0, 4); m.stigAlt = src?.stigmaAlt || st.slice(4);
 m.items = Object.fromEntries(Object.entries(CSLOT).map(([p, s]) => [p, src?.slots?.[s]?.items]).filter(x => x[1]?.length));
 m.il = src?.ilvlMedian || 0;
+m.cls = !own;   // sin muestra de este tipo: lo de arriba es de toda la clase (Healer: pegan, no curan)
 m.gods = src?.theostones?.list || []; m.godPair = src?.theostones?.pairs?.[0] || null;
 m.ms = Object.fromEntries(Object.entries(CSLOT).map(([p, s]) => [p, src?.slots?.[s]?.stones]).filter(x => x[1]?.length));
 m.dae = src?.daevanion || null;
@@ -98,7 +99,7 @@ export function kindGuess(d, items, sets = {}) {
 const sup = new Set((sets.support || []).map(x => String(x.id))), pvpS = new Set((sets.pvp || []).map(x => String(x.id)));
 const core = (d.skills || []).filter(s => s.category === 'Dp' && s.equipped && s.level > 0).map(s => String(s.id)); // como coreOf del server: subidas y puestas
 const its = Object.values(items || {});
-const stones = its.flatMap(it => (it.magicStoneStat || []).map(m => String(m.id))).filter(id => /^pvp/i.test(id)).length;
+const stones = pvpStones(items);
 const lines = its.flatMap(it => [...(it.subStats || []), ...(it.surpassStats || [])].map(m => String(m.id))).filter(id => /^pvp/i.test(id)).length;
 const az = (d.daevanion || [])[5]?.open ?? 0;
 const sig = [];
@@ -113,21 +114,34 @@ if (pvp >= 2) return { kind: 'pvp', sig };
 if (sup.size && ss >= Math.min(2, sup.size)) return { kind: 'support', sig: [`${ss} estigmas de curación subidas`] };
 return { kind: 'pve', sig: sig.length ? [...sig, 'no alcanzan para JcJ'] : [] };
 }
-const hybrid = (d, items) => { const g = kindGuess(d, items); return g.kind === 'pve' && g.sig.length > 0; };
+export const pvpStones = items => Object.values(items || {}).flatMap(it => (it?.magicStoneStat || []).map(m => String(m.id))).filter(id => /^pvp/i.test(id)).length;
+export const hybrid = (d, items) => { const g = kindGuess(d, items); return g.kind === 'pve' && (g.sig.length > 0 || pvpStones(items) >= 3); };
 const ARC_C = ['chalice', 'parchment', 'compass', 'bell', 'mirror'];
 export function estilo(d, items = {}, top = new Map()) {
 const out = new Set(), st = top.stig || [], tieK = st.length === 4 ? st[3].k : undefined;
 const main = new Set([...st, ...(top.stigAlt || []).filter(x => tieK != null && x.k === tieK)].map(x => String(x.id)));
-if (main.size) for (const s of d.skills || []) if (s.category === 'Dp' && s.equipped && s.level >= 10 && !main.has(String(s.id))) out.add('stig:' + s.id);
+if (main.size || top.size) for (const s of d.skills || []) if (s.category === 'Dp' && s.equipped && s.level >= 10 && !main.has(String(s.id))) out.add('stig:' + s.id);
 const G = top.gods || [];
 if (G.length) for (const sl of [1, 2]) for (const g of items[sl]?.godStoneStat || []) { const f = godFam(g.icon); if (f && !G.some(x => x.f === f)) out.add('gs:' + f); }
 ARC_C.forEach((c, i) => {
 const e = (d.equipment || []).find(x => x.slot === 41 + i), t = top.arc?.[c]?.[0]?.set?.[0], my = /PveSet/.test(e?.icon || '') ? 'V' : /DefenceSet/.test(e?.icon || '') ? 'M' : null;
 if (t && my && my !== t && (e.enchant || 0) >= 3) out.add('arc:' + c);
 });
-if (Object.values(items).some(it => (it?.magicStoneStat || []).some(m => pvpId(m.id))) && hybrid(d, items)) out.add('ms');
+const g = pvpStones(items) && kindGuess(d, items);
+if (g && g.kind === 'pve' && g.sig.length) out.add('ms');
 return out;
 }
+const isPaso = x => String(x).startsWith('paso:'), EK = ['pve', 'pvp', 'support'];
+export const estOf = (e, k) => e[k] || { si: e.si.filter(x => !isPaso(x)), no: e.no.filter(x => !isPaso(x)) };
+export function estSet(e, key, v, k) {
+if (!isPaso(key)) { for (const x of EK) e[x] = estOf(e, x); for (const l of ['si', 'no']) e[l] = e[l].filter(isPaso); }
+const b = isPaso(key) ? e : e[k];
+for (const l of ['si', 'no']) b[l] = b[l].filter(x => x !== key);
+if (v) b[v].push(key);
+for (const x of EK) if (e[x] && !e[x].si.length && !e[x].no.length) delete e[x];
+return e;
+}
+export const estEmpty = e => !e.si.length && !e.no.length && !EK.some(x => e[x]);
 const AMP = [[8.8, 0.88], [16.9, 1.69], [32.1, 3.75], [51.4, 6.86], [87.1, 13.07]];
 const WPN = [1, 2], ACC = [10, 11, 12, 13, 14], BRAC = [15, 16], ARMOR = [3, 4, 5, 6, 7, 8, 19];
 const LBL = { 1: 'arma', 2: 'secundaria', 3: 'casco', 4: 'hombreras', 5: 'pechera', 6: 'piernas', 7: 'guantes', 8: 'botas', 19: 'capa', 10: 'collar', 11: 'aro', 12: 'aro', 13: 'anillo', 14: 'anillo', 15: 'brazalete', 16: 'brazalete', 17: 'cinturón', 22: 'amuleto', 23: 'runa', 24: 'runa' };
@@ -190,13 +204,21 @@ cand.push({ id: 'gs', icon: (gEmpty[0] || hands.at(-1)).e.icon, title: gEmpty.le
 gain: [gEmpty.length ? `+${gil} de nivel de objeto con ${two ? 'dos' : 'una'} ${(GR_F[gr] || gr).toLowerCase()}${two ? 's' : ''}` : 'dos iguales aplican un solo efecto', ...(g0 ? [`los top: ${GOD[g0.f]?.[0] || g0.stoneEn} (${g0.k} de ${g0.of})`] : [])],
 cost: 'Una piedra sagrada (Theostone)', il: gil, dmg: 0.3, sure: 'seguro', cheap: 1 });
 }
+const GSV = ['Rare', 'Legend', 'Unique'], TG = top.gods || [];
+const gUp = hands.flatMap(x => (x.it.godStoneStat || []).map(g => ({ g, f: godFam(g.icon) }))).map(o => ({ ...o, to: (TG.find(t => t.f === o.f) || TG[0])?.grade }))
+.filter(o => o.f && GSV.includes(o.g.grade) && GSV.includes(o.to) && GR_N[o.g.grade] < GR_N[o.to]);
+if (gUp.length) {
+const upIl = gUp.reduce((t, o) => t + GS[o.to] - GS[o.g.grade], 0), toS = new Set(gUp.map(o => o.to)), toF = gr => (GR_F[gr] || gr).toLowerCase();
+cand.push({ id: 'gs-up', icon: hands[0].e.icon, title: gUp.length > 1 ? `Subí tus ${gUp.length} piedras sagradas${toS.size === 1 ? ` a ${toF(gUp[0].to)}` : ' de grado'}` : `Subí tu piedra sagrada (${GOD[gUp[0].f]?.[0] || 'la tuya'}) a ${toF(gUp[0].to)}`,
+gain: [`+${upIl} de nivel de objeto`, 'el mismo efecto, más fuerte'], cost: 'Una piedra sagrada del mismo efecto en ese grado', il: upIl, dmg: 0.2, sure: 'seguro', cheap: 1 });
+}
 const pvMs = kind === 'pvp' ? [] : eq.map(e => [e, (items[e.slot]?.magicStoneStat || []).filter(m => pvpId(m.id)).length]).filter(x => x[1]);
 const msN = pvMs.reduce((t, x) => t + x[1], 0);
 if (msN && !mine.has('ms')) {
 const c = {}, hyb = hybrid(d, items);
-for (const [e] of pvMs) { const st = (top.ms?.[e.slot] || []).find(x => !pvpId(x.id)); if (st) c[st.name] = (c[st.name] || 0) + 1; }
+if (!(kind === 'support' && top.cls)) for (const [e, n] of pvMs) { const st = (top.ms?.[e.slot] || []).find(x => !pvpId(x.id)); if (st) c[st.name] = (c[st.name] || 0) + n; }
 const best = Object.entries(c).sort((x, y) => y[1] - x[1])[0]?.[0];
-cand.push({ id: 'ms', icon: pvMs[0][0].icon, title: msN > 1 ? `Cambiá tus ${msN} piedras de maná JcJ` : 'Cambiá tu piedra de maná JcJ', gain: ['solo suman contra jugadores', ...(hyb ? ['Si también hacés PvP, dejalas'] : []), ...(best ? [`los top ponen ${best}`] : [])],
+cand.push({ id: 'ms', icon: pvMs[0][0].icon, title: hyb ? (msN > 1 ? `Tenés ${msN} piedras de maná JcJ` : 'Tenés una piedra de maná JcJ') : msN > 1 ? `Cambiá tus ${msN} piedras de maná JcJ` : 'Cambiá tu piedra de maná JcJ', gain: ['solo suman contra jugadores', ...(hyb ? ['Si también hacés PvP, dejalas'] : []), ...(best ? [`los top ponen ${best}`] : [])],
 cost: `${names(pvMs.map(x => x[0].slot)).replace(/^./, ch => ch.toUpperCase())}: piedras de maná, de lo más barato para mejorar`, il: 0, dmg: 0.3, sure: 'seguro', cheap: 1, past: hyb, ch: 'ms' });
 }
 const parts = skillParts(d, items, boards), daeN = [], tD = top.dae && Object.values(top.dae).some(x => x?.nodes?.length) ? top.dae : null;
@@ -215,8 +237,9 @@ const spec = [...per.values()].map(l => { const s = l[0].s, tl = top.get(String(
 return { s, l, tl, core, T: core ? (SPEC[s.category] || []).find(t => s.level < t && s.level + l.length >= t && (!top.size || tl >= t)) : undefined }; })
 .sort((x, y) => (!!y.T - !!x.T) || (OFFBAR.has(String(x.s.id)) - OFFBAR.has(String(y.s.id))) || (y.core - x.core) || (y.tl - x.tl) || y.l.length - x.l.length);
 const pts = daeN.reduce((t, x) => t + x.cost, 0), hd = spec[0], key = spec.filter(x => x.core).slice(0, 4);
+const kN = key.reduce((t, x) => t + x.l.length, 0), restN = skN - kN, nv = n => `+${n} nivel${n > 1 ? 'es' : ''} de skill`;
 cand.push({ id: 'dae', icon: (key[0] || hd)?.s.icon || null, board: 1, T: hd?.T, title: hd?.T ? `${hd.s.name} a ${hd.T}: nueva especialización` : tD ? `Abrí los ${daeN.length} nodos que abren los top` : `Abrí los ${daeN.length} nodos de skill que te faltan`,
-gain: [...(skN ? [`+${skN} niveles de skill`] : []), `+${pts} de nivel de objeto`], skills: key.length ? key.map(x => ({ icon: x.s.icon, name: x.s.name, n: x.l.length, T: x.T })) : undefined,
+gain: [...(skN ? [kN ? nv(kN) + (restN ? ` (y ${restN} en otras skills)` : '') : nv(skN)] : []), `+${pts} de nivel de objeto`], skills: key.length ? key.map(x => ({ icon: x.s.icon, name: x.s.name, n: x.l.length, T: x.T })) : undefined,
 cost: `${pts} puntos de Daevanion (cristales: subir de nivel y mazmorras selladas)`, il: pts, dmg: hd?.T ? 0.9 : 0.05, sure: 'seguro', heal: 1 });
 }
 const goal = s => {
@@ -251,26 +274,27 @@ gain: [`+${stg.reduce((t, x) => t + x.to - x.s.level, 0)} niveles de estigma`, .
 cost: 'Fragmentos de Estigma', il: 0, dmg: 0.5, sure: 'seguro', heal: 1, ...(keep ? { detail: keep, own: 'stig:' + kept.id } : {}) });
 }
 if (miss && missS && (free || (out && !(outS >= miss.share - 0.25)))) cand.push({ id: 'stig-swap', icon: missS.icon, ...(swap ? { ch: 'stig:' + out.id } : {}),
-title: swap ? `Cambiá ${out.name} por ${missS.name}` : free && missS.equipped ? `Subí ${missS.name} (la tenés en ${missS.level || 0})` : `Poné ${missS.name} en tus estigmas`,
+title: swap ? `Probá ${missS.name} en vez de ${out.name}` : free && missS.equipped ? `Subí ${missS.name} (la tenés en ${missS.level || 0})` : `Poné ${missS.name} en tus estigmas`,
 gain: [`${missS.name}: la suben ${cnt(miss)}${of}`, ...(swap ? [`${out.name} (la tenés en ${out.level}): ${cnt(outA)}${miss.of ? ` de ${miss.of}` : ' %'}`] : [])],
 cost: `Fragmentos de Estigma para subirla (los top la llevan a ${Math.round(miss.lvl || STIG_CAP)}; la tenés en ${missS.level || 0})`, il: 0, dmg: 0.4, sure: 'seguro', heal: 1 });
 const ampAll = eq.reduce((s, e) => s + 5 * Math.max(0, (items[e.slot]?.maxExceedEnchantLevel || 0) - (e.exceed || 0)), 0);
 const daeAll = (d.daevanion || []).slice(0, 4).reduce((s, b) => s + nodesOf(boards[b.id]).filter(n => !n.open).reduce((t, n) => t + (NODE_COST[n.grade] || 0), 0), 0);
 const ways = [['Amplificación', ampAll], ['Encantamiento', encIl], ['Arcanas', arcIl], ['Daevanion (tableros base)', daeAll]].filter(x => x[1] > 0);
 const roof = il + ways.reduce((s, x) => s + x[1], 0);
-const swapG = [], swapCs = new Set(), isTop = (e, L) => L.some(i => i.share >= 0.25 && [i.id, ...(i.ids || [])].map(String).includes(String(e.id)));
+const swapG = [], swapCs = new Set(), has = (e, i) => !!e && [i.id, ...(i.ids || [])].map(String).includes(String(e.id)), isTop = (e, L) => L.some(i => i.share >= 0.25 && has(e, i));
 const swapN = eq.filter(e => top.items?.[e.slot] && !isTop(e, top.items[e.slot])).length;
 for (const e of eq) {
 const L = top.items?.[e.slot], cs = CSLOT[e.slot];
 if (!L || swapCs.has(cs) || isTop(e, L)) continue;
-swapCs.add(cs); swapG.push({ e, it: L[0] });
+const twin = eq.find(x => x !== e && CSLOT[x.slot] === cs);
+swapCs.add(cs); swapG.push({ e, it: has(twin, L[0]) ? { ...L[0], name: 'un segundo ' + L[0].name } : L[0] });
 }
 if (swapG.length && top.il) cand.push({ id: 'gear', icon: swapG[0].e.icon, title: `Tu techo con este equipo: ${fmt(roof)} de nivel de objeto`,
-gain: [`los top: ${fmt(top.il)}`, swapG.length > 4 ? `${swapN} de tus piezas no son de las que llevan los top` : `${list(swapG.map(x => PL[LBL[x.e.slot]] || LBL[x.e.slot])).replace(/^./, c => c.toUpperCase())}: los top usan otras piezas`],
+gain: [`los top: ${fmt(top.il)}`, swapG.length > 4 ? `los top usan otro set en ${swapN} piezas` : `${list(swapG.map(x => PL[LBL[x.e.slot]] || LBL[x.e.slot])).replace(/^./, c => c.toUpperCase())}: los top usan otras piezas`],
 cost: 'Es lo que sigue cuando ya mejoraste lo que tenés', detail: `Los top usan ${bySet(swapG.map(x => x.it))}`, il: 0, dmg: 0, sure: 'seguro' });
 const P = kind === 'support'
-? { dae: 100, pts: 90, gs: 88, ms: 86, stig: 85, arc: 80, 'stig-swap': 75, enc: 70, 'amp-acc': 60, 'amp-arma': 55, ariel: 40, 'amp-brac': 25, 'amp-arm': 20 }
-: { 'amp-acc': 100, 'amp-arma': 100, gs: 92, ms: 90, stig: 85, dae: 80, 'stig-swap': 75, enc: 70, arc: 60, pts: 50, ariel: 40, 'amp-brac': kind === 'pvp' ? 45 : 30, 'amp-arm': kind === 'pvp' ? 35 : 10 };
+? { dae: 100, pts: 90, gs: 88, 'gs-up': 87, ms: 86, stig: 85, arc: 80, 'stig-swap': 75, enc: 70, 'amp-acc': 60, 'amp-arma': 55, ariel: 40, 'amp-brac': 25, 'amp-arm': 20 }
+: { 'amp-acc': 100, 'amp-arma': 100, gs: 92, 'gs-up': 91, ms: 90, stig: 85, dae: 80, 'stig-swap': 75, enc: 70, arc: 60, pts: 50, ariel: 40, 'amp-brac': kind === 'pvp' ? 45 : 30, 'amp-arm': kind === 'pvp' ? 35 : 10 };
 const score = c => P[c.id] + (c.id.startsWith('amp') ? c.dmg * 100 : 0) - (c.id === 'dae' && !c.T ? 40 : 0) - (c.past ? 70 : 0);
 const ord = cand.filter(c => c.id !== 'gear').sort((x, y) => score(y) - score(x)), gear = cand.find(c => c.id === 'gear');
 return { steps: gear ? [...ord, gear] : ord, path: { il, ways, roof } };

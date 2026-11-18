@@ -2,6 +2,7 @@ import {
 $, $$, esc, ico, on, onTick, onStore, bind, countdown, fmtClock, fmtLeft, leftNext, schedule, upcoming, nextReset, renderUpcoming,
 nextBelled, bellButton, getBell, evPic, EVENTS, isLive, isVisible, catIcon, tzSentence, versioned,
 toast, prefs, setPrefs, partsIn, displayTz, store, confTag, clockLeft, gname, galt, alertName, nextOcc, currentOcc, miniTabs, HOUR, MIN,
+storedTimers, bossPic, maintNow, maintEnd, GRUPO_TXT,
 } from './core.js';
 import { renderTodo } from './hoy.js';
 const vivo = () => setTimeout(() => import('./vivo.js' + new URL(import.meta.url).search), 3000);   // ?v=<hash>: el mismo módulo que importa Jefes
@@ -29,28 +30,50 @@ $('.rs-t', el).innerHTML = `${esc(range)} ${mw.announced ? confTag({ source: mw.
 function paintHero() {
 const now = Date.now(), nb = nextBelled(now), box = $('#hero');
 const occ = upcoming(now, { count: 20, minor: false }).find(o => o.start > now || o.entry > now);
-if (!occ) { $('#hero-now').hidden = true; box.innerHTML = '<p class="hero-hint">No hay eventos visibles. Activalos en Ajustes.</p>'; return; }
+const tm = storedTimers(now).filter(t => t.up && t.start > now).sort((a, b) => a.start - b.start)[0];
+const first = tm && (!occ || tm.start < occ.start);
+paintNow(now, first ? '' : occ?.id);
+if (first) return heroTimer(tm, now, nb, box);
+if (!occ) { box.innerHTML = '<p class="hero-hint">No hay eventos visibles. Activalos en Ajustes.</p>'; return; }
 const ev = occ.ev, name = gname(ev), live = isLive(occ, now), portal = live && occ.entry > now;
-const cur = upcoming(now, { count: 20, minor: false }).find(o => isLive(o, now) && o !== occ && o.id !== ev.id);
-const lbl = !live ? 'empieza en' : portal ? `${ev.entryLabel || 'entrada abierta'} · cierra en` : 'termina en';
+const lbl = !live ? 'empieza en' : portal ? `${ev.entryLabel || 'entrada abierta'} · cierra en` : ev.durTxt ? '≈ termina en' : 'termina en';
 const target = !live ? occ.start : portal ? occ.entry : occ.end;
-const bits = [ev.entry ? `${ev.entryLabel} ${ev.entry} min` : '', ev.duration ? `dura ${ev.duration >= 60 ? ev.duration / 60 + ' h' : ev.duration + ' min'}` : '', occ.maint === 'quizas' ? 'puede caer en el mantenimiento' : ''].filter(Boolean);
-const same = nb && nb.item.id === ev.id, mine = getBell(ev.id);
-const nbName = nb && (nb.occ.ev ? gname(nb.occ.ev, 'short') || gname(nb.occ.ev) : alertName(nb.item));
-const hint = mine ? `${ico('i-bell-on')} <span>Te aviso ${leadsTxt(mine)}.${nb && !same ? ` Con campana: <b>${esc(nbName)}</b> <span class="cd" id="hero-nb"></span>` : ''}</span>`
-: nb ? `${ico('i-bell-on')} <span>Con campana: <b>${esc(nbName)}</b> <span class="cd" id="hero-nb"></span></span>` : '';
-const hn0 = $('#hero-now');
-hn0.hidden = !cur;
-hn0.innerHTML = cur ? `<i class="st-dot" aria-hidden="true"></i><span>En curso: <b>${esc(gname(cur.ev, 'short') || gname(cur.ev))}</b> hasta ${fmtClock(cur.end, { now, day: false })}</span>` : '';
+const bits = [ev.entry ? `${ev.entryLabel} ${ev.entry} min` : '', ev.durTxt || (ev.duration ? `dura ${ev.duration >= 60 ? ev.duration / 60 + ' h' : ev.duration + ' min'}` : ''), occ.maint === 'quizas' ? 'puede caer en el mantenimiento' : '',
+occ.approx === 'grupo' ? GRUPO_TXT : occ.approx ? 'hora estimada según tu grupo' : ''].filter(Boolean);
+const hint = bellHint(ev.id, nb);
 box.innerHTML = `${evPic(ev, 80, 'hero-p', 44) || ico(catIcon(ev), 'hero-p hero-i')}
 <div class="hero-id"><p class="hero-n" title="${esc(ev.what ? gname(ev, 'what') : galt(ev) || '')}">${esc(name)}</p>
-<p class="hero-s"><span class="hero-k2">${CAT[ev.category] || 'Evento'}</span><time>${fmtClock(live ? occ.end : occ.start, { now })}${live ? ' fin' : ''}</time>${bits.map(b => `<span>${esc(b)}</span>`).join('')}${confTag(ev)}${confTag(ev, { dot: true })}</p></div>
+<p class="hero-s"><span class="hero-k2">${CAT[ev.category] || 'Evento'}</span><time>${occ.approx && !live || live && ev.durTxt ? '≈ ' : ''}${fmtClock(live ? occ.end : occ.start, { now })}${live ? ' fin' : ''}</time>${bits.map(b => `<span>${esc(b)}</span>`).join('')}${confTag(ev)}${confTag(ev, { dot: true })}</p></div>
 <p class="hero-cw"><span class="hero-l">${lbl}</span><span class="hero-c cd" id="hero-c"></span></p>
 ${hint ? `<p class="hero-hint">${hint}</p>` : ''}`;
 box.append(bellButton(ev.id, name));
 bind($('#hero-c'), n => [fmtLeft(target - n), n + leftNext(target - n)]);
-const hn = $('#hero-nb');
-if (hn) bind(hn, nb.live ? () => 'ya empezó' : clockLeft(nb.occ.start));
+bindNb(nb);
+}
+function heroTimer(t, now, nb, box) {
+const name = gname(t, 'label'), hint = bellHint(t.id, nb), bits = [gname(t, 'note'), t.src].filter(Boolean);
+box.innerHTML = `${bossPic(t.pic, 80, 'hero-p', 44) || ico('i-boss', 'hero-p hero-i')}
+<div class="hero-id"><p class="hero-n">${t.approx ? '≈ ' : ''}${esc(name)}</p>
+<p class="hero-s"><span class="hero-k2">Jefe de mundo</span><time>${fmtClock(t.start, { now })}</time>${bits.map(b => `<span>${esc(b)}</span>`).join('')}</p></div>
+<p class="hero-cw"><span class="hero-l">sale en</span><span class="hero-c cd" id="hero-c"></span></p>
+${hint ? `<p class="hero-hint">${hint}</p>` : ''}`;
+box.append(bellButton(t.id, name));
+bind($('#hero-c'), n => n < t.start ? [fmtLeft(t.start - n), n + leftNext(t.start - n)] : [t.liveText || 'ya puede estar', 0]);
+bindNb(nb);
+}
+function bellHint(id, nb) {
+const same = nb && nb.item.id === id, mine = getBell(id);
+const nbName = nb && (nb.occ.ev ? gname(nb.occ.ev, 'short') || gname(nb.occ.ev) : alertName(nb.item));
+return mine ? `${ico('i-bell-on')} <span>Te aviso ${leadsTxt(mine)}.${nb && !same ? ` Con campana: <b>${esc(nbName)}</b> <span class="cd" id="hero-nb"></span>` : ''}</span>`
+: nb ? `${ico('i-bell-on')} <span>Con campana: <b>${esc(nbName)}</b> <span class="cd" id="hero-nb"></span></span>` : '';
+}
+const bindNb = nb => { const hn = $('#hero-nb'); if (hn) bind(hn, nb.live ? () => 'ya empezó' : clockLeft(nb.occ.start)); };
+function paintNow(now, id) {
+const el = $('#hero-now'), mw = maintNow(now);
+const cur = !mw && upcoming(now, { count: 20, minor: false }).find(o => isLive(o, now) && o.id !== id);
+el.hidden = !mw && !cur;
+el.innerHTML = mw ? `<i class="st-dot" aria-hidden="true"></i><span>Mantenimiento en curso · hasta <b>${maintEnd(mw, now)}</b></span>`
+: cur ? `<i class="st-dot" aria-hidden="true"></i><span>En curso: <b>${esc(gname(cur.ev, 'short') || gname(cur.ev))}</b> hasta ${fmtClock(cur.end, { now, day: false })}</span>` : '';
 }
 const CAT = { pvp: 'PvP', boss: 'Jefe', evento: 'Evento' };
 const leadsTxt = L => { const t = L.map(l => l ? `${l} min` : 'al inicio'); return (t.length > 1 ? t.slice(0, -1).join(', ') + ' y ' + t.at(-1) : t[0]) + (L.some(l => l) ? (L.includes(0) && L.length > 1 ? '' : ' antes') : ''); };
@@ -76,7 +99,7 @@ let n = 0;
 const rows = evs.map(ev => {
 const bl = c.list.filter(o => o.id === ev.id && Math.max(o.end, o.start + 1) > t0 && o.start < t1).map(o => {
 const w = Math.max(o.end - o.start, 0), cls = ['tl-b', isLive(o, now) && 'live', o.maint === 'si' && 'skip', o.maint === 'quizas' && 'quizas', !w && 'pt'].filter(Boolean).join(' ');
-const tip = `${gname(ev)} · ${fmtClock(o.start, { now, day: false })}${w ? '–' + fmtClock(o.end, { now, day: false }) : ''}${o.maint === 'si' ? ' · no ocurre: mantenimiento' : o.maint === 'quizas' ? ' · puede caer en el mantenimiento' : ''}`;
+const tip = `${gname(ev)} · ${fmtClock(o.start, { now, day: false })}${w ? '–' + fmtClock(o.end, { now, day: false }) : ''}${o.maint === 'si' ? ' · no ocurre: mantenimiento' : o.maint === 'quizas' ? ' · puede caer en el mantenimiento' : ''}${o.approx === 'grupo' ? ' · ' + GRUPO_TXT : o.approx ? ' · hora estimada' : ''}`;
 const portal = o.entry && w ? `<b style="width:${(o.entry - o.start) / w * 100}%"></b>` : '';
 return `<i class="${cls}" style="left:${pct(o.start)};width:${w ? `calc(${pct(o.end)} - ${pct(o.start)})` : '0'}" title="${esc(tip)}">${portal}</i>`;
 }).join('');
@@ -172,7 +195,7 @@ $('#up-sub').textContent = prefs().clock === 'server' ? 'hora del server' : 'en 
 function paintAll() { paintResets(); paintHero(); paintTl(); paintTz(); }
 const ONE = matchMedia('(max-width: 960px), (orientation: portrait) and (min-height: 1400px)');
 let stopUp = () => {};
-const mountUp = () => { stopUp(); stopUp = renderUpcoming($('#up'), html.classList.contains('mini') ? { count: 8, within: 6 * HOUR } : { count: ONE.matches ? 10 : 14, minorLast: true }); };
+const mountUp = () => { stopUp(); stopUp = renderUpcoming($('#up'), html.classList.contains('mini') ? { count: 8, within: 6 * HOUR } : { ...(ONE.matches ? { count: 8, within: 6 * HOUR } : { count: 14 }), minorLast: true }); };
 ONE.addEventListener?.('change', mountUp);
 mountUp();
 paintAll();
