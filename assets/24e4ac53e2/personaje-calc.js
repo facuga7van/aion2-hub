@@ -8,7 +8,7 @@ export const GATES = [
 { il: 2500, name: 'Trascendencia 4', ok: 0 },
 { il: 2600, name: 'Cueva de Krao y Draupnir difícil', short: 'Krao y Draupnir difícil', ok: 1 },
 { il: 2700, name: 'Cañón de Urugugu e Isla Aérea de Vakron difícil', short: 'Urugugu y Vakron difícil', ok: 1 },
-{ il: 2800, name: 'Templo de Fuego y Caverna del Cuerno Feroz difícil · Forja Abismal: Ludra (fácil y normal)', short: 'Templo de Fuego difícil y Ludra', ok: 1 },
+{ il: 2800, name: 'Templo de Fuego y Caverna del Cuerno Feroz difícil · Forja Abismal: Ludra (fácil y normal)', short: 'Templo de Fuego difícil y Ludra fácil', in: 'Ludra fácil', ok: 1 },
 { il: 3000, name: 'Forja Abismal: Ludra difícil', short: 'Ludra difícil', ok: 1 },
 ];
 export function gateOf(il) {
@@ -72,9 +72,9 @@ for (const s of d.skills || []) { const x = get(s.id); x.base = Math.max(0, (s.l
 return out;
 }
 export function skillHint(s, x) {
-if (s.category === 'Dp') return !s.equipped ? '' : s.level >= STIG_CAP ? 'Al tope: 20' : `Con Fragmentos de Estigma hasta 20 (te faltan ${STIG_CAP - (s.level || 0)})`;
+if (s.category === 'Dp') return !s.equipped ? '' : s.level >= STIG_CAP ? 'Al tope: 20' : `Con Fragmentos de Estigma hasta 20 (${STIG_CAP - (s.level || 0) > 1 ? 'te faltan' : 'te falta'} ${STIG_CAP - (s.level || 0)})`;
 if (!x) return '';
-if (x.base < BASE_CAP) return `${BASE_CAP - x.base} con puntos de skill (la base llega a ${BASE_CAP})`;
+if (x.base < BASE_CAP) return `Base ${x.base} de ${BASE_CAP} con puntos de skill: se puede hasta +${BASE_CAP - x.base}`;
 if (x.dae < x.daeMax) return `${x.daeMax - x.dae} con Daevanion: ${[...new Set(x.daeMiss)].join(', ')}`;
 return 'Lo que sigue sale de líneas de Arcana y de equipo';
 }
@@ -105,14 +105,14 @@ const az = (d.daevanion || [])[5]?.open ?? 0;
 const sig = [];
 let pvp = 0;
 if ((d.equipment || []).some(e => FIERCE.has(String(e.id)))) { pvp += 2; sig.push('Amuleto de batalla feroz'); }
-if (stones >= 8) { pvp++; sig.push(`${stones} piedras de maná de JcJ`); }
-if (lines >= 2) { pvp += lines >= 10 ? 2 : 1; sig.push(`${lines} líneas de JcJ en el equipo`); }
+if (stones >= 8) { pvp++; sig.push(`${stones} piedras de maná de PvP`); }
+if (lines >= 2) { pvp += lines >= 10 ? 2 : 1; sig.push(`${lines} líneas de PvP en el equipo`); }
 if (az >= 90) { pvp++; sig.push(`Azphel con ${az} nodos`); }
 const ps = core.filter(id => pvpS.has(id)).length, ss = core.filter(id => sup.has(id)).length;
-if (ps) { pvp++; sig.push('una estigma de JcJ subida'); }
+if (ps) { pvp++; sig.push('una estigma de PvP subida'); }
 if (pvp >= 2) return { kind: 'pvp', sig };
 if (sup.size && ss >= Math.min(2, sup.size)) return { kind: 'support', sig: [`${ss} estigmas de curación subidas`] };
-return { kind: 'pve', sig: sig.length ? [...sig, 'no alcanzan para JcJ'] : [] };
+return { kind: 'pve', sig: sig.length ? [...sig, 'no alcanzan para PvP'] : [] };
 }
 export const pvpStones = items => Object.values(items || {}).flatMap(it => (it?.magicStoneStat || []).map(m => String(m.id))).filter(id => /^pvp/i.test(id)).length;
 export const hybrid = (d, items) => { const g = kindGuess(d, items); return g.kind === 'pve' && (g.sig.length > 0 || pvpStones(items) >= 3); };
@@ -146,17 +146,18 @@ const AMP = [[8.8, 0.88], [16.9, 1.69], [32.1, 3.75], [51.4, 6.86], [87.1, 13.07
 const WPN = [1, 2], ACC = [10, 11, 12, 13, 14], BRAC = [15, 16], ARMOR = [3, 4, 5, 6, 7, 8, 19];
 const LBL = { 1: 'arma', 2: 'secundaria', 3: 'casco', 4: 'hombreras', 5: 'pechera', 6: 'piernas', 7: 'guantes', 8: 'botas', 19: 'capa', 10: 'collar', 11: 'aro', 12: 'aro', 13: 'anillo', 14: 'anillo', 15: 'brazalete', 16: 'brazalete', 17: 'cinturón', 22: 'amuleto', 23: 'runa', 24: 'runa' };
 const fmt = n => new Intl.NumberFormat('es-AR', { maximumFractionDigits: 1 }).format(n);
+const pl = (n, w, p = w + 's') => `${n} ${n === 1 ? w : p}`;   // "1 nivel", "2 niveles"
 const list = a => a.length > 1 ? a.slice(0, -1).join(', ') + ' y ' + a.at(-1) : a[0] || '';
 const PL = { aro: 'aros', anillo: 'anillos', brazalete: 'brazaletes', runa: 'runas' };
 const names = slots => { const c = {}; for (const s of slots) c[LBL[s]] = (c[LBL[s]] || 0) + 1; return list(Object.entries(c).map(([k, n]) => n > 1 ? PL[k] || k : k)); };
 const pvpId = id => /^pvp/i.test(String(id));
 const STIG_SLOTS = 4;   // espacios de estigma en Global
-export function bySet(L) {
 const tails = n => { const t = []; for (let i = n.indexOf(' de '); i >= 0; i = n.indexOf(' de ', i + 1)) t.push(n.slice(i + 4)); return t; };
+export function bySet(L) {
 const cnt = {}, left = [...L], out = [];
-for (const x of L) for (const t of new Set(tails(x.name))) cnt[t] = (cnt[t] || 0) + 1;
+for (const x of L) if (!x.or) for (const t of new Set(tails(x.name))) cnt[t] = (cnt[t] || 0) + 1;
 for (const [t] of Object.entries(cnt).filter(e => e[1] >= 2).sort((a, b) => b[1] - a[1] || b[0].length - a[0].length)) {
-const g = left.filter(x => tails(x.name).includes(t));
+const g = left.filter(x => !x.or && tails(x.name).includes(t));
 if (g.length < 2) continue;
 const p = g.map(x => Math.round(x.share * 100)), lo = Math.min(...p), hi = Math.max(...p);
 out.push(`Set de ${t} (${lo === hi ? lo : `${lo}–${hi}`} %)`);
@@ -194,7 +195,7 @@ if (enc.length) cand.push({ id: 'enc', icon: enc[0].icon, title: encLong ? `Term
 ...(encLong ? { detail: encD } : { cost: encD }), il: encIl, dmg: 0.2 / Math.max(1, encIl), sure: 'seguro', cheap: 1 });
 const arc = eq.filter(e => isArcana(e.slot) && items[e.slot]?.maxEnchantLevel > (e.enchant || 0));
 const arcIl = arc.reduce((s, e) => s + items[e.slot].maxEnchantLevel - (e.enchant || 0), 0);
-if (arc.length) cand.push({ id: 'arc', icon: arc[0].icon, title: `Subí ${arc.length > 1 ? `tus ${arc.length} Arcanas` : 'la Arcana'} a +${items[arc[0].slot].maxEnchantLevel}`, gain: [`+${arcIl} de nivel de objeto`, `+${arcIl} niveles de skill`],
+if (arc.length) cand.push({ id: 'arc', icon: arc[0].icon, title: `Subí ${arc.length > 1 ? `tus ${arc.length} Arcanas` : 'la Arcana'} a +${items[arc[0].slot].maxEnchantLevel}`, gain: [`+${arcIl} de nivel de objeto`, `+${pl(arcIl, 'nivel', 'niveles')} de skill`],
 cost: 'Cada nivel suma +1 a una de sus líneas de skill', il: arcIl, dmg: 0.1, sure: 'seguro', cheap: 1 });
 const hands = [1, 2].map(s => ({ s, e: by.get(s), it: items[s] })).filter(x => x.e && x.it?.godStoneSlotCount);
 const gEmpty = hands.filter(x => x.it.godStoneSlotCount > (x.it.godStoneStat || []).length), myF = hands.flatMap(x => (x.it.godStoneStat || []).map(g => godFam(g.icon)).filter(Boolean));
@@ -202,7 +203,7 @@ if (gEmpty.length || myF.length > new Set(myF).size) {
 const G = top.gods || [], g0 = G.find(x => !myF.includes(x.f)), gr = G[0]?.grade || 'Legend', gil = gEmpty.length * (GS[gr] || 0), two = gEmpty.length > 1;
 cand.push({ id: 'gs', icon: (gEmpty[0] || hands.at(-1)).e.icon, title: gEmpty.length ? `Poné una piedra sagrada en ${two ? 'el arma y la secundaria' : gEmpty[0].s === 1 ? 'el arma' : 'la secundaria'}` : 'Dos piedras sagradas iguales: cambiá una',
 gain: [gEmpty.length ? `+${gil} de nivel de objeto con ${two ? 'dos' : 'una'} ${(GR_F[gr] || gr).toLowerCase()}${two ? 's' : ''}` : 'dos iguales aplican un solo efecto', ...(g0 ? [`los top: ${GOD[g0.f]?.[0] || g0.stoneEn} (${g0.k} de ${g0.of})`] : [])],
-cost: 'Una piedra sagrada (Theostone)', il: gil, dmg: 0.3, sure: 'seguro', cheap: 1 });
+cost: 'Una piedra sagrada', il: gil, dmg: 0.3, sure: 'seguro', cheap: 1 });
 }
 const GSV = ['Rare', 'Legend', 'Unique'], TG = top.gods || [];
 const gUp = hands.flatMap(x => (x.it.godStoneStat || []).map(g => ({ g, f: godFam(g.icon) }))).map(o => ({ ...o, to: (TG.find(t => t.f === o.f) || TG[0])?.grade }))
@@ -218,7 +219,7 @@ if (msN && !mine.has('ms')) {
 const c = {}, hyb = hybrid(d, items);
 if (!(kind === 'support' && top.cls)) for (const [e, n] of pvMs) { const st = (top.ms?.[e.slot] || []).find(x => !pvpId(x.id)); if (st) c[st.name] = (c[st.name] || 0) + n; }
 const best = Object.entries(c).sort((x, y) => y[1] - x[1])[0]?.[0];
-cand.push({ id: 'ms', icon: pvMs[0][0].icon, title: hyb ? (msN > 1 ? `Tenés ${msN} piedras de maná JcJ` : 'Tenés una piedra de maná JcJ') : msN > 1 ? `Cambiá tus ${msN} piedras de maná JcJ` : 'Cambiá tu piedra de maná JcJ', gain: ['solo suman contra jugadores', ...(hyb ? ['Si también hacés PvP, dejalas'] : []), ...(best ? [`los top ponen ${best}`] : [])],
+cand.push({ id: 'ms', icon: pvMs[0][0].icon, title: hyb ? (msN > 1 ? `Tenés ${msN} piedras de maná PvP` : 'Tenés una piedra de maná PvP') : msN > 1 ? `Cambiá tus ${msN} piedras de maná PvP` : 'Cambiá tu piedra de maná PvP', gain: ['solo suman contra jugadores', ...(hyb ? ['Si también hacés PvP, dejalas'] : []), ...(best ? [`los top ponen ${best}`] : [])],
 cost: `${names(pvMs.map(x => x[0].slot)).replace(/^./, ch => ch.toUpperCase())}: piedras de maná, de lo más barato para mejorar`, il: 0, dmg: 0.3, sure: 'seguro', cheap: 1, past: hyb, ch: 'ms' });
 }
 const parts = skillParts(d, items, boards), daeN = [], tD = top.dae && Object.values(top.dae).some(x => x?.nodes?.length) ? top.dae : null;
@@ -230,7 +231,7 @@ const m = n.type === 'SkillLevel' && String(n.effectList?.[0]?.desc || '').match
 if (n.type === 'SkillLevel' ? s && useful(s, parts.get(String(s.id))) : W) daeN.push({ s, board: b.name, cost: NODE_COST[n.grade] || 0 });
 }
 }
-if (daeN.length) {
+if (daeN.length && !(kind === 'support' && top.cls)) {
 const per = new Map(), skN = daeN.filter(x => x.s).length;
 for (const x of daeN.filter(x => x.s)) { const k = String(x.s.id); per.set(k, [...(per.get(k) || []), x]); }
 const spec = [...per.values()].map(l => { const s = l[0].s, tl = top.get(String(s.id)) ?? 0, core = !top.size || tl >= s.level;
@@ -238,7 +239,7 @@ return { s, l, tl, core, T: core ? (SPEC[s.category] || []).find(t => s.level < 
 .sort((x, y) => (!!y.T - !!x.T) || (OFFBAR.has(String(x.s.id)) - OFFBAR.has(String(y.s.id))) || (y.core - x.core) || (y.tl - x.tl) || y.l.length - x.l.length);
 const pts = daeN.reduce((t, x) => t + x.cost, 0), hd = spec[0], key = spec.filter(x => x.core).slice(0, 4);
 const kN = key.reduce((t, x) => t + x.l.length, 0), restN = skN - kN, nv = n => `+${n} nivel${n > 1 ? 'es' : ''} de skill`;
-cand.push({ id: 'dae', icon: (key[0] || hd)?.s.icon || null, board: 1, T: hd?.T, title: hd?.T ? `${hd.s.name} a ${hd.T}: nueva especialización` : tD ? `Abrí los ${daeN.length} nodos que abren los top` : `Abrí los ${daeN.length} nodos de skill que te faltan`,
+cand.push({ id: 'dae', icon: (key[0] || hd)?.s.icon || null, board: 1, T: hd?.T, title: hd?.T ? `${hd.s.name} a ${hd.T}: nueva especialización` : tD ? (daeN.length > 1 ? `Abrí los ${daeN.length} nodos que abren los top` : 'Abrí el nodo que abren los top') : daeN.length > 1 ? `Abrí los ${daeN.length} nodos de skill que te faltan` : 'Abrí el nodo de skill que te falta',
 gain: [...(skN ? [kN ? nv(kN) + (restN ? ` (y ${restN} en otras skills)` : '') : nv(skN)] : []), `+${pts} de nivel de objeto`], skills: key.length ? key.map(x => ({ icon: x.s.icon, name: x.s.name, n: x.l.length, T: x.T })) : undefined,
 cost: `${pts} puntos de Daevanion (cristales: subir de nivel y mazmorras selladas)`, il: pts, dmg: hd?.T ? 0.9 : 0.05, sure: 'seguro', heal: 1 });
 }
@@ -248,11 +249,11 @@ if (!top.size) return useful(s, x) ? BASE_CAP : 0;
 const t = top.get(String(s.id));
 return t == null ? 0 : Math.max(1, Math.min(BASE_CAP, Math.round(t - Math.max(x?.dae || 0, x?.daeMax || 0) - (x?.gear || 0) - (x?.arc || 0))));
 };
-const low = (d.skills || []).filter(s => s.category !== 'Dp' && inBar(s) && (parts.get(String(s.id))?.base ?? BASE_CAP) < goal(s)).map(s => ({ s, n: goal(s) - parts.get(String(s.id)).base }));
-if (low.length) cand.push({ id: 'pts', icon: low[0].s.icon, title: `Subí ${low.length > 1 ? `${low.length} skills` : low[0].s.name} con puntos de skill`, gain: [`+${low.reduce((t, x) => t + x.n, 0)} niveles de skill`, ...(top.size ? ['hasta el nivel de los top'] : [])],
+const low = kind === 'support' && top.cls ? [] : (d.skills || []).filter(s => s.category !== 'Dp' && inBar(s) && (parts.get(String(s.id))?.base ?? BASE_CAP) < goal(s)).map(s => ({ s, n: goal(s) - parts.get(String(s.id)).base }));
+if (low.length) cand.push({ id: 'pts', icon: low[0].s.icon, title: `Subí ${low.length > 1 ? `${low.length} skills` : low[0].s.name} con puntos de skill`, gain: [`+${pl(low.reduce((t, x) => t + x.n, 0), 'nivel', 'niveles')} de skill`, ...(top.size ? ['hasta el nivel de los top'] : [])],
 skills: low.slice(0, 4).map(({ s, n }) => ({ icon: s.icon, name: s.name, n })), cost: 'Solo si te quedan puntos: la ficha oficial no muestra cuántos tenés', il: 0, dmg: 0.3, sure: 'estimado', heal: 1 });
 const ar = (d.daevanion || [])[4];
-if (ar && ar.open < ar.total && il >= 2600 && kind !== 'pvp') cand.push({ id: 'ariel', icon: null, board: 1, title: 'Juntá Fragmentos de Ariel en Expedición difícil', gain: ['daño a jefes y amplificación JcE', `${ar.total - ar.open} nodos por abrir`],
+if (ar && ar.open < ar.total && il >= 2600 && kind !== 'pvp') cand.push({ id: 'ariel', icon: null, board: 1, title: 'Juntá Fragmentos de Ariel en Expedición difícil', gain: ['daño a jefes y amplificación PvE', `${pl(ar.total - ar.open, 'nodo')} por abrir`],
 cost: '100 fragmentos = 1 cristal de Ariel, hasta 30 por personaje', il: 0, dmg: 0.02, sure: 'estimado' });
 const sMain = new Map((top.stig || []).map(x => [String(x.id), x])), myOwn = s => mine.has('stig:' + s.id);
 const myStg = (d.skills || []).filter(s => s.category === 'Dp' && s.equipped && s.level > 0), myIds = new Set(myStg.map(s => String(s.id)));
@@ -270,7 +271,7 @@ return { s, tl, T, to: T || tl, own };
 if (stg.length) {
 const allT = stg.every(x => x.T), oneT = allT && new Set(stg.map(x => x.T)).size === 1, tls = new Set(stg.filter(x => !x.own).map(x => x.tl)), [s0] = stg;
 cand.push({ id: 'stig', icon: s0.s.icon, T: s0.T, title: stg.length > 1 ? `Subí ${stg.length} estigmas ${oneT ? `a ${s0.T}` : allT ? 'a su próxima especialización' : 'al nivel de los top'}` : s0.T ? `${s0.s.name} a ${s0.T}: nueva especialización` : `Subí ${s0.s.name} a ${s0.tl}`,
-gain: [`+${stg.reduce((t, x) => t + x.to - x.s.level, 0)} niveles de estigma`, ...(tls.size === 1 ? [`los top: ${[...tls][0]}`] : [])], skills: stg.slice(0, 4).map(x => ({ icon: x.s.icon, name: x.s.name, n: x.to - x.s.level, T: x.T })),
+gain: [`+${pl(stg.reduce((t, x) => t + x.to - x.s.level, 0), 'nivel', 'niveles')} de estigma`, ...(tls.size === 1 ? [`los top: ${[...tls][0]}`] : [])], skills: stg.slice(0, 4).map(x => ({ icon: x.s.icon, name: x.s.name, n: x.to - x.s.level, T: x.T })),
 cost: 'Fragmentos de Estigma', il: 0, dmg: 0.5, sure: 'seguro', heal: 1, ...(keep ? { detail: keep, own: 'stig:' + kept.id } : {}) });
 }
 if (miss && missS && (free || (out && !(outS >= miss.share - 0.25)))) cand.push({ id: 'stig-swap', icon: missS.icon, ...(swap ? { ch: 'stig:' + out.id } : {}),
@@ -283,11 +284,18 @@ const ways = [['Amplificación', ampAll], ['Encantamiento', encIl], ['Arcanas', 
 const roof = il + ways.reduce((s, x) => s + x[1], 0);
 const swapG = [], swapCs = new Set(), has = (e, i) => !!e && [i.id, ...(i.ids || [])].map(String).includes(String(e.id)), isTop = (e, L) => L.some(i => i.share >= 0.25 && has(e, i));
 const swapN = eq.filter(e => top.items?.[e.slot] && !isTop(e, top.items[e.slot])).length;
+const myT = new Set(eq.flatMap(x => tails(String(x.name || '')))), topT = {};
+for (const L of new Set(Object.values(top.items || {}))) if (!(L[1]?.share === L[0].share)) for (const t of new Set(tails(L[0].name))) topT[t] = (topT[t] || 0) + 1;
+const pick = L => {
+const T = L.filter(i => i.share === L[0].share), sc = T.map(i => Math.max(0, ...tails(i.name).map(t => (myT.has(t) ? 100 : 0) + (topT[t] || 0)))), mx = Math.max(...sc);
+return T.length < 2 ? L[0] : mx > 0 && sc.filter(x => x === mx).length === 1 ? T[sc.indexOf(mx)] : { ...T[0], name: T.map(i => i.name).join(' o '), or: 1 };
+};
 for (const e of eq) {
 const L = top.items?.[e.slot], cs = CSLOT[e.slot];
 if (!L || swapCs.has(cs) || isTop(e, L)) continue;
 const twin = eq.find(x => x !== e && CSLOT[x.slot] === cs);
-swapCs.add(cs); swapG.push({ e, it: has(twin, L[0]) ? { ...L[0], name: 'un segundo ' + L[0].name } : L[0] });
+const it = pick(L);
+swapCs.add(cs); swapG.push({ e, it: has(twin, it) ? { ...it, name: 'un segundo ' + it.name } : it });
 }
 if (swapG.length && top.il) cand.push({ id: 'gear', icon: swapG[0].e.icon, title: `Tu techo con este equipo: ${fmt(roof)} de nivel de objeto`,
 gain: [`los top: ${fmt(top.il)}`, swapG.length > 4 ? `los top usan otro set en ${swapN} piezas` : `${list(swapG.map(x => PL[LBL[x.e.slot]] || LBL[x.e.slot])).replace(/^./, c => c.toUpperCase())}: los top usan otras piezas`],

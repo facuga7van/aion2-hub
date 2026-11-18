@@ -300,7 +300,7 @@ function structure(now) {
 const c = schedule(now);
 nextB = now + HOUR;
 for (const o of c.list) for (const t of [o.start, o.entry, o.end]) if (t > now && t < nextB) nextB = t;
-for (const o of storedTimers(now)) for (const t of [o.start, o.end]) if (t > now && t < nextB) nextB = t;
+for (const o of storedTimers(now)) for (const t of [o.start - 6 * HOUR, o.start, o.end]) if (t > now && t < nextB) nextB = t;
 for (const w of c.mw) for (const t of [w.start, w.maxEnd]) if (t > now && t < nextB) nextB = t;   // "Mantenimiento en curso" entra y sale a horario
 const d = lastReset('daily', now), w = lastReset('weekly', now);
 const rd = nextReset('daily', now);
@@ -844,7 +844,7 @@ box.append(m);
 }
 if (live) box.append(stripItem(live, now, 'st-live'));
 const seq = next.map((o, i) => [o.start, stripItem(o, now, 'st-next' + (i ? ' st-2' : ''))]);
-const tm = storedTimers(now).sort((a, b) => (a.start <= now) - (b.start <= now) || a.start - b.start)[0];
+const tm = storedTimers(now).filter(t => !t.bell || t.start - now <= 6 * HOUR).sort((a, b) => (a.start <= now) - (b.start <= now) || a.start - b.start)[0];
 if (tm) {
 const a = document.createElement('a');
 a.className = 'st-i st-timer';
@@ -985,12 +985,12 @@ f.append(b);
 return f;
 }
 /* ---------- ajustes y onboarding de un paso ---------- */
-export function openSettings({ welcome = false } = {}) {
+export function openSettings({ welcome = false, focus = '' } = {}) {
 const pr = profile(), now = Date.now();
 const regOpts = Object.entries(REG).map(([k, r]) => `<option value="${k}"${k === pr.region ? ' selected' : ''}>${esc(r.name)}</option>`).join('');
 const evAll = EVS.filter(e => e.category !== 'reset'), evOn = evAll.filter(isVisible).length;
 const evRows = evAll.map(e => `<label class="chk"><input type="checkbox" data-vis="${e.id}"${isVisible(e) ? ' checked' : ''}> <span data-evn="${e.id}">${esc(gname(e))}</span>${confOf(e) === 'sin' ? ' ' + confTag(e) : ''}</label>`).join('');
-const html = `${welcome ? `<div class="ob-fac" role="group" aria-label="Tu facción" tabindex="-1" autofocus>${Object.entries(FACCION).map(([f, n]) => `<button type="button" class="ob-f" data-fac="${f}"><i class="femb femb-${f}" aria-hidden="true"></i><b>${n}</b></button>`).join('')}</div>` : ''}
+const html = `${welcome ? `<div class="ob-fac" role="group" aria-label="Tu facción" tabindex="-1" autofocus>${Object.entries(FACCION).map(([f, n]) => `<button type="button" class="ob-f" data-fac="${f}"><i class="femb femb-${f}" aria-hidden="true"></i><b>${n}</b></button>`).join('')}</div>` : `<label class="chk s-comp"><input type="checkbox" id="s-comp"${store.get('hub-compacto', 0) ? ' checked' : ''}> Vista compacta <small>para tenerla en un costado de la pantalla</small></label>`}
 <fieldset><legend>${welcome ? 'Tu server <small>para ver los jefes en vivo</small>' : 'Dónde jugás'}</legend>
 <div class="f2"><label>Región<span class="sel"><select id="s-reg">${regOpts}</select></span></label>
 <label>Servidor<span class="sel"><select id="s-srv"></select></span></label></div>
@@ -1013,7 +1013,6 @@ ${'speechSynthesis' in window ? `<label class="chk" title='"Kashapa en cinco min
 <div class="f2 q"><label>Desde <input type="time" id="s-qf" value="${A.quiet.from}"></label><label>Hasta <input type="time" id="s-qt" value="${A.quiet.to}"></label></div>
 <p class="hint">${'Notification' in window ? (Notification.permission === 'granted' ? 'Notificaciones del sistema: permitidas.' : Notification.permission === 'denied' ? 'Notificaciones del sistema: bloqueadas en este navegador (igual te aviso en la página).' : 'El permiso de notificaciones se pide la primera vez que tocás una campana.') : 'Este navegador no tiene notificaciones: te aviso en la página.'}</p>
 <button type="button" class="btn" id="s-test">${ico('i-bell-on')} Probar aviso</button></fieldset>
-<label class="chk s-comp"><input type="checkbox" id="s-comp"${store.get('hub-compacto', 0) ? ' checked' : ''}> Vista compacta <small>para tenerla en un costado de la pantalla</small></label>
 <details class="more-av s-evs"><summary>Eventos que ves <small>(${evOn} de ${evAll.length})</small></summary><div class="evs">${evRows}</div></details>
 <p class="hint">De dónde salen los datos: <button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button> · <button type="button" class="linkbtn" data-hub="help">Atajos de teclado <kbd>?</kbd></button></p>`}`;
 const box = document.createElement('div');
@@ -1072,6 +1071,7 @@ else if (['s-qon', 's-qf', 's-qt'].includes(t.id)) setAlertPrefs({ quiet: { on: 
 $('#s-vol', box)?.addEventListener('input', e => setAlertPrefs({ vol: +e.target.value }));
 if (!welcome) store.set('hub-onboarded', 1);
 const done = modal({ title: welcome ? '¿Con qué facción jugás?' : 'Ajustes', node: box, cls: 'settings' + (welcome ? ' welcome' : ''), actions: welcome ? [{ label: 'Ahora no', value: 'skip' }, { label: 'Listo', value: 'ok', primary: true }] : [{ label: 'Listo', value: 'ok', primary: true }] });
+if (focus) $(focus, box)?.focus();
 if (welcome) done.then(v => { const f = store.get('hub-faccion', null); if (v || f) store.set('hub-onboarded', 1); if (!f) facHint(); });
 return done;
 }
@@ -1133,6 +1133,12 @@ const L = taskList().filter(x => x.period === per && !x.optional), d = taskDone(
 out[per] = { done: L.filter(x => (d[x.id] || 0) >= (x.count || 1)).length, total: L.length };
 }
 return out;
+}
+export const OD = versioned('hub-odyle', 1, { c: {} });
+export function odyle(m, s, now) {
+const cap = s.sub ? m.capSub : m.cap, A = lastReset('daily', now), P = m.hours * HOUR, k = x => Math.floor((x - A) / P);
+const v = s.e >= cap ? s.e : Math.min(cap, s.e + m.amount * Math.max(0, k(now) - k(s.at)));
+return { v, cap, full: v >= cap ? 0 : A + (k(now) + Math.ceil((cap - v) / m.amount)) * P, next: A + (k(now) + 1) * P };
 }
 /* ---------- ventana flotante (Document Picture-in-Picture) ---------- */
 export function miniTabs(doc, panels) {
@@ -1215,7 +1221,7 @@ registerPalette('cmd', {
 group: 'Acción', items: () => [
 { id: 'cmd-ajustes', title: 'Ajustes', sub: 'Server, facción, idioma y avisos', icon: 'i-gear', run: () => openSettings(), pin: true, kw: 'configuracion server region faccion idioma ingles english nombres horas' },
 { id: 'cmd-mute', title: isMuted() ? 'Activar avisos' : 'Silenciar avisos 1 hora', sub: 'Tecla M', icon: 'i-bell-off', run: () => toggleMute(), pin: true, kw: 'mute silencio' },
-{ id: 'cmd-pip', title: 'Sacar ventana', sub: 'Lo próximo, siempre a la vista', icon: 'i-pip', run: () => popOut(), pin: true, kw: 'mini flotante picture overlay' },
+{ id: 'cmd-pip', title: 'Ventana flotante', sub: 'Lo próximo, siempre a la vista', icon: 'i-pip', run: () => popOut(), pin: true, kw: 'mini sacar ventana picture overlay' },
 { id: 'cmd-creditos', title: 'Fuentes y créditos', sub: 'De dónde salen los datos', icon: 'i-ext', run: () => openCredits(), kw: 'fuentes creditos datos questlog plaync shugo' },
 { id: 'cmd-test', title: 'Probar aviso', sub: 'Cartel, sonido y notificación', icon: 'i-bell-on', run: () => { audio(); testAlert(); }, kw: 'alerta sonido notificacion' },
 { id: 'cmd-help', title: 'Teclado', sub: 'Tecla ?', icon: 'i-help', run: () => openHelp(), kw: 'ayuda atajos teclas' },
@@ -1276,6 +1282,7 @@ onStore('hub-group', syncTimers); on('store', k => k === 'hub-group' && syncTime
 for (const k of ['hub-region', 'hub-server', 'hub-faccion']) onStore(k, () => { CACHE = null; emit('profile', profile()); });
 paintFac();
 on('profile', paintFac);
+on('pip', () => $$('.pipbtn').forEach(b => b.setAttribute('aria-pressed', String(!!pipWin))));
 document.addEventListener('click', e => {
 const gf = e.target.closest('[data-gfac]');
 if (gf) {   // en la barra de abajo se ve un solo botón (la facción actual): tocarlo alterna
@@ -1287,11 +1294,12 @@ const b = e.target.closest('.bell[data-bell]');
 if (b) { e.preventDefault(); openBellMenu(b); return; }
 const cf = e.target.closest('[data-conf]');
 if (cf) { e.preventDefault(); openConf(cf); return; }
-if (e.target.closest('[data-hub=settings]')) openSettings();
+const st = e.target.closest('[data-hub=settings]');
+if (st) openSettings({ focus: st.dataset.focus });
 else if (e.target.closest('[data-hub=search]')) openPalette();
 else if (e.target.closest('[data-hub=help]')) openHelp();
 else if (e.target.closest('[data-hub=credits]')) openCredits();
-else if (e.target.closest('[data-hub=pip]')) popOut();
+else if (e.target.closest('[data-hub=pip]')) pipWin ? pipWin.close() : popOut();   // el botón alterna (aria-pressed)
 else if (e.target.closest('[data-hub=compacto]')) setCompact(false);
 else if (e.target.closest('[data-hub=cuenta]')) loadCuenta().then(m => m.open(), () => toast(CUENTA_OFF));
 else if (e.target.closest('#hub-warn [data-x]')) $('#hub-warn').hidden = true;

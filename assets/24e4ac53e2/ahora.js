@@ -64,14 +64,17 @@ renderTodo($('#tk'));
 $('#widgets').before(miniTabs(document, { viene: $('#up'), tareas: $('#tk') }));
 /* ---------- tu próximo paso: el paso 1 de la ficha de tu principal y dónde está parado ---------- */
 const nf = n => new Intl.NumberFormat('es-AR').format(n);
+const agoTxt = t => { const m = Math.max(0, Math.floor((Date.now() - t) / 60e3)); return m < 1 ? 'recién' : m < 60 ? `hace ${m} min` : m < 1440 ? `hace ${Math.floor(m / 60)} h` : m < 2880 ? 'ayer' : `hace ${Math.floor(m / 1440)} días`; };
 function paintPaso() {
 const mine = myChars(), c = mine.find(x => x.main) || mine[0], s = c && store.get('hub-pj-paso', {})[c.pj.k.toLowerCase()], box = $('#paso');
-if (!c) html.dataset.paso = '0'; else if (s) html.dataset.paso = '1'; else delete html.dataset.paso;
+html.dataset.paso = s?.t ? '1' : '0';
 if (!c) { box.innerHTML = '<p class="ps-0"><a href="personaje/">Cargá tu personaje</a> y te digo qué mejorar primero.</p>'; return; }
-if (!s) { box.textContent = ''; return; }
-const where = s.low ? `Nivel <b>${s.lv}</b> de 45` : `Nivel de objeto <b>${nf(s.il)}</b>${s.nx ? ` · para ${esc(s.nx)} te faltan <b>${nf(s.need)}</b>` : ''}`;
-box.innerHTML = `<div class="w-h"><h2>Tu próximo paso</h2><a class="w-sub" href="personaje/#${c.pj.k.split('/').map(encodeURIComponent).join('/')}">Ficha de ${esc(c.pj.n)}</a></div>
-${s.t ? `<p class="ps-t">${esc(s.t)}</p>` : ''}<p class="ps-w">${where}</p>`;
+const href = `personaje/#${c.pj.k.split('/').map(encodeURIComponent).join('/')}`, fi = `<a class="w-sub" href="${href}">Ficha de ${esc(c.pj.n)}</a>`;
+if (!s) { box.innerHTML = `<p class="ps-0"><a href="${href}">Abrí la ficha de ${esc(c.pj.n)}</a> para ver tu próximo paso.</p>`; return; }
+const where = s.low ? `Nivel <b>${s.lv}</b> de 45` : `Nivel de objeto <b>${nf(s.il)}</b>${s.nx ? ` · para ${esc(s.nx)} te falta${s.need > 1 ? 'n' : ''} <b>${nf(s.need)}</b>` : ''}`;
+const ago = s.at ? `<small class="ps-ago"> · según tu ficha de ${agoTxt(s.at)}</small>` : '';
+box.innerHTML = s.t ? `<div class="w-h"><h2>Tu próximo paso</h2>${fi}</div><p class="ps-t">${esc(s.t)}</p><p class="ps-w">${where}${ago}</p>`
+: `<p class="ps-0">${where} · ${fi}${ago}</p>`;
 }
 paintPaso();
 onStore('hub-pj-paso', paintPaso);
@@ -185,7 +188,7 @@ el.classList.add('flash');
 }
 /* ---------- arranque ---------- */
 function paintTz() {
-$('#tzline').innerHTML = `${esc(tzSentence())} <button type="button" class="linkbtn" data-hub="settings">Cambiar</button>`;
+$('#tzline').innerHTML = `${esc(tzSentence())} <button type="button" class="linkbtn" data-hub="settings" data-focus="[data-clock][aria-pressed=true]">Cambiar</button>`;
 }
 function paintAll() { paintHero(); paintTl(); paintTz(); }
 const ONE = matchMedia('(max-width: 960px), (orientation: portrait) and (min-height: 1400px)');

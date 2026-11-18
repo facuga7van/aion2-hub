@@ -1,14 +1,8 @@
 import {
 $, esc, ico, on, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal, evPic,
 characters, taskList, taskDone, setTaskDone, taskProgress, PJ, TK, profile, serverName, registerKey, confOf, confTag, clockLeft, gname, gclass, HOUR,
-lastReset, versioned, setTimers, bellButton, ROOT, MIN,
+setTimers, bellButton, ROOT, MIN, OD, odyle,
 } from './core.js';
-const OD = versioned('hub-odyle', 1, { c: {} });
-function odyle(m, s, now) {
-const cap = s.sub ? m.capSub : m.cap, A = lastReset('daily', now), P = m.hours * HOUR, k = x => Math.floor((x - A) / P);
-const v = s.e >= cap ? s.e : Math.min(cap, s.e + m.amount * Math.max(0, k(now) - k(s.at)));
-return { v, cap, full: v >= cap ? 0 : A + (k(now) + Math.ceil((cap - v) / m.amount)) * P, next: A + (k(now) + 1) * P };
-}
 const odBell = ch => 'odyle:' + ch;
 function pubOdyle(now) {
 const t = taskList().find(x => x.meter), { list } = characters(), D = OD.get().c, many = list.length > 1, out = [];

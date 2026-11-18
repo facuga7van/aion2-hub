@@ -83,6 +83,7 @@ if (held) setTimeout(() => { if (held) { held = false; paint(); paintSt(); } }, 
 }
 const SOON = 15 * MIN;                                   // "sale pronto": la cuenta regresiva se enciende
 const NEAR = 60 * MIN;                                   // importantes: a más de 1 h (o sin dato), fila chica; grandes cuando están por salir o vivos
+const isFar = (tm, now) => { const s = tm ? state(tm, now) : 'none'; return !(s === 'alive' || s === 'due' || s === 'window' || (s === 'spawns' && tm.start - now <= NEAR)); };
 const GROUPS = [['now', 'Para ir ahora'], ['soon', 'Próximos'], ['stale', 'Sin confirmar', 'hubo mantenimiento'], ['none', 'Sin datos']];
 const TIER_TXT = { 1: () => `Set ${gradeTxt('Unique')}`, 2: () => `Set ${gradeTxt('Legend')} o alma de pet`, 3: () => `Set ${gradeTxt('Rare')}` };
 const grpOf = s => s === 'alive' || s === 'window' || s === 'due' ? 'now' : s === 'spawns' ? 'soon' : s;
@@ -121,7 +122,7 @@ const petName = s => { const p = DATA.pets?.find(x => String(x[0]) === String(s.
 const tipTxt = (id, ch) => `${gname(IT[id])} · ${gradeTxt(IT[id].grade)} · ${pct(ch)}`;
 const icon = (id, ch, px, btn) => {
 const c = `jf-ic ${qcls(IT[id].grade)}${teSirve(id) ? ' is-want' : ''}`;
-return btn ? `<button type="button" class="${c}" data-it="${id}" data-ch="${ch}" aria-label="${esc(tipTxt(id, ch))}">${icImg(IT[id], px)}</button>`
+return btn ? `<button type="button" class="${c}" tabindex="-1" data-it="${id}" data-ch="${ch}" aria-label="${esc(tipTxt(id, ch))}">${icImg(IT[id], px)}</button>`
 : `<span class="${c}" data-it="${id}" data-ch="${ch}">${icImg(IT[id], px)}</span>`;
 };
 function rowDrops(b) {
@@ -229,7 +230,7 @@ const denyBtn = tm?.src === 'com' && s !== 'stale' && com() === 'compartir'
 ? '<button type="button" class="btn ghost jf-deny" data-deny title="Fuiste y no estaba muerto, o el reporte no cierra: le resta confianza">No estaba</button>' : '';
 const fix = tm?.src === 'vos';                         // con tu timer, el botón corrige (nunca lo pisa sin preguntar)
 const soon = s === 'spawns' && tm.start - now <= SOON ? ' is-soon' : '';
-const far = b.top && !(s === 'alive' || s === 'due' || s === 'window' || (s === 'spawns' && tm.start - now <= NEAR)) ? ' is-far' : '';
+const far = b.top && isFar(tm, now) ? ' is-far' : '';
 const meta = [lv && `Nivel ${b.level}`, tpTxt(gname(b, 'teleport')) || 'Ubicación sin confirmar', b.top && (tm || srv()) && `cada ${cycTxt(b.respawnMin)}`].filter(Boolean).map(esc).join(' · ');
 const info = `${galt(b) ? esc(galt(b)) + ' · ' : ''}Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)}${b.respawnSource === 'oficial' ? ' (oficial, parche Global)' : ''}`;
 return `<li class="jf-r s-${s}${tm ? ' src-' + tm.src : ''}${s === 'stale' && mant ? ' is-mant' : ''}${soon}${far}${b.top ? ' jf-wc' : ''}" id="b-${b.id}" data-boss="${b.id}" data-lv="${b.level}" data-tier="${b.tier}" tabindex="-1">
@@ -252,11 +253,11 @@ if (!!mant !== was) paintSt();                         // empieza o termina el m
 for (const b of BOSSES) {
 const tm = timer(b, now, K);
 if (tm) for (const x of [tm.start - SOON, tm.start, tm.end, tm.end + KEEP, tm.maint, b.top ? tm.start - NEAR : 0]) if (x > now && x < nextChange) nextChange = x;
-if (b.fac === f) (b.top ? world : rest).push([b, tm]);
+if (b.fac === f && hit(b)) (b.top ? world : rest).push([b, tm]);   // el filtro vale para los de mundo y los de campo
 }
 const why = () => { $('#jf-world-why').innerHTML = `sueltan equipo ${grade('Unique')}, el mejor`; };
 if (held) {
-$('#jf-world').hidden = false; why();
+$('#jf-world').hidden = !world.length; why();
 $('#jf-world-l').innerHTML = world.map(([b, tm]) => row(b, tm, now, { wait: true })).join('');
 bindRows();
 return;
@@ -264,8 +265,8 @@ return;
 const rk =([, tm]) => tm ? RANK[state(tm, now)] : RANK.none;
 rest.sort((a, c) => rk(a) - rk(c) || ((a[1]?.start || 0) - (c[1]?.start || 0)) * (rk(a) === RANK.alive ? -1 : 1));
 publish(now, K);                                       // (vivo.js) lo vigente a hub-timers
-const o = ord(), fv = favs(), oc = ocultos(), all = rest.filter(([b]) => hit(b));
-const hid = all.filter(([b]) => oc.has(b.id)), shown = all.filter(([b]) => !oc.has(b.id));
+const o = ord(), fv = favs(), oc = ocultos();
+const hid = rest.filter(([b]) => oc.has(b.id)), shown = rest.filter(([b]) => !oc.has(b.id));
 if (o !== 'spawn' && o !== 'importancia') shown.sort(([a], [c]) => (o === 'nivel' && a.level - c.level) || gname(a).localeCompare(gname(c), 'es'));
 const pins = shown.filter(([b]) => fv.has(b.id)), loose = shown.filter(([b]) => !fv.has(b.id)), by = { now: [], soon: [], stale: [], none: [] };
 if (o === 'spawn') for (const x of loose) by[grpOf(x[1] ? state(x[1], now) : 'none')].push(x);
@@ -281,12 +282,14 @@ const html = [pins.length && grp('fav', 'Fijados', pins),
 : o === 'importancia' ? [1, 2, 3].map(t => [t, loose.filter(([b]) => b.tier === t)]).filter(([, L]) => L.length).map(([t, L]) => grp('t' + t, TIER_TXT[t](), L))
 : [loose.length && grp('all', o === 'nivel' ? 'Por nivel' : 'Por nombre', loose)]),
 hidOpen && hid.length && grp('hid', 'Ocultos', hid)].filter(Boolean).join('');
-$('#jf-world').hidden = $('#jf-all').hidden = false;   // ocultas hasta el primer pintado: así nada visible se corre (CLS 0)
+$('#jf-all').hidden = false;                           // ocultas hasta el primer pintado: así nada visible se corre (CLS 0)
+$('#jf-world').hidden = !world.length;                 // filtrando: sin "De mundo" si ninguno coincide
+world.sort((a, c) => isFar(a[1], now) - isFar(c[1], now));
 $('#jf-world-l').innerHTML = world.map(([b, tm]) => row(b, tm, now)).join('');
 $('#jf-all-h').innerHTML = `De campo <small>${shown.length}</small> <span class="jf-hs">set ${grade('Legend')} o ${grade('Rare')}, a veces una pet</span>`;
 why();
 $('#jf-ord').value = o;
-$('#jf-all-l').innerHTML = (html || (q ? `<p class="jf-empty">Ningún jefe ${FACCION[f]} con “${esc($('#jf-q').value)}”.</p>` : ''))
+$('#jf-all-l').innerHTML = (html || (q ? `<p class="jf-empty">Ningún jefe ${world.length ? 'de campo' : FACCION[f]} con “${esc($('#jf-q').value)}”.</p>` : ''))
 + (hid.length ? `<p class="jf-hidf"><button type="button" class="linkbtn" data-hid aria-expanded="${hidOpen}">${hid.length} ${hid.length > 1 ? 'ocultos' : 'oculto'} · ${hidOpen ? 'Esconder' : 'Mostrar'}</button></p>` : '');
 bindRows();
 nextCyc = now + MIN;

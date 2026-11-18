@@ -49,8 +49,8 @@ dae: ['Daevanion', 'Tableros de nodos que abrís con cristales de Daevanion: sal
 spec: ['Especialización', 'Cuando una skill activa llega a 8, 12 y 16, se abre una mejora nueva que elegís en la ventana de skills. Es el salto más grande que da subir una skill.'],
 pts: ['Puntos de skill', 'Cada skill sube hasta 10 con puntos de skill. La ficha oficial no muestra cuántos te quedan sin usar.'],
 skills: ['Nivel de skill', 'Se arma con puntos (hasta 10), nodos de Daevanion (hasta +4) y líneas de skill del equipo y de las Arcanas. 14 es el tope normal; de ahí para arriba, solo con líneas.'],
-gs: ['Piedra sagrada', 'Theostone: va una en el arma y otra en la secundaria. Al atacar tiene chance de aplicar su efecto (sellado, parálisis, daño extra). Dos con el mismo efecto aplican uno solo.'],
-ms: ['Piedras de maná', 'Van en las ranuras de cada pieza y suman un stat (Ataque, Crítico…). Las JcJ solo suman contra jugadores. Se cambian por otras sin perder la pieza.'],
+gs: ['Piedra sagrada', 'Va una en el arma y otra en la secundaria. Al atacar tiene chance de aplicar su efecto (sellado, parálisis, daño extra). Dos con el mismo efecto aplican uno solo.'],
+ms: ['Piedras de maná', 'Van en las ranuras de cada pieza y suman un stat (Ataque, Crítico…). Las PvP solo suman contra jugadores. Se cambian por otras sin perder la pieza.'],
 stig: ['Estigmas', 'Skills especiales que van en 4 espacios aparte. Suben solo con Fragmentos de Estigma, hasta 20.'],
 ariel: ['Ariel', 'El quinto tablero de Daevanion: da daño contra jefes. Sus nodos se abren con Fragmentos de Ariel de Expedición difícil (100 fragmentos = 1 cristal, hasta 30 por personaje).'],
 lineas: ['Líneas', 'Los stats extra de cada pieza, que salen al azar. Los mejores buscan ciertas líneas en cada pieza. En Equipo, tocá una pieza para ver qué tan alto te salió cada una.'],
@@ -413,7 +413,7 @@ function savePaso() {
 if (!cur?.x || !own()) return;
 const k = kindOf(cur), P = plan(cur.d, cur.x.items, cur.x.boards, k, topSkills(cur, k), styleOf(cur, k)), g = gateOf(P.path.il);
 const hid = new Set(estStored(cur.ref).no), on = P.steps.filter(s => !hid.has('paso:' + s.id)), s = on.find(x => x.id !== 'gear') || on[0];
-const m = store.get(PASO, {}), lk = cur.ref.k.toLowerCase(), v = { t: s?.title || '', low: !!P.low, lv: +cur.d.profile.level || 0, il: P.path.il, nx: g.next ? g.next.short || g.next.name : '', need: g.need };
+const m = store.get(PASO, {}), lk = cur.ref.k.toLowerCase(), v = { t: s?.title || '', low: !!P.low, lv: +cur.d.profile.level || 0, il: P.path.il, nx: g.next ? g.next.short || g.next.name : '', need: g.need, at: cur.d.cachedAt || 0 };
 if (JSON.stringify(m[lk]) === JSON.stringify(v)) return;
 delete m[lk];
 store.set(PASO, Object.fromEntries([...Object.entries(m), [lk, v]].slice(-8)));
@@ -510,7 +510,7 @@ const il = P.path.il, roof = P.path.roof, W = P.path.ways, g = gateOf(il), nx = 
 const lo = g.cur?.il ?? Math.max(0, il - 200), hi = Math.max(roof, nx?.il ?? roof, il + 1), at = x => ((x - lo) / (hi - lo) * 100).toFixed(2) + '%';
 const name = x => esc(x.short || x.name), y = own();
 const txt = !nx ? (y ? 'Ya entrás a todo el contenido que pide nivel de objeto.' : 'Ya entra a todo el contenido que pide nivel de objeto.')
-: `Para <b>${name(nx)}</b> ${y ? 'te faltan' : 'le faltan'} <b>${nf(g.need)}</b>. ${roof >= nx.il ? `Mejorando lo que ya ${y ? 'tenés llegás' : 'tiene llega'} a <b>${nf(roof)}</b>: ${y ? 'te' : 'le'} alcanza.` : `Mejorando lo que ${y ? 'tenés llegás' : 'tiene llega'} a ${nf(roof)}: para eso ${y ? 'vas' : 'va'} a necesitar mejor equipo.`}`;
+: `${g.cur?.in ? `Ya ${y ? 'entrás' : 'entra'} a <b>${esc(g.cur.in)}</b>. ` : ''}Para <b>${name(nx)}</b> ${y ? 'te' : 'le'} falta${g.need > 1 ? 'n' : ''} <b>${nf(g.need)}</b>. ${roof >= nx.il ? `Mejorando lo que ya ${y ? 'tenés llegás' : 'tiene llega'} a <b>${nf(roof)}</b>: ${y ? 'te' : 'le'} alcanza.` : `Mejorando lo que ${y ? 'tenés llegás' : 'tiene llega'} a ${nf(roof)}: para eso ${y ? 'vas' : 'va'} a necesitar mejor equipo.`}`;
 return `<section class="wh" aria-labelledby="wh-h"><h3 class="wh-h" id="wh-h">Dónde estás${gl('il')}</h3>
 <p class="wh-n"><b>${nf(il)}</b><span>de nivel de objeto</span></p>
 <div class="wh-bar" role="img" aria-label="${esc(`Nivel de objeto ${nf(il)}${nx ? `; ${nx.short || nx.name} pide ${nf(nx.il)}` : ''}; mejorando lo que tenés llegás a ${nf(roof)}`)}">
@@ -532,6 +532,7 @@ const estBtn = (key, v, t, cls = '', tt = '') => `<button type="button" class="l
 function stepsHtml() {
 const k = kindOf(cur), P = plan(cur.d, cur.x.items, cur.x.boards, k, topSkills(cur, k), styleOf(cur, k)), st = stations(cur.d, cur.x.items, cur.x.boards), y = own();
 const C = curated(cur), noTop = !P.low && C?.top && !C.top[k]?.slots;
+const src = !P.low && C?.top && /^\d{4}-\d\d-\d\d/.test(C.v || '') ? `${noTop ? `Comparado con los ${C.top.all?.n || 0} top de toda la clase` : `Comparado con ${C.top[k]?.n || 0} top ${KIND_ES[k]}`} · semana del ${C.v.slice(8, 10)}/${C.v.slice(5, 7)}` : '';
 const note = !noTop ? '' : `Sin top ${KIND_ES[k]} esta semana: ${y ? 'te comparamos' : 'lo comparamos'} con los top de toda la clase${k === 'support' ? ', que pegan y no curan. Tomalo como orientación.' : '.'}`;
 const by = new Map((cur.d.equipment || []).map(e => [e.slot, e]));
 const hid = new Set(estStored(cur.ref).no.filter(x => x.startsWith('paso:')).map(x => x.slice(5))), on = P.steps.filter(s => !hid.has(s.id)), off = P.steps.filter(s => hid.has(s.id));
@@ -560,7 +561,8 @@ ${P.low ? levelHtml(cur.d.profile.level) : whereHtml(P)}
 <section class="pj-sec st-m" aria-labelledby="st-h"><h3 id="st-h" class="pj-h">Qué hacer ahora <small>${P.low ? `hasta nivel ${LEVEL_CAP}` : `para ${y ? 'tu' : 'la'} build ${esc(KIND_ES[k])}, de lo que más rinde a lo que menos`}</small></h3>
 ${note ? `<p class="st-note" role="note">${esc(note)}</p>` : ''}
 ${on.length ? `<ol class="st-l">${steps}</ol>` : off.length ? '<p class="pj-empty">Apagaste todos los pasos. Si querés volver a ver alguno, está acá abajo.</p>' : '<p class="pj-empty">No veo pasos con lo que muestra la ficha: equipo, amplificación, Arcanas y Daevanion están al tope. Lo que sigue es cambiar de equipo.</p>'}
-${off.length ? `<details class="st-off"><summary>Pasos que apagaste (${off.length})</summary><ul>${off.map(s => `<li data-step="${s.id}"><span>${esc(s.title)}</span>${estBtn('paso:' + s.id, '', 'Volver a mostrar')}</li>`).join('')}</ul></details>` : ''}</section>
+${off.length ? `<details class="st-off"><summary>Pasos que apagaste (${off.length})</summary><ul>${off.map(s => `<li data-step="${s.id}"><span>${esc(s.title)}</span>${estBtn('paso:' + s.id, '', 'Volver a mostrar')}</li>`).join('')}</ul></details>` : ''}
+${src ? `<p class="st-src">${esc(src)}</p>` : ''}</section>
 ${P.low ? '' : `<section class="rt-w" aria-labelledby="rt-h"><h3 class="wh-h" id="rt-h">Cómo vas <small>lo que se sube sin cambiar de equipo</small></h3><ol class="rt-l">${route}</ol></section>`}
 </div>`;
 }
@@ -584,7 +586,7 @@ ${groups.map(([t, l]) => `<h4 class="pj-h4">${t}</h4><ul class="eq-g">${l.map(([
 <span class="eq-t"><small>${esc(lb)}${it[e.slot]?.level ? ` · nivel ${it[e.slot].level}` : ''}</small><span class="eq-n">${esc(gname(e))}</span>${pips(e)}</span></button></li>`).join('')}</ul>`).join('')}
 <div class="pj-pw">${cur.d.pet ? `<span>${img(cur.d.pet.icon, 36)}<small>Pet</small> ${esc(gname(cur.d.pet))} · Nv ${+cur.d.pet.level || 0}</span>` : ''}${cur.d.wings ? `<span>${img(cur.d.wings.icon, 36)}<small>Alas</small> ${esc(gname(cur.d.wings))}${cur.d.wings.enchant ? ` +${cur.d.wings.enchant}` : ''}</span>` : ''}</div></section>`;
 }
-/* ---------- skills: ícono, ES/EN y barra por fuente ---------- */
+/* ---------- skills: ícono, nombre (con el juego en inglés, el español chico abajo: la interfaz es en español) y barra por fuente ---------- */
 const skName = s => ({ name: s.name, nameEn: s.nameEn && s.nameEn !== s.name ? s.nameEn : SK[s.id]?.[0] || s.nameEn });
 const hint = (s, x) => s.category === 'Dp' ? (s.level < STIG_CAP ? skillHint(s, x) : '') : x && (x.base < BASE_CAP || x.dae < x.daeMax) ? skillHint(s, x) : '';
 function skillsHtml() {
@@ -597,7 +599,7 @@ const seg = stig ? `<i class="s-st" style="--w:${w(s.level)}"></i>` : `<i class=
 const desc = stig ? `Nivel ${s.level}` : `Nivel ${s.level}: base ${x.base}, Daevanion ${x.dae}, equipo ${x.gear}, Arcanas ${x.arc}`;
 const tl = top.get(String(s.id));
 return `<li class="sk${use(s) || stig ? '' : ' off'}" data-sk="${s.id}">
-${img(s.icon, 40, 'sk-ic')}<span class="sk-n"><b>${esc(gname(nm))}</b>${galt(nm) ? `<small lang="${gameLang() === 'en' ? 'es' : 'en'}">${esc(galt(nm))}</small>` : ''}</span>
+${img(s.icon, 40, 'sk-ic')}<span class="sk-n"><b>${esc(gname(nm))}</b>${gameLang() === 'en' && galt(nm) ? `<small lang="es">${esc(galt(nm))}</small>` : ''}</span>
 <span class="sk-bar" role="img" aria-label="${esc(desc)}" data-parts="${stig ? s.level : [x.base, x.dae, x.gear, x.arc].join(',')}">${seg}<b class="sk-cap" style="--x:${w(stig ? STIG_CAP : NORMAL_CAP)}" title="${stig ? 'Tope de las estigmas' : 'Tope normal: 10 con puntos + 4 de Daevanion'}"></b>${tl && !stig ? `<b class="sk-tl" style="--x:${w(Math.min(tl, max))}" title="Los mejores la tienen en ${Math.round(tl)}"></b>` : ''}</span>
 <b class="sk-lv">${s.level || '—'}</b>
 <small class="sk-h">${[hint(s, x), tl && `los top: ${Math.round(tl)}`, !use(s) && !stig && 'no la usás'].filter(Boolean).map(esc).join(' · ')}</small></li>`;
@@ -638,7 +640,7 @@ return `<button type="button" class="dn${n.open ? ' o' : ''}${rec ? ' rec' : ''}
 }).join('');
 const open = nodes.filter(n => n.open && n.type !== 'Start'), shut = nodes.filter(n => !n.open && n.type !== 'Start');
 const pts = l => l.reduce((s, n) => s + (NODE_COST[n.grade] || 0), 0), recN = shut.filter(n => want.has(String(n.nodeId)) && uses(n)).length;
-$('#dae-s').innerHTML = `<p class="dae-c"><b>${open.length}</b> de ${open.length + shut.length} nodos abiertos · faltan <b>${pts(shut)}</b> puntos</p>
+$('#dae-s').innerHTML = `<p class="dae-c"><b>${open.length}</b> de ${open.length + shut.length} nodos abiertos · falta${pts(shut) === 1 ? ` <b>1</b> punto` : `n <b>${pts(shut)}</b> puntos`}</p>
 <div class="dae-node" id="dae-node" aria-live="polite"><p class="pj-empty">Tocá un nodo.</p></div>
 <ul class="dae-k"><li>${icoGame('board_icon_legend_open', 22)}Skill activa (+1 nivel)</li><li>${icoGame('board_icon_rare_open', 22)}Skill pasiva o stat raro</li><li>${icoGame('board_icon_unique_open', 22)}Stat único</li><li>${icoGame('board_icon_common_open', 22)}Stat común</li><li><span class="dae-kc">${icoGame('board_icon_common', 22)}</span>Cerrado</li>${want.size ? `<li><span class="dae-kr"></span>Lo abren los top ${esc(KIND_ES[kindOf(cur)])} y vos no (${recN})</li>` : ''}</ul>
 ${t.openStatEffectList?.length ? `<details class="dae-sum"><summary>Lo que suma este tablero</summary><ul>${[...(t.openSkillEffectList || []), ...t.openStatEffectList].map(x => `<li>${esc(x.desc)}</li>`).join('')}</ul></details>` : ''}`;
