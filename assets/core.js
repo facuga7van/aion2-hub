@@ -263,6 +263,7 @@ if (t !== b.last) { node.textContent = t; b.last = t; }
 b.due = due || 0;
 }
 let pipWin = null;
+export const pipOpen = () => !!pipWin;               // la ventana flotante abierta (vivo.js consulta aunque la pestaña esté oculta)
 function retryImg(i) {
 if (i?.tagName !== 'IMG' || i.dataset.fb || i.dataset.rt || i.classList.contains('cu-avi') || !i.currentSrc && !i.src) return;
 const was = i.currentSrc || i.src, u = new URL(was, location.href);
@@ -1031,8 +1032,9 @@ main.className = 'mini-main';
 d.body.append(main);
 pipWin = w;
 const stop = renderUpcoming(main, { count: 8, bells: false });
-w.addEventListener('pagehide', () => { stop(); pipWin = null; cfgKey = ''; });
+w.addEventListener('pagehide', () => { stop(); pipWin = null; cfgKey = ''; emit('pip'); });
 cfgKey = '';
+emit('pip');
 tick();
 return 'pip';
 } catch { /* sin gesto o bloqueado: cae al popup */ }

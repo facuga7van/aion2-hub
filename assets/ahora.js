@@ -2,7 +2,9 @@ import {
 $, $$, esc, ico, on, onTick, onStore, bind, countdown, fmtClock, fmtLeft, leftNext, schedule, upcoming, nextReset, renderUpcoming,
 nextBelled, bellButton, getBell, evPic, EVENTS, isLive, isVisible, catIcon, tzSentence, versioned, characters, taskList, taskDone, taskProgress,
 setTaskDone, toast, prefs, setPrefs, partsIn, displayTz, store, confTag, clockLeft, gname, galt, alertName, nextOcc, currentOcc, HOUR, MIN,
-} from './core.js?v=bf1d5c97b5';
+} from './core.js?v=8486b92432';
+const vivo = () => setTimeout(() => import('./vivo.js' + new URL(import.meta.url).search), 3000);   // ?v=<hash>: el mismo módulo que importa Jefes
+if (document.readyState === 'complete') vivo(); else addEventListener('load', vivo, { once: true });
 const html = document.documentElement;
 /* ---------- resets y mantenimiento ---------- */
 function paintResets() {
