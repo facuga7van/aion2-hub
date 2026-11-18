@@ -396,7 +396,7 @@ export const alertable = id => ITEMS.get(id);
 export const alertName = it => it ? gname(it, 'short') || gname(it, 'label') : '';
 export const alertPrefs = () => A;
 export function setAlertPrefs(patch) { A = { ...A, ...patch }; BC = null; saveA(); rebuildQueue(Date.now()); emit('bells', A); }
-export const RULES = { world: 'Todos los jefes importantes', pets: 'Jefes que sueltan una pet que me falta', alive: 'Avisame cuando un jefe con campana pase a Vivo' };
+export const RULES = { world: 'Todos los jefes de mundo', pets: 'Jefes que sueltan una pet que me falta', alive: 'Avisame cuando un jefe con campana pase a Vivo' };
 const RULE_LEADS = [5];
 let RULED = new Map(), BC = null;
 const ruleOf = id => RULED.get(id) || ITEMS.get(id)?.rules || [];
@@ -431,7 +431,7 @@ const d = document.createElement('div');
 d.className = 'rules';
 d.setAttribute('role', 'group');
 d.setAttribute('aria-label', 'Campanas por regla');
-d.innerHTML = Object.entries(RULES).map(([k, t]) => `<label class="chk"><input type="checkbox" data-rule="${k}"${A.rules?.[k] ? ' checked' : ''}> <span>${t}${k === 'world' ? ' <small>(los 4 de mundo de tu facción)</small>' : ''}</span></label>`).join('')
+d.innerHTML = Object.entries(RULES).map(([k, t]) => `<label class="chk"><input type="checkbox" data-rule="${k}"${A.rules?.[k] ? ' checked' : ''}> <span>${t}${k === 'world' ? ' <small>(los 4 de tu facción)</small>' : ''}</span></label>`).join('')
 + '<p class="hint">Cada jefe de una regla queda con campana (5 min antes); la apagás de a uno en su campana.</p>';
 d.addEventListener('change', e => {
 const k = e.target.dataset.rule;
@@ -589,13 +589,20 @@ if (n && !best?.live && (!best || n.start < best.occ.start)) best = { item: it, 
 }
 return best;
 }
-export const storedTimers = (now = Date.now()) => (store.get('hub-timers', []) || []).filter(t => now < t.end && !(t.until && now >= t.until));
-export function setTimers(list) { store.set('hub-timers', list); syncTimers(); }
+const allTimers = now => (store.get('hub-timers', []) || []).filter(t => now < t.end && !(t.until && now >= t.until));
+export const storedTimers = (now = Date.now()) => allTimers(now).filter(t => !t.bell || getBell(t.id));
+export function setTimers(list, owner = 'jefes') {
+const cur = store.get('hub-timers', []) || [], mine = t => (t.owner || 'jefes') === owner, mk = list.map(t => ({ ...t, owner }));
+if (JSON.stringify(cur.filter(mine)) === JSON.stringify(mk)) return;
+const now = Date.now();
+store.set('hub-timers', [...cur.filter(t => !mine(t) && t.end > now), ...mk]);   // los vencidos de otros dueños se van
+syncTimers();
+}
 const timerText = t => n => n < t.start ? [fmtLeft(t.start - n), n + leftNext(t.start - n)] : [t.liveText || 'ya puede estar', 0];
 function syncTimers() {
 const now = Date.now(), was = new Map();
 for (const [id, it] of ITEMS) if (it.stored) { was.set(id, !!it.alive); ITEMS.delete(id); }
-for (const t of storedTimers(now)) {
+for (const t of allTimers(now)) {
 const ok = n => !(t.until && n >= t.until);
 ITEMS.set(t.id, { ...t, stored: true, note: () => gname(t, 'note'), next: n => n < t.start && ok(n) ? t : null, current: n => n >= t.start && n < t.end && ok(n) ? t : null });
 }
@@ -631,13 +638,14 @@ if (l) l.href = dot ? DATA.favicon.dot : DATA.favicon.base;
 }
 /* ---------- campana (componente) ---------- */
 const leadTxt = l => l ? `${l} min antes` : 'al inicio';
-export function bellButton(id, label = gname(alertable(id), 'label') || id, { hint = '' } = {}) {
+export function bellButton(id, label = gname(alertable(id), 'label') || id, { hint = '', lead = 0 } = {}) {
 const b = document.createElement('button');
 b.type = 'button';
 b.className = 'bell';
 b.dataset.bell = id;
 b.dataset.label = label;
 if (hint) b.dataset.hint = hint;
+if (lead) b.dataset.def = lead;                     // antelación del primer clic (si no, 5 min)
 b.setAttribute('aria-haspopup', 'dialog');
 paintBell(b);
 return b;
@@ -698,7 +706,7 @@ if (bmAnchor === b && m.matches(':popover-open')) { m.hidePopover(); return; }
 bmAnchor = b;
 bmHost = b.parentElement?.closest('[id]') || null;
 if (!getBell(id)) {
-setBell(id, [5]);                                // un clic = campana puesta con el default (5 min)
+setBell(id, [+(b.dataset.def || 5)]);            // un clic = campana puesta con el default (5 min; Odyle: 15)
 audio();                                         // desbloquea el sonido dentro del gesto
 if (!askedOnce) { askedOnce = true; askPermission().then(() => bmAnchor?.dataset.bell === id && paintMenu(m, id)); }
 }
@@ -757,7 +765,7 @@ L = soon?.length ? soon : L;
 const ol = doc.createElement('ol');
 ol.className = 'up';
 const k = (live, start) => live ? 0 : start;
-const rows = [...L.map(o => [k(isLive(o, now), o.start), o]), ...storedTimers(now).filter(t => t.up && (!within || t.start < now + within)).map(t => [k(now >= t.start, t.start), null, t])].sort((a, b) => a[0] - b[0]).slice(0, count)
+const rows = [...L.map(o => [k(isLive(o, now), o.start), o]), ...storedTimers(now).filter(t => (t.up || t.bell) && (!within || t.start < now + within)).map(t => [k(now >= t.start, t.start), null, t])].sort((a, b) => a[0] - b[0]).slice(0, count)
 .sort((a, b) => minorLast && (!!a[1]?.ev.minor - !!b[1]?.ev.minor));   // primero los `count` por hora; después, los menores al final
 for (const [, o, t] of rows) {
 if (t) {
@@ -765,7 +773,7 @@ const li = doc.createElement('li'), live = now >= t.start;
 li.className = 'up-r up-tm' + (live ? ' live' : '');
 li.dataset.tm = t.id;
 const st = t.src === 'En vivo' ? gname(t, 'note') : t.src;   // (vivo.js SRC_TXT)
-li.innerHTML = `${bossPic(t.pic) || ico('i-boss', 'up-i')}<span class="up-n"><span class="up-nt">${t.approx ? '≈ ' : ''}${esc(alertName(t))}</span>${st ? `<small class="up-st">${esc(st)}</small>` : ''}</span><time class="up-t" datetime="${new Date(t.start).toISOString()}">${live ? 'desde ' + fmtClock(t.start, { now, day: false }) : fmtClock(t.start, { now })}</time><span class="up-c cd"></span>`;
+li.innerHTML = `${bossPic(t.pic) || evPic(t) || ico('i-boss', 'up-i')}<span class="up-n"><span class="up-nt">${t.approx ? '≈ ' : ''}${esc(alertName(t))}</span>${st ? `<small class="up-st">${esc(st)}</small>` : ''}</span><time class="up-t" datetime="${new Date(t.start).toISOString()}">${live ? 'desde ' + fmtClock(t.start, { now, day: false }) : fmtClock(t.start, { now })}</time><span class="up-c cd"></span>`;
 if (bells) li.append(bellButton(t.id, gname(t, 'label')));
 bind($('.up-c', li), timerText(t));
 ol.append(li);
@@ -803,6 +811,7 @@ return a;
 }
 export const maintNow = (now = Date.now()) => schedule(now).mw.find(w => w.start <= now && now < w.maxEnd) || null;
 export const maintEnd = (w, now = Date.now()) => (w.announced ? '' : '~') + fmtClock(w.maxEnd, { now, day: false });
+const NARROW = matchMedia('(max-width: 420px)');
 const dailyLeft = now => { const c = characters().activo, p = taskProgress(c, now).daily; return p.total - p.done; };
 function renderStrip() {
 const el = $('#hub-strip');
@@ -810,7 +819,8 @@ if (!el) return;
 if (document.documentElement.classList.contains('mini')) {   // mini: solo una línea con la sección y el reloj
 const box = document.createElement('div');
 box.className = 'strip-in';
-box.innerHTML = `<span class="st-lab">${esc(NAV.find(n => n.id === PAGE)?.label || 'Bitácora')}</span><span class="st-r"><span class="st-clock"></span></span>`;
+const comp = store.get('hub-compacto', 0) ? '<button type="button" class="st-comp" data-hub="compacto" aria-pressed="true" title="Volver a la vista normal">Compacto</button>' : '';
+box.innerHTML = `<span class="st-lab">${esc(NAV.find(n => n.id === PAGE)?.label || 'Bitácora')}</span><span class="st-r">${comp}<span class="st-clock"></span></span>`;
 bind($('.st-clock', box), n => [fmtClock(n, { now: n, day: false }), n + MIN - n % MIN]);
 el.replaceChildren(box);
 return;
@@ -847,8 +857,8 @@ seq.sort((x, y) => x[0] - y[0]).forEach(([, el]) => box.append(el));
 const rd = nextReset('daily', now), rs = document.createElement('a'), left = rd - now < 2 * HOUR ? dailyLeft(now) : 0;
 rs.className = 'st-i st-reset' + (left ? ' st-due' : '');
 rs.href = left ? ROOT + 'tareas/' : ROOT + '#resets';
-rs.innerHTML = left ? `<b>Te faltan ${left} diaria${left > 1 ? 's' : ''}</b><span class="cd"></span>` : `<b>Reset</b><small>${fmtClock(rd, { now })}</small><span class="cd"></span>`;
-bind($('.cd', rs), n => [(left ? 'reset en ' : 'en ') + fmtLeft(rd - n), n + leftNext(rd - n)]);
+rs.innerHTML = left ? `<b><span class="st-lg">Te faltan </span>${left} diaria${left > 1 ? 's' : ''}</b><span class="cd"></span>` : `<b>Reset</b><small>${fmtClock(rd, { now })}</small><span class="cd"></span>`;
+bind($('.cd', rs), n => [(left ? (NARROW.matches ? 'reset ' : 'reset en ') : 'en ') + fmtLeft(rd - n), n + leftNext(rd - n)]);
 const right = document.createElement('span');
 right.className = 'st-r';
 right.innerHTML = `<button type="button" class="st-mute" ${isMuted(now) ? '' : 'hidden'} title="Avisos silenciados · M para activar">${ico('i-bell-off')}<span>Silencio</span></button><span class="st-clock" title="Hora ${P.clock === 'server' ? 'del server' : 'tuya'}"></span>`;
@@ -978,7 +988,8 @@ return f;
 export function openSettings({ welcome = false } = {}) {
 const pr = profile(), now = Date.now();
 const regOpts = Object.entries(REG).map(([k, r]) => `<option value="${k}"${k === pr.region ? ' selected' : ''}>${esc(r.name)}</option>`).join('');
-const evRows = EVS.filter(e => e.category !== 'reset').map(e => `<label class="chk"><input type="checkbox" data-vis="${e.id}"${isVisible(e) ? ' checked' : ''}> <span data-evn="${e.id}">${esc(gname(e))}</span>${confOf(e) === 'sin' ? ' ' + confTag(e) : ''}</label>`).join('');
+const evAll = EVS.filter(e => e.category !== 'reset'), evOn = evAll.filter(isVisible).length;
+const evRows = evAll.map(e => `<label class="chk"><input type="checkbox" data-vis="${e.id}"${isVisible(e) ? ' checked' : ''}> <span data-evn="${e.id}">${esc(gname(e))}</span>${confOf(e) === 'sin' ? ' ' + confTag(e) : ''}</label>`).join('');
 const html = `${welcome ? `<div class="ob-fac" role="group" aria-label="Tu facción" tabindex="-1" autofocus>${Object.entries(FACCION).map(([f, n]) => `<button type="button" class="ob-f" data-fac="${f}"><i class="femb femb-${f}" aria-hidden="true"></i><b>${n}</b></button>`).join('')}</div>` : ''}
 <fieldset><legend>${welcome ? 'Tu server <small>para ver los jefes en vivo</small>' : 'Dónde jugás'}</legend>
 <div class="f2"><label>Región<span class="sel"><select id="s-reg">${regOpts}</select></span></label>
@@ -1002,8 +1013,9 @@ ${'speechSynthesis' in window ? `<label class="chk" title='"Kashapa en cinco min
 <div class="f2 q"><label>Desde <input type="time" id="s-qf" value="${A.quiet.from}"></label><label>Hasta <input type="time" id="s-qt" value="${A.quiet.to}"></label></div>
 <p class="hint">${'Notification' in window ? (Notification.permission === 'granted' ? 'Notificaciones del sistema: permitidas.' : Notification.permission === 'denied' ? 'Notificaciones del sistema: bloqueadas en este navegador (igual te aviso en la página).' : 'El permiso de notificaciones se pide la primera vez que tocás una campana.') : 'Este navegador no tiene notificaciones: te aviso en la página.'}</p>
 <button type="button" class="btn" id="s-test">${ico('i-bell-on')} Probar aviso</button></fieldset>
-<p class="hint">De dónde salen los datos: <button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button></p>
-<fieldset><legend>Eventos que ves</legend><div class="evs">${evRows}</div></fieldset>`}`;
+<label class="chk s-comp"><input type="checkbox" id="s-comp"${store.get('hub-compacto', 0) ? ' checked' : ''}> Vista compacta <small>para tenerla en un costado de la pantalla</small></label>
+<details class="more-av s-evs"><summary>Eventos que ves <small>(${evOn} de ${evAll.length})</small></summary><div class="evs">${evRows}</div></details>
+<p class="hint">De dónde salen los datos: <button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button> · <button type="button" class="linkbtn" data-hub="help">Atajos de teclado <kbd>?</kbd></button></p>`}`;
 const box = document.createElement('div');
 box.innerHTML = html;
 if (!welcome) $('fieldset', box).after(cuentaBox());
@@ -1048,18 +1060,19 @@ if (e.target.closest('#s-test')) { audio(); testAlert(); }
 });
 box.addEventListener('change', e => {
 const t = e.target;
-if (t.dataset.vis) setPrefs({ vis: { ...P.vis, [t.dataset.vis]: t.checked } });
+if (t.dataset.vis) { setPrefs({ vis: { ...P.vis, [t.dataset.vis]: t.checked } }); $('.s-evs small', box).textContent = `(${evAll.filter(isVisible).length} de ${evAll.length})`; }
 else if (t.id === 's-snd') { setAlertPrefs({ sound: t.checked }); if (t.checked) audio(); }
 else if (t.id === 's-voz') { setAlertPrefs({ voice: t.checked }); if (t.checked) say('Así te aviso'); }
 else if (t.id === 's-vol') setAlertPrefs({ vol: +t.value });
 else if (t.id === 's-tit') setAlertPrefs({ title: t.checked });
+else if (t.id === 's-comp') setCompact(t.checked);
 else if (t.id === 's-dia') { setAlertPrefs({ daily: t.checked }); if (t.checked) { audio(); askPermission(); } }   // gesto: acá se puede pedir permiso
 else if (['s-qon', 's-qf', 's-qt'].includes(t.id)) setAlertPrefs({ quiet: { on: $('#s-qon', box).checked, from: $('#s-qf', box).value || '00:00', to: $('#s-qt', box).value || '08:00' } });
 });
 $('#s-vol', box)?.addEventListener('input', e => setAlertPrefs({ vol: +e.target.value }));
-store.set('hub-onboarded', 1);
+if (!welcome) store.set('hub-onboarded', 1);
 const done = modal({ title: welcome ? '¿Con qué facción jugás?' : 'Ajustes', node: box, cls: 'settings' + (welcome ? ' welcome' : ''), actions: welcome ? [{ label: 'Ahora no', value: 'skip' }, { label: 'Listo', value: 'ok', primary: true }] : [{ label: 'Listo', value: 'ok', primary: true }] });
-if (welcome) done.then(() => { if (!store.get('hub-faccion', null)) facHint(); });
+if (welcome) done.then(v => { const f = store.get('hub-faccion', null); if (v || f) store.set('hub-onboarded', 1); if (!f) facHint(); });
 return done;
 }
 function facHint() {
@@ -1182,10 +1195,11 @@ const html = document.documentElement;
 const FORCED_MINI = new URLSearchParams(location.search).has('mini');
 const mqMini = matchMedia('(max-width: 480px) and (max-height: 640px) and (pointer: fine)');   // alto: a 480x900 con mouse va el layout angosto (con héroe, resets y Ajustes)
 const setMini = () => {
-const m = FORCED_MINI || mqMini.matches;
+const m = FORCED_MINI || mqMini.matches || !!store.get('hub-compacto', 0);
 if (m !== html.classList.contains('mini')) { html.classList.toggle('mini', m); renderStrip(); }
 };
 mqMini.addEventListener?.('change', setMini);
+export function setCompact(on) { store.set('hub-compacto', on ? 1 : 0); location.reload(); }
 function registerBuiltins() {
 for (const ev of EVS) registerAlertable({
 id: ev.id, label: ev.name, short: ev.short, labelEn: ev.nameEn, shortEn: ev.shortEn, href: ROOT + '#ev-' + ev.id,
@@ -1278,6 +1292,7 @@ else if (e.target.closest('[data-hub=search]')) openPalette();
 else if (e.target.closest('[data-hub=help]')) openHelp();
 else if (e.target.closest('[data-hub=credits]')) openCredits();
 else if (e.target.closest('[data-hub=pip]')) popOut();
+else if (e.target.closest('[data-hub=compacto]')) setCompact(false);
 else if (e.target.closest('[data-hub=cuenta]')) loadCuenta().then(m => m.open(), () => toast(CUENTA_OFF));
 else if (e.target.closest('#hub-warn [data-x]')) $('#hub-warn').hidden = true;
 });

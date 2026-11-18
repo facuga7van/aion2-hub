@@ -1,31 +1,13 @@
 import {
-$, $$, esc, ico, on, onTick, onStore, bind, countdown, fmtClock, fmtLeft, leftNext, schedule, upcoming, nextReset, renderUpcoming,
+$, $$, esc, ico, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, schedule, upcoming, renderUpcoming,
 nextBelled, bellButton, getBell, evPic, EVENTS, isLive, isVisible, catIcon, tzSentence, versioned,
 toast, prefs, setPrefs, partsIn, displayTz, store, confTag, clockLeft, gname, galt, alertName, nextOcc, currentOcc, miniTabs, HOUR, MIN,
-storedTimers, bossPic, maintNow, maintEnd, GRUPO_TXT,
+storedTimers, bossPic, maintNow, maintEnd, GRUPO_TXT, myChars,
 } from './core.js';
 import { renderTodo } from './hoy.js';
 const vivo = () => setTimeout(() => import('./vivo.js' + new URL(import.meta.url).search), 3000);   // ?v=<hash>: el mismo módulo que importa Jefes
 if (document.readyState === 'complete') vivo(); else addEventListener('load', vivo, { once: true });
 const html = document.documentElement;
-/* ---------- resets y mantenimiento ---------- */
-function paintResets() {
-const now = Date.now(), same = nextReset('daily', now) === nextReset('weekly', now);
-$('#rs-w').hidden = same;
-$('#rs-d .rs-l').lastChild.textContent = same ? 'Reset diario y semanal' : 'Reset diario';
-for (const [sel, per] of [['#rs-d', 'daily'], ['#rs-w', 'weekly']]) {
-const t = nextReset(per, now), el = $(sel);
-countdown($('.rs-c', el), t);
-$('.rs-t', el).textContent = fmtClock(t, { now });
-}
-const el = $('#rs-m'), mw = schedule(now).mw.find(x => x.maxEnd > now);
-el.hidden = !mw;
-if (!mw) return;
-const range = mw.announced ? `${fmtClock(mw.start, { now })} – ${fmtClock(mw.maxEnd, { now, day: false })}` : `${fmtClock(mw.start, { now })} – ~${fmtClock(mw.maxEnd, { now, day: false })}`;
-bind($('.rs-c', el), n => n < mw.start ? [fmtLeft(mw.start - n), n + leftNext(mw.start - n)] : ['en curso', 0]);
-$('.rs-t', el).innerHTML = `${esc(range)} ${mw.announced ? confTag({ source: mw.source }, { lv: 'oficial' })
-: confTag({ source: 'Visto los miércoles 4 y 11 de noviembre. Sin aviso oficial cargado para esta semana.' }, { lv: 'sin', note: 'la hora de vuelta: dura entre 3 h y 4 h 30' })}`;
-}
 /* ---------- lo próximo: siempre lo más cercano (o lo que tiene el portal abierto); lo de la campana va abajo ---------- */
 function paintHero() {
 const now = Date.now(), nb = nextBelled(now), box = $('#hero');
@@ -80,6 +62,20 @@ const leadsTxt = L => { const t = L.map(l => l ? `${l} min` : 'al inicio'); retu
 /* ---------- te falta hoy: las diarias sin hacer y lo de hoy de las semanales (hoy.js) ---------- */
 renderTodo($('#tk'));
 $('#widgets').before(miniTabs(document, { viene: $('#up'), tareas: $('#tk') }));
+/* ---------- tu próximo paso: el paso 1 de la ficha de tu principal y dónde está parado ---------- */
+const nf = n => new Intl.NumberFormat('es-AR').format(n);
+function paintPaso() {
+const mine = myChars(), c = mine.find(x => x.main) || mine[0], s = c && store.get('hub-pj-paso', {})[c.pj.k.toLowerCase()], box = $('#paso');
+if (!c) html.dataset.paso = '0'; else if (s) html.dataset.paso = '1'; else delete html.dataset.paso;
+if (!c) { box.innerHTML = '<p class="ps-0"><a href="personaje/">Cargá tu personaje</a> y te digo qué mejorar primero.</p>'; return; }
+if (!s) { box.textContent = ''; return; }
+const where = s.low ? `Nivel <b>${s.lv}</b> de 45` : `Nivel de objeto <b>${nf(s.il)}</b>${s.nx ? ` · para ${esc(s.nx)} te faltan <b>${nf(s.need)}</b>` : ''}`;
+box.innerHTML = `<div class="w-h"><h2>Tu próximo paso</h2><a class="w-sub" href="personaje/#${c.pj.k.split('/').map(encodeURIComponent).join('/')}">Ficha de ${esc(c.pj.n)}</a></div>
+${s.t ? `<p class="ps-t">${esc(s.t)}</p>` : ''}<p class="ps-w">${where}</p>`;
+}
+paintPaso();
+onStore('hub-pj-paso', paintPaso);
+onStore('hub-personajes', paintPaso);
 /* ---------- línea de tiempo (12/24 h, estilo shugo) ---------- */
 const PH = matchMedia('(max-width: 640px)');
 PH.addEventListener?.('change', () => paintTl());
@@ -103,9 +99,9 @@ const tip = `${gname(ev)} · ${fmtClock(o.start, { now, day: false })}${w ? '–
 const portal = o.entry && w ? `<b style="width:${(o.entry - o.start) / w * 100}%"></b>` : '';
 return `<i class="${cls}" style="left:${pct(o.start)};width:${w ? `calc(${pct(o.end)} - ${pct(o.start)})` : '0'}" title="${esc(tip)}">${portal}</i>`;
 }).join('');
-if (!bl && PH.matches) return '';                   // celu: una fila vacía en la ventana que ves solo ocupa lugar
+if (!bl) return '';                                 // una fila vacía en la ventana que ves solo ocupa lugar (Asedio, Nahma…)
 n++;
-return `<div class="tl-row" id="tl-${ev.id}"><button type="button" class="tl-l" data-what="${esc(ev.id)}">${evPic({ icon: ev.icon }, 80, 'tl-p', 20) || ico(catIcon(ev))}<span class="tl-nm">${esc(gname(ev, 'short') || gname(ev))}</span>${ev.what ? `<small>${esc(gname(ev, 'what'))}</small>` : ''}</button><div class="tl-tr">${bl}</div></div>`;
+return `<div class="tl-row" id="tl-${ev.id}"><button type="button" class="tl-l" data-what="${esc(ev.id)}">${evPic({ icon: ev.icon }, 80, 'tl-p', 20) || ico(catIcon(ev))}<span class="tl-nm">${esc(gname(ev, 'short') || gname(ev))}</span></button><div class="tl-tr">${bl}</div></div>`;
 }).join('');
 const resets = c.list.filter((o, i, L) => o.ev.category === 'reset' && o.start > t0 && o.start < t1 && !(o.id === 'reset-diario' && L.some(w => w.id === 'reset-semanal' && w.start === o.start)))
 .map(o => `<i class="tl-rs${o.id === 'reset-semanal' ? ' wk' : ''}" style="left:${pct(o.start)}"><span>${o.id === 'reset-semanal' ? 'Reset semanal' : 'Reset'}</span></i>`).join('');
@@ -190,17 +186,16 @@ el.classList.add('flash');
 /* ---------- arranque ---------- */
 function paintTz() {
 $('#tzline').innerHTML = `${esc(tzSentence())} <button type="button" class="linkbtn" data-hub="settings">Cambiar</button>`;
-$('#up-sub').textContent = prefs().clock === 'server' ? 'hora del server' : 'en tu reloj';
 }
-function paintAll() { paintResets(); paintHero(); paintTl(); paintTz(); }
+function paintAll() { paintHero(); paintTl(); paintTz(); }
 const ONE = matchMedia('(max-width: 960px), (orientation: portrait) and (min-height: 1400px)');
 let stopUp = () => {};
-const mountUp = () => { stopUp(); stopUp = renderUpcoming($('#up'), html.classList.contains('mini') ? { count: 8, within: 6 * HOUR } : { ...(ONE.matches ? { count: 8, within: 6 * HOUR } : { count: 14 }), minorLast: true }); };
+const mountUp = () => { stopUp(); stopUp = renderUpcoming($('#up'), html.classList.contains('mini') ? { count: 8, within: 6 * HOUR } : { ...(ONE.matches ? { count: 8, within: 6 * HOUR } : { count: 11 }), minorLast: true }); };
 ONE.addEventListener?.('change', mountUp);
 mountUp();
 paintAll();
 paintPins();
-on('structure', () => { paintResets(); paintHero(); paintTl(); });
+on('structure', () => { paintHero(); paintTl(); });
 on('prefs', paintAll);
 on('profile', paintAll);
 on('bells', paintHero);

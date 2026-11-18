@@ -1,5 +1,5 @@
 import { $, $$, esc, store, on, emit, modal, toast, bind, myChars, HUB_API, lnaBlocked, LNA_MSG, PAGE } from './core.js';
-const NO_SYNC = new Set(['hub-cuenta', 'hub-sync', 'hub-live', 'hub-api', 'hub-pj-api', 'hub-alertas-log', 'hub-cid', 'hub-ahora-tl',
+const NO_SYNC = new Set(['hub-cuenta', 'hub-sync', 'hub-live', 'hub-api', 'hub-pj-api', 'hub-alertas-log', 'hub-cid', 'hub-ahora-tl', 'hub-compacto',
 'pets-backup', 'pets-bak-t', 'pets-dirty', 'pets-fx', 'pets-questlog-char', 'pets-questlog-sync']);
 const syncable = k => /^(hub|pets)-[A-Za-z0-9_.:-]{1,60}$/.test(k) && !NO_SYNC.has(k);
 const QUESTIONS = ['Nombre de tu primera mascota', 'Ciudad donde naciste', 'Tu primer personaje de Aion', 'Tu comida favorita de chico'];

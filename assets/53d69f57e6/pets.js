@@ -121,6 +121,10 @@ $('#cuenta').innerHTML = (n === N ? `<b>${N}</b> pets` : `Mostrando <b>${n}</b> 
 for (const b of $$('#ver button')) b.setAttribute('aria-pressed', b.dataset.v === F.ver);
 for (const b of $$('#vista button')) b.setAttribute('aria-pressed', b.dataset.vista === F.vista);
 $('#esq').setAttribute('aria-pressed', F.esq);
+$('#faltan').setAttribute('aria-pressed', F.ver === 'faltan');
+album.toggleAttribute('data-esq', F.esq);
+const nf = [F.ver && F.ver !== 'faltan', F.genus, F.group, F.esq, SIN].filter(Boolean).length;
+$('#filN').hidden = !nf; $('#filN').textContent = nf;
 selG.classList.toggle('on', !!F.genus); selR.classList.toggle('on', !!F.reg); selGr.classList.toggle('on', !!F.group);
 const u = new URLSearchParams();
 if (F.qRaw.trim()) u.set('q', F.qRaw.trim());
@@ -266,10 +270,14 @@ $('#esq').addEventListener('click', () => { F.esq = !F.esq; apply(); });
 selGr.addEventListener('change', () => { F.group = selGr.value; regroup(); apply(); });
 $('#ver').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { F.ver = b.dataset.v; apply(); } });
 $('#vista').addEventListener('click', e => { const b = e.target.closest('button'); if (b) { F.vista = b.dataset.vista; apply(); } });
+$('#faltan').addEventListener('click', () => { F.ver = F.ver === 'faltan' ? '' : 'faltan'; apply(); });
+const filUI = () => $('#fil').setAttribute('aria-expanded', document.documentElement.hasAttribute('data-pfil'));
+$('#fil').addEventListener('click', () => { ls.set('hub-pets-filtros', +document.documentElement.toggleAttribute('data-pfil')); filUI(); });
+filUI();
 $('#limpiar').addEventListener('click', () => {
 Object.assign(F, { ver: '', genus: '', reg: '', esq: false }); setQ(''); qIn.value = ''; selG.value = ''; selR.value = ''; apply();
 });
-registerKey({ key: 'f', label: 'Pets: buscar en el álbum', run: () => { qIn.focus(); qIn.select(); } });
+registerKey({ key: 'f', label: 'Pets: buscar en el álbum', run: () => { go('#album'); qIn.focus(); qIn.select(); } });
 /* ---------- tilt holográfico (solo puntero fino) ---------- */
 if (mq('(hover:hover) and (pointer:fine)') && !RM) {
 let tc = null, raf = 0, ev;
@@ -465,8 +473,8 @@ else if (nav) step(+nav.dataset.nav);
 else if (e.target.closest('[data-genus]')) {
 e.preventDefault();
 const h = e.target.closest('a').hash, t = document.getElementById(h.slice(1));
-history.replaceState(null, '', h);  // si no, el history.back() del cierre pisa el scroll
-dlg.close();
+history.replaceState({ tab: 'genus' }, '', h);  // si no, el history.back() del cierre pisa el scroll
+tab('genus'); dlg.close();
 setTimeout(() => t?.scrollIntoView({ block: 'start' }), 60);
 }
 });
@@ -517,25 +525,46 @@ grip.addEventListener('pointermove', e => { if (y0 == null) return; dy = Math.ma
 const end = () => { if (y0 == null) return; y0 = null; dlg.style.transition = ''; if (dy > 110) dlg.close(); else dlg.style.transform = ''; };
 grip.addEventListener('pointerup', end); grip.addEventListener('pointercancel', end);
 }
-/* ---------- saltos a las secciones de abajo (menú, riel, paleta, "Ver la guía") ---------- */
-const DEEP = /^#(mapa|coleccion|genus|bak)/;
-const deep = () => document.documentElement.setAttribute('data-deep', '');
-document.addEventListener('click', e => { const a = e.target.closest('a[href*="#"]'); if (a && a.pathname === location.pathname && DEEP.test(a.hash)) deep(); }, true);
-addEventListener('hashchange', () => {
-if (!DEEP.test(location.hash) || document.documentElement.hasAttribute('data-deep')) return;
-deep(); document.querySelector(location.hash.split(/[?&]/)[0])?.scrollIntoView();
+/* ---------- pestañas: Álbum, Mapa, Colección, Guía (una a la vez; el hash elige, el script inline la pone antes de pintar) ---------- */
+const ptabs = $('#ptabs'), TABS = $$('[role=tab]', ptabs), H = document.documentElement;
+const DEF = H.classList.contains('mini') ? 'mapa' : 'album';   // la ventanita abre en el Mapa: lo que se usa mientras jugás
+const tabOf = h => { const m = /^#(album|mapa|coleccion|bak|genus)/.exec(h); return m && (m[1] === 'bak' ? 'coleccion' : m[1]); };
+function tab(t) {
+H.dataset.ptab = t;
+for (const b of TABS) { const on = b.dataset.tab === t; b.setAttribute('aria-selected', on); b.tabIndex = on ? 0 : -1; }
+}
+function go(h, replace) {
+const t = tabOf(h); if (!t) return;
+const url = location.pathname + location.search + (t === 'album' ? '' : h);
+if (url !== location.pathname + location.search + location.hash) history[replace ? 'replaceState' : 'pushState']({ tab: t }, '', url);
+tab(t);
+}
+tab(H.dataset.ptab || DEF);
+const sync = () => { const t = history.state?.tab || tabOf(location.hash) || (/^#(pet-|c=)/.test(location.hash) ? '' : DEF); if (t) tab(t); };
+addEventListener('hashchange', sync);   // ponytail: cada pestaña tiene su hash (el Álbum, ninguno): atrás/adelante siempre cambian el hash
+document.addEventListener('click', e => {
+const a = e.target.closest('a[href*="#"]');
+if (!a || e.defaultPrevented || e.ctrlKey || e.metaKey || e.shiftKey || e.button || a.pathname !== location.pathname || (a.search && a.search !== location.search) || !tabOf(a.hash)) return;
+e.preventDefault(); go(a.hash);
+const el = /^#(bak|genus-)/.test(a.hash) && $(a.hash);
+if (el) el.scrollIntoView({ block: 'start' }); else if (ptabs.getBoundingClientRect().top < 0) ptabs.scrollIntoView({ block: 'start' });
 });
-/* ---------- "↑ Menú" en el celu: con el menú de Pets (2x2) arriba, fuera de la pantalla, aparece al scrollear hacia ARRIBA
+ptabs.addEventListener('keydown', e => {  // flechas, Inicio y Fin: mueven el foco y eligen (sin llenar el historial)
+const i = TABS.indexOf(e.target), k = { ArrowLeft: i - 1, ArrowRight: i + 1, Home: 0, End: TABS.length - 1 }[e.key];
+if (i < 0 || k === undefined) return;
+e.preventDefault(); const b = TABS[(k + TABS.length) % TABS.length]; go(b.hash, true); b.focus();
+});
+/* ---------- "↑ Menú" en el celu: con las pestañas de Pets arriba, fuera de la pantalla, aparece al scrollear hacia ARRIBA
 (al bajar se esconde, así no tapa lo que leés) y vuelve a él. Mientras hay un aviso abajo (toast) no está: nunca lo tapa ---------- */
 {
-const btn = $('#toMenu'), nav = $('.hnav'), tst = $('#hub-toast');
+const btn = $('#toMenu'), nav = ptabs, tst = $('#hub-toast');
 const sy = () => Math.min(Math.max(scrollY, 0), document.documentElement.scrollHeight - innerHeight);
 let far = false, up = false, y = sy();
 const set = () => btn.classList.toggle('on', far && (up || btn.matches(':focus-visible')) && !tst?.classList.contains('on'));  // con el foco de teclado encima no se va (el foco no cae a body)
 new IntersectionObserver(([e]) => { far = !e.isIntersecting && e.boundingClientRect.top < 0; set(); }).observe(nav);
 addEventListener('scroll', () => { const c = sy(), d = c - y; if (Math.abs(d) > 8) { up = d < 0; y = c; set(); } }, { passive: true });
 if (tst) new MutationObserver(set).observe(tst, { attributes: true, attributeFilter: ['class'] });
-btn.onclick = () => { nav.scrollIntoView({ block: 'center', behavior: RM ? 'auto' : 'smooth' }); $('a', nav).focus({ preventScroll: true }); };
+btn.onclick = () => { nav.scrollIntoView({ block: 'center', behavior: RM ? 'auto' : 'smooth' }); $('[aria-selected=true]', nav).focus({ preventScroll: true }); };
 }
 /* ---------- colección: pets-coleccion.js se carga al primer gesto que lo necesita ---------- */
 const QL_DIR = '%APPDATA%\\Questlog\\aion-2';
@@ -548,7 +577,7 @@ m.init({ D, PETS, BY, get N() { return N; }, owned, level, save, paint, counts, 
 catLabel, cico, inF, PN, nudge, fac: () => FAC, base: () => location.origin + location.pathname });
 return colM = m;
 });
-function goBackup() { deep(); $('#bak').scrollIntoView({ block: 'center' }); $('#exCopy').focus({ preventScroll: true }); }
+function goBackup() { go('#bak'); $('#bak').scrollIntoView({ block: 'center' }); $('#exCopy').focus({ preventScroll: true }); }
 document.addEventListener('click', e => {
 const b = e.target.closest('[data-col]'); if (!b) return;
 const k = b.dataset.col;
@@ -597,7 +626,7 @@ toast(IOS ? 'En iPhone, Safari puede borrar tu colección tras 7 días sin entra
 }
 document.addEventListener('click', e => {
 if (!e.target.closest('#hub-toast [data-faltan]')) return;
-hideToast(); F.ver = 'faltan'; apply(); album.scrollIntoView({ block: 'start' });
+hideToast(); F.ver = 'faltan'; go('#album'); apply(); album.scrollIntoView({ block: 'start' });
 });
 /* ---------- guía de genus: detalle del slot ---------- */
 $('#genus').addEventListener('click', e => {

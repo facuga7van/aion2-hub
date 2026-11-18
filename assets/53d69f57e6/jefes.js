@@ -21,7 +21,7 @@ const cycTxt = m => m < 60 ? `${m} min` : `${Math.floor(m / 60)} h${m % 60 ? ' '
 const CONF = { alta: 'Alta', media: 'Media', baja: 'Baja' };
 const jLeft = (ms, n) => [fmtLeft(ms), n + leftNext(ms)];
 const ago = ts => n => { const m = Math.max(0, Math.floor((n - ts) / MIN)); return [m < 1 ? 'recién' : `hace ${m < 60 ? m + ' min' : `${Math.floor(m / 60)}h ${pad(m % 60)}m`}`, ts + (m + 1) * MIN]; };
-/* ---------- comunidad (opt-in, en "Corregir o completar") ---------- */
+/* ---------- comunidad (opt-in, en el (i) de arriba) ---------- */
 let feed = null, feedTxt = '', feedAt = 0, comDown = false, nextPoll = 0, inflight = false;
 function setFeed(txt, s = srv()) {
 feedTxt = txt;
@@ -156,8 +156,7 @@ const dli = (it, id, ch, px) => `<li class="${qcls(it.grade)}${teSirve(id) ? ' i
 function dropsHtml(b) {
 const x = dropsOf(b), own = x.d.filter(d => !d[2]);
 const sec = (h, L, cls = '') => L.length ? `<section class="jf-ds${cls}"><h3>${h}</h3><ul class="jf-dl">${L.map(([id, ch]) => dli(IT[id], id, ch, 36)).join('')}</ul></section>` : '';
-return `<div class="jf-dh">${pic(b, b.top ? 192 : 80, 56)}<span><small>Nivel ${b.level}</small></span></div>`
-+ souls(b).filter(s => s.falta).map(s => `<p class="jf-dpet">${icImg(IT[s.id], 40)}<span><b>Pet que te falta</b><small>${esc(petName(s))} · 100 %</small></span></p>`).join('')
+return souls(b).filter(s => s.falta).map(s => `<p class="jf-dpet">${icImg(IT[s.id], 40)}<span><b>Pet que te falta</b><small>${esc(petName(s))} · 100 %</small></span></p>`).join('')
 + sec('Equipo exclusivo', own.filter(([id]) => IT[id].kind in GEAR))
 + own.filter(([id]) => IT[id].kind === 'cofre').map(([cid, cch]) => sec(`${icImg(IT[cid], 28)} ${esc(gname(IT[cid]))} <small>${pct(cch)}</small>`, x.d.filter(d => d[2] === cid), ' jf-dcof')).join('')
 + sec('Otros', own.filter(([id]) => !(IT[id].kind in GEAR) && IT[id].kind !== 'cofre'))
@@ -176,10 +175,17 @@ box.innerHTML = `<ul class="jf-dl">${(z.tables[dropsOf(b).z] || []).map(([id, ch
 } catch { box.innerHTML = '<p class="jf-zw">No se pudo cargar. Probá de nuevo con conexión.</p>'; }
 }
 function paintDrops() {
-dpBox.innerHTML = dropsHtml(dpB);
+dpBox.innerHTML = '<ul class="jf-list jf-dmr" id="jf-dmr"></ul>' + dropsHtml(dpB);
 const h = dpBox.closest('dialog')?.querySelector('h2');
 if (h) h.textContent = gname(dpB);
 $('.jf-zona', dpBox)?.addEventListener('toggle', e => paintZona(e.currentTarget));
+paintHead();
+}
+function paintHead() {
+const ul = $('#jf-dmr'), now = Date.now(), fe = document.activeElement, f = ul.contains(fe) ? (fe.matches('.bell') ? '.bell' : fe.matches('[data-deny]') ? '[data-deny]' : '[data-kill]') : null;
+ul.innerHTML = row(dpB, timer(dpB, now), now, { lv: true, say: true }).replace(/ id="b-\d+"/, '');
+bindRow(ul.firstElementChild);
+if (f) $(f, ul)?.focus();
 }
 async function openDrops(b) {
 hideTip();
@@ -187,23 +193,34 @@ if (dpB) return;
 dpB = b;
 dpBox = document.createElement('div');
 dpBox.className = 'jf-dp';
-const done = modal({ title: gname(b), node: dpBox, cls: 'jf-dm' });
+const done = modal({ title: gname(b), node: dpBox, cls: 'jf-dm' }), dlg = dpBox.closest('dialog');
+dlg.append(KM);
+dlg.addEventListener('click', e => {
+const bl = e.target.closest('.bell'), m = $('#hub-bellmenu');
+if (e.target.closest('[data-kill]')) kill(b);
+else if (e.target.closest('[data-deny]')) deny(b);
+else if (bl && m) dlg.append(m);
+else if (bl) setTimeout(() => { const n = $('#hub-bellmenu'); if (n && dlg.isConnected) { dlg.append(n); bl.click(); } });
+}, true);
 paintDrops();
 await done;
+document.body.append(KM);
+const m = $('#hub-bellmenu') || dlg.querySelector('#hub-bellmenu');
+if (m) document.body.append(m);
 dpB = dpBox = null;
 }
-function row(b, tm, now, { lv = false, wait = false } = {}) {
+function row(b, tm, now, { lv = false, wait = false, say = b.top } = {}) {
 const s = tm ? state(tm, now) : wait ? 'wait' : 'none', ap = tm?.src === 'com' ? '≈ ' : '';
-const at = tm && ap + fmtClock(tm.start, { now }), win = tm && ap + span(tm.start, tm.end, now);   // Questlog da la hora; tu kill, la ventana
+const hh = tm && fmtClock(tm.start, { now }), at = tm && ap + hh, win = tm && ap + span(tm.start, tm.end, now);   // Questlog da la hora; tu kill, la ventana
 const src = tm?.src === 'vos' ? ' <em class="src vos" title="Tu “Lo maté” es más nuevo que el dato en vivo">Vos</em>'
 : tm?.src === 'com' ? ` <em class="src com" title="Lo reportan otros jugadores de ${esc(serverName(srv()))} (confianza ${(CONF[tm.c.confidence] || tm.c.confidence).toLowerCase()}). No es un horario oficial.">≈ Estimado</em>` : '';
 const [st, when, tip] = {
 alive: ['<b class="jf-big">Vivo</b>', `<span data-ago="${tm?.start}"></span>`, `Vivo desde ${at}`],
 due: ['<b class="jf-big">Debería estar</b>', `<span data-ago="${tm?.start}"></span>`, `Debería estar desde ${at} (nadie lo confirmó)`],
 window: ['<b class="jf-big">Puede estar</b>', `cierra en <span class="cd" data-left="${tm?.end}"></span>`, `Puede salir entre ${win}`],
-spawns: [`<span class="jf-l">Sale en</span> <b class="jf-big cd" data-left="${tm?.start}"></b>`, `<i class="jf-sep">· </i>${at}`, tm?.src === 'ql' ? `Sale ${at}` : `Sale entre ${win}`],
+spawns: [`${say ? '<span class="jf-l">Sale en</span> ' : ''}<b class="jf-big cd" data-left="${tm?.start}"></b>`, `<i class="jf-sep">· </i>${at}`, tm?.src === 'ql' ? `Sale ${at}` : `Sale entre ${win}`],
 stale: mant ? ['<b class="jf-big">En pausa</b>', '', `Mantenimiento en curso hasta ${untilTxt(mant, now)}: el jefe reaparece después`]
-: [`<s class="jf-big">${at}</s>`, 'Sin confirmar', 'Hubo mantenimiento después de este dato: puede no valer'],
+: [`<b class="jf-big">¿${hh}?</b>`, '', `Sin confirmar: ${hh} es de antes del mantenimiento y puede no valer`],
 none: srv() ? ['<b class="jf-big">Sin datos</b>', '', 'Sin dato en vivo de este jefe en tu server']
 : [`<span class="jf-l">Sale cada</span> <b class="jf-cyc">${cycTxt(b.respawnMin)}</b>`, '', 'Elegí tu server arriba para ver cuándo sale'],
 wait: ['<b class="jf-big">Buscando…</b>', '', 'Buscando el dato en vivo de tu server'],
@@ -237,7 +254,7 @@ const tm = timer(b, now, K);
 if (tm) for (const x of [tm.start - SOON, tm.start, tm.end, tm.end + KEEP, tm.maint, b.top ? tm.start - NEAR : 0]) if (x > now && x < nextChange) nextChange = x;
 if (b.fac === f) (b.top ? world : rest).push([b, tm]);
 }
-const why = () => { $('#jf-world-why').innerHTML = `sueltan equipo ${grade('Unique')}, el mejor de campo`; };
+const why = () => { $('#jf-world-why').innerHTML = `sueltan equipo ${grade('Unique')}, el mejor`; };
 if (held) {
 $('#jf-world').hidden = false; why();
 $('#jf-world-l').innerHTML = world.map(([b, tm]) => row(b, tm, now, { wait: true })).join('');
@@ -253,11 +270,11 @@ if (o !== 'spawn' && o !== 'importancia') shown.sort(([a], [c]) => (o === 'nivel
 const pins = shown.filter(([b]) => fv.has(b.id)), loose = shown.filter(([b]) => !fv.has(b.id)), by = { now: [], soon: [], stale: [], none: [] };
 if (o === 'spawn') for (const x of loose) by[grpOf(x[1] ? state(x[1], now) : 'none')].push(x);
 const fold = by.none.length < loose.length, open = noneOpen || !!q, lv = o === 'nivel';
-const grp = (g, label, L, { tog = false, sub = '' } = {}) => {
+const say = o !== 'spawn', grp = (g, label, L, { tog = false, sub = '' } = {}) => {
 const h = tog ? `<button type="button" class="jf-gt" data-gt aria-expanded="${open}" aria-controls="jf-g-${g}">${label} <small>${L.length}</small><svg aria-hidden="true"><use href="#i-r"/></svg></button>`
 : `${label} <small>${L.length}</small>${sub ? ` <span class="jf-gs">· ${sub}</span>` : ''}`;
-if (g === 'none' && !srv() && !fold) return `<section class="jf-grp g-${g}" aria-label="Todos"><ul class="jf-list" id="jf-g-${g}">${L.map(([b, tm]) => row(b, tm, now, { lv })).join('')}</ul></section>`;
-return `<section class="jf-grp g-${g}" aria-label="${label}"><h3 class="jf-gh">${h}</h3><ul class="jf-list" id="jf-g-${g}"${tog && !open ? ' hidden' : ''}>${L.map(([b, tm]) => row(b, tm, now, { lv })).join('')}</ul></section>`;
+if (g === 'none' && !srv() && !fold) return `<section class="jf-grp g-${g}" aria-label="Todos"><ul class="jf-list" id="jf-g-${g}" style="--h:${Math.ceil(L.length / 2)}">${L.map(([b, tm]) => row(b, tm, now, { lv, say })).join('')}</ul></section>`;
+return `<section class="jf-grp g-${g}" aria-label="${label}"><h3 class="jf-gh">${h}</h3><ul class="jf-list" id="jf-g-${g}" style="--h:${Math.ceil(L.length / 2)}"${tog && !open ? ' hidden' : ''}>${L.map(([b, tm]) => row(b, tm, now, { lv, say })).join('')}</ul></section>`;
 };
 const html = [pins.length && grp('fav', 'Fijados', pins),
 ...(o === 'spawn' ? GROUPS.filter(([g]) => by[g].length).map(([g, label, sub]) => grp(g, label, by[g], { tog: g === 'none' && fold, sub: g === 'stale' && mant ? 'hay mantenimiento' : sub }))
@@ -277,16 +294,18 @@ const reach = li => li && !li.closest('[hidden]'), rv = $(`#b-${roveId}`);
 (reach(rv) ? rv : [...$('#jf-main').querySelectorAll('[data-boss]')].find(reach))?.setAttribute('tabindex', '0');
 if (fb) ($(`#b-${fb} ${fsel || ''}`.trim()) || null)?.focus();
 else if (fgt) $(fgt)?.focus();
+if (dpB) paintHead();
 if (km && KM.matches(':popover-open')) placeKm();
 }
 function bindRows() {
 $('#jf-world').classList.toggle('is-far', !$('#jf-world-l .jf-r:not(.is-far)'));
-for (const li of $('#jf-main').querySelectorAll('[data-boss]')) {
+for (const li of $('#jf-main').querySelectorAll('[data-boss]')) bindRow(li);
+}
+function bindRow(li) {
 const b = BY.get(+li.dataset.boss), l = $('[data-left]', li), a = $('[data-ago]', li);
 if (l) { const t = +l.dataset.left; bind(l, n => jLeft(t - n, n)); }
 if (a) bind(a, ago(+a.dataset.ago));
 $('.jf-b', li).append(bellButton(bellId(b), gname(b), /s-(none|wait|stale)/.test(li.className) ? { hint: 'Suena cuando haya timer.' } : {}));
-}
 }
 const visRows = () => [...$('#jf-main').querySelectorAll('[data-boss]')].filter(li => li.checkVisibility());
 let nextCyc = 0;
@@ -370,7 +389,8 @@ if (input && t) { const p = partsIn(t, displayTz()); $('#jf-ex').value = `${pad(
 const h = Math.floor((now - t) / HOUR);                 // una hora "futura" se toma como de ayer: avisarlo
 $('#jf-kw').innerHTML = t ? `Lo mataste ${fmtClock(t, { now })}${h >= 1 ? ` <span class="jf-warn">(eso fue hace ${h} h)</span>` : ''} · sale <b>${span(t + b.cyc, t + b.cyc + WIN, now)}</b>` : '';
 }
-const placeKm = () => placeAt(KM, $(`#b-${km.b.id} [data-kill]`));
+const killBtn = b => (dpB?.id === b.id && $('#jf-dmr [data-kill]')) || $(`#b-${b.id} [data-kill]`);
+const placeKm = () => placeAt(KM, killBtn(km.b));
 function placeAt(pop, a) {
 if (!a) return;
 a.scrollIntoView({ block: 'nearest' });
@@ -457,7 +477,7 @@ if (!timer(b, Date.now())) noneOpen = true;           // sin tu timer y sin Ques
 KM.hidePopover();
 paint();
 toast(`Quitaste tu timer de <b>${esc(gname(b))}</b>${V.map.has(b.id) ? ': vuelve el dato en vivo' : ''}.`);
-$(`#b-${b.id} [data-kill]`)?.focus();
+killBtn(b)?.focus();
 return;
 }
 if (e.target.closest('[data-undo]')) {
@@ -467,7 +487,7 @@ if (!timer(b, Date.now())) noneOpen = true;
 KM.hidePopover();
 paint();
 toast(prev ? `Deshice: <b>${esc(gname(b))}</b> vuelve a tu kill anterior.` : `Deshice: <b>${esc(gname(b))}</b> vuelve al dato en vivo.`);
-$(`#b-${b.id} [data-kill]`)?.focus();
+killBtn(b)?.focus();
 }
 });
 KM.addEventListener('change', e => {
@@ -481,7 +501,7 @@ if (e.newState !== 'closed' || !km) return;
 const { b, prev } = km, t = KILLS.get().k[kkey(b)], back = KM.contains(document.activeElement) || document.activeElement === document.body;
 km = null;
 if (t && t !== prev && com() === 'compartir') share(b, t);
-if (back) $(`#b-${b.id} [data-kill]`)?.focus();
+if (back) killBtn(b)?.focus();
 });
 /* ---------- eventos ---------- */
 $('#jf-main').addEventListener('click', e => {
@@ -508,7 +528,11 @@ IP.className = 'bellmenu jf-ipop';
 IP.popover = 'auto';
 IP.setAttribute('role', 'dialog');
 IP.setAttribute('aria-label', 'De dónde salen los horarios');
-IP.innerHTML = '<p>Datos de telemetría de jugadores y reportes; no son horarios oficiales.</p><p>Ciclos: parche oficial (Gartua y Lagta) y telemetría; pueden variar unos minutos.</p><p><b>Teleport 6</b> es el punto de teletransporte más cercano al jefe, con su número del mapa.</p><button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button><p class="bm-t">Campanas por regla</p><div id="jf-rules"></div>';
+IP.innerHTML = `<p>Datos de telemetría de jugadores y reportes; no son horarios oficiales.</p><p>Ciclos: parche oficial (Gartua y Lagta) y telemetría; pueden variar unos minutos.</p><p><b>Teleport 6</b> es el punto de teletransporte más cercano al jefe, con su número del mapa.</p>
+<p>¿Lo mataste y no figura? Tocá <b>Lo maté</b> en su fila<span class="jf-keys"> (o <kbd>K</kbd>; <kbd>↑</kbd> <kbd>↓</kbd> recorren los jefes)</span>. Tu kill manda si es más nuevo y queda en este navegador (<em class="src vos">Vos</em>); <em class="src com">≈ Estimado</em> es lo que reportan otros jugadores.</p>
+<button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button><p class="bm-t">Campanas por regla</p><div id="jf-rules"></div>
+<p class="bm-t" id="jf-com-l">Reportes de la comunidad</p><div class="seg" role="group" aria-labelledby="jf-com-l" id="jf-com"><button type="button" data-com="off">Apagada</button><button type="button" data-com="ver">Ver</button><button type="button" data-com="compartir">Ver y compartir</button></div>
+<p class="jf-com-st" id="jf-com-st" aria-live="polite">&nbsp;</p>`;
 document.body.append(IP);
 $('#jf-i').addEventListener('click', () => { $('#jf-rules').replaceChildren(ruleBox()); IP.showPopover(); placeAt(IP, $('#jf-i')); $('#jf-i').setAttribute('aria-expanded', 'true'); });
 IP.addEventListener('toggle', e => { if (e.newState === 'closed') $('#jf-i').setAttribute('aria-expanded', 'false'); });
@@ -595,7 +619,6 @@ const m = location.hash.match(/^#b-(\d+)$/), b = m && BY.get(+m[1]);
 if (b) focusBoss(b);
 }
 hold();
-if (com() !== 'off') $('#jf-more').open = true;          // si la comunidad está prendida, que se vea
 paintBar();
 paint();
 paintSt();

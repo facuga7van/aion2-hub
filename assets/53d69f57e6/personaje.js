@@ -8,7 +8,7 @@ const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
 return /^http:\/\/(localhost|127\.0\.0\.1)(:\d{1,5})?$/.test(v) ? v : DEF_API;     // nunca un host ajeno desde un link
 })();
-const REC = 'hub-pj-recientes', FAV = 'hub-pj-favoritos', BLD = 'hub-pj-build', EST = 'hub-pj-estilo';
+const REC = 'hub-pj-recientes', FAV = 'hub-pj-favoritos', BLD = 'hub-pj-build', EST = 'hub-pj-estilo', PASO = 'hub-pj-paso';
 const SK = (() => { try { return JSON.parse($('#page-data')?.textContent || '{}'); } catch { return {}; } })();   // {skillId: [nombre EN, ícono]}
 const NAME = /^[\p{L}\p{N}]{2,16}$/u;
 const REGS = Object.keys(SERVERS.regions);
@@ -409,6 +409,15 @@ const m = store.get(EST, {}), lk = ref.k.toLowerCase(), e = estSet(estStored(ref
 if (!estEmpty(e)) m[lk] = e; else delete m[lk];
 store.set(EST, Object.fromEntries(Object.entries(m).slice(-60)));
 }
+function savePaso() {
+if (!cur?.x || !own()) return;
+const k = kindOf(cur), P = plan(cur.d, cur.x.items, cur.x.boards, k, topSkills(cur, k), styleOf(cur, k)), g = gateOf(P.path.il);
+const hid = new Set(estStored(cur.ref).no), on = P.steps.filter(s => !hid.has('paso:' + s.id)), s = on.find(x => x.id !== 'gear') || on[0];
+const m = store.get(PASO, {}), lk = cur.ref.k.toLowerCase(), v = { t: s?.title || '', low: !!P.low, lv: +cur.d.profile.level || 0, il: P.path.il, nx: g.next ? g.next.short || g.next.name : '', need: g.need };
+if (JSON.stringify(m[lk]) === JSON.stringify(v)) return;
+delete m[lk];
+store.set(PASO, Object.fromEntries([...Object.entries(m), [lk, v]].slice(-8)));
+}
 /* ---------- build que sigue (Estándar / Healer / PvP), guardada por personaje ---------- */
 const kindStored = ref => store.get(BLD, {})[ref.k.toLowerCase()] || null;
 const okKind = (c, k) => kindsOf(c).some(([v]) => v === k) ? k : null;
@@ -418,6 +427,7 @@ const guess = c => { const g = kindGuess(c.d, c.x?.items, curated(c)?.method?.ki
 function paintBuild() {
 const box = $('#pj-bld');
 if (!box || !cur) return;
+savePaso();
 const g = guess(cur), k = kindOf(cur), st = okKind(cur, kindStored(cur.ref));
 box.innerHTML = `<span class="pj-bl-l"><span id="pj-bl-l">Build</span>${gl('build')}</span>
 <div class="seg" role="group" aria-labelledby="pj-bl-l">${kindsOf(cur).map(([v, l]) => `<button type="button" data-kind="${v}" aria-pressed="${v === k}">${l}${v === g.kind && !st ? ' <small>sugerida</small>' : ''}</button>`).join('')}</div>
@@ -691,9 +701,10 @@ const { ref } = cur, key = b.dataset.est, v = b.dataset.v, before = store.get(ES
 const repaint = () => { const x = $('#pj-x'); if (TAB === 'builds' && x?._paint) x._paint(); else paintPanel(); };
 setEst(ref, key, v, (TAB === 'builds' && $('#cu-kd [aria-pressed="true"]')?.dataset.ck) || kindOf(cur));
 repaint();
+savePaso();
 $(`[data-est="${CSS.escape(key)}"]`)?.focus();
 toast(v === 'si' ? 'Listo: queda como tu elección.' : !key.startsWith('paso:') ? 'Listo: te sugerimos lo de los top.' : v ? 'Paso apagado: queda abajo, en «Pasos que apagaste».' : 'El paso volvió a la lista.',
-{ ms: 6000, action: { label: 'Deshacer', run: () => { store.set(EST, before); if (cur) repaint(); } } });
+{ ms: 6000, action: { label: 'Deshacer', run: () => { store.set(EST, before); if (cur) { repaint(); savePaso(); } } } });
 }
 function toggleFav() {
 if (!cur) return;

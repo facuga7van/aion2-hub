@@ -157,7 +157,7 @@ note: tpTxt(b.teleport), noteEn: tpTxt(b.teleportEn), pic: b.retrato, nowText: '
 const s = JSON.stringify(list);
 if (s === lastPub) return;
 lastPub = s;
-if (s !== JSON.stringify(store.get('hub-timers', []))) setTimers(list);
+setTimers(list, 'jefes');                              // (core) reemplaza solo los de Jefes; sin cambios no escribe
 }
 /* ---------- arranque ---------- */
 loadLive();

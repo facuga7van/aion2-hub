@@ -1,6 +1,6 @@
 import {
 esc, ico, on, onStore, emit, bind, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, characters, taskList, taskDone,
-setTaskDone, taskProgress, PJ, gname, clockLeft, HOUR,
+setTaskDone, taskProgress, PJ, gname, clockLeft, schedule, maintEnd, HOUR,
 } from './core.js';
 const kept = new Set();
 on('reset', () => kept.clear());
@@ -23,13 +23,20 @@ const who = list.length > 1 ? `<span class="seg tk-pj" role="group" aria-label="
 : `<span class="tk-c">${esc(list[0].name)}</span>`;
 const pct = pr.daily.total ? Math.round(pr.daily.done / pr.daily.total * 100) : 0, rows = (listo ? [] : daily.filter(show)).map(row).join('');
 box.classList.toggle('tk-listo', listo);
-box.innerHTML = `<div class="tk-p">${who}<span><b>${pr.daily.done}</b>/${pr.daily.total} diarias</span><span><b>${pr.weekly.done}</b>/${pr.weekly.total} semanales</span><span class="tk-rs"></span></div>
+box.innerHTML = `<div class="tk-p">${who}<span><b>${pr.daily.done}</b>/${pr.daily.total} diarias</span><span><b>${pr.weekly.done}</b>/${pr.weekly.total} semanales</span><span class="tk-r"><span class="tk-rs"></span><span class="tk-rw"></span></span></div>
 <div class="bar" role="img" aria-label="${pct}% de las diarias"><i style="--w:${pct}%"></i></div>${listo ? '<p class="tk-ok">Diarias listas ✓</p>' : ''}
 <div class="tk-cols">${rows ? `<ul class="tk-l">${rows}</ul>` : ''}${also.length ? `<ul class="tk-l"><li class="tk-sep">Hoy también</li>${also.map(row).join('')}</ul>` : ''}</div>`;
 bind(box.querySelector('.tk-rs'), n => {
 const left = rd - n, soon = !listo && left < 2 * HOUR;
 box.classList.toggle('tk-soon', soon);
 return [soon ? `Te quedan ${fmtLeft(left)} para el reset` : `reset en ${fmtLeft(left)}`, n + leftNext(left)];
+});
+const rw = nextReset('weekly', now);
+bind(box.querySelector('.tk-rw'), n => {
+const mw = schedule(n).mw.find(w => w.maxEnd > n), ml = mw ? mw.start - n : Infinity, soon = ml < 48 * HOUR;
+const m = ml <= 0 ? ` · mantenimiento hasta ${maintEnd(mw, n)}` : soon ? ` · mantenimiento en ${mw.announced ? '' : '~'}${fmtLeft(ml)}` : '';
+const due = Math.min(leftNext(rw - n), ml <= 0 ? mw.maxEnd - n : soon ? leftNext(ml) : ml - 48 * HOUR);
+return [(rw === rd ? ' · también el semanal' : ` · semanal en ${fmtLeft(rw - n)}`) + m, n + due];
 });
 for (const t of also) if (occ[t.id]) { const o = occ[t.id], cl = clockLeft(o.start); bind(box.querySelector('#' + CSS.escape('ah-ev-' + t.id)), n => isLive(o, n) ? ['en curso ahora', o.end] : cl(n)); }
 };

@@ -1,13 +1,25 @@
 import {
 $, esc, ico, on, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal, evPic,
 characters, taskList, taskDone, setTaskDone, taskProgress, PJ, TK, profile, serverName, registerKey, confOf, confTag, clockLeft, gname, gclass, HOUR,
-lastReset, versioned,
+lastReset, versioned, setTimers, bellButton, ROOT, MIN,
 } from './core.js';
 const OD = versioned('hub-odyle', 1, { c: {} });
 function odyle(m, s, now) {
 const cap = s.sub ? m.capSub : m.cap, A = lastReset('daily', now), P = m.hours * HOUR, k = x => Math.floor((x - A) / P);
 const v = s.e >= cap ? s.e : Math.min(cap, s.e + m.amount * Math.max(0, k(now) - k(s.at)));
 return { v, cap, full: v >= cap ? 0 : A + (k(now) + Math.ceil((cap - v) / m.amount)) * P, next: A + (k(now) + 1) * P };
+}
+const odBell = ch => 'odyle:' + ch;
+function pubOdyle(now) {
+const t = taskList().find(x => x.meter), { list } = characters(), D = OD.get().c, many = list.length > 1, out = [];
+for (const c of t ? list : []) {
+const s = D[c.id], o = s && odyle(t.meter, s, now);
+if (!o?.full) continue;                          // sin anotar o ya llena: nada que avisar
+const pj = many ? ` · ${c.name}` : '';
+out.push({ id: odBell(c.id), label: t.name + pj, labelEn: (t.nameEn || t.name) + pj, start: o.full, end: o.full + 30 * MIN, bell: true,
+href: ROOT + 'tareas/#t-' + t.id, icon: t.icon, nowText: 'Llegó al tope', liveText: 'llena' });
+}
+setTimers(out, 'odyle');
 }
 const PER = { daily: { t: 'Diarias', when: 'reset diario' }, weekly: { t: 'Semanales', when: 'reset del miércoles' } };
 let editing = false;
@@ -18,6 +30,7 @@ const now = Date.now(), { list, activo } = characters(), focusId = document.acti
 setHtml($('#pj-tabs'), list.map(c => { const d = taskProgress(c.id, now).daily, all = d.total && d.done >= d.total;
 return `<button type="button" data-pj="${esc(c.id)}" aria-pressed="${c.id === activo}"><span class="pj-nm">${esc(c.name)}</span>${c.clase ? `<small>${esc(gclass(c.clase))}</small>` : ''}<span class="pj-p${all ? ' all' : ''}" title="Diarias hechas">${all ? ico('i-check') : ''}${d.done}/${d.total}</span>${editing && c.id !== 'main' ? `<span class="pj-x" data-pjdel="${esc(c.id)}" role="button" tabindex="0" aria-label="Quitar ${esc(c.name)}">${ico('i-x')}</span>` : ''}</button>`; }).join(''));
 for (const per of ['daily', 'weekly']) paintGroup(per, activo, now);
+pubOdyle(now);
 setHtml($('#tk-pie'), pie());
 $('#tk-edit').setAttribute('aria-pressed', String(editing));
 document.body.classList.toggle('tk-editing', editing);
@@ -36,6 +49,8 @@ setHtml(g, `<div class="tk-h"><h2 id="h-${per}">${PER[per].t}</h2><span class="t
 bind($('#rs-' + per), n2 => [fmtLeft(rs - n2), n2 + leftNext(rs - n2)]);
 for (const t of met) {   // estimado y "se llena en": cambian solos con el reloj (bind), el HTML no
 const s = OD.get().c[ch], v = $(`#od-v-${CSS.escape(t.id)}`), f = $(`#od-f-${CSS.escape(t.id)}`);
+const li = g.querySelector(`.tk-meter[data-t="${CSS.escape(t.id)}"]`), old = li?.querySelector('.bell'), want = s && odBell(ch);
+if (li && old?.dataset.bell !== want) { old?.remove(); if (want) li.querySelector('.tk-del').before(bellButton(want, `${gname(t)} llena`, { lead: 15 })); }
 if (!s || !v || !f) continue;
 bind(v, n2 => { const o = odyle(t.meter, s, n2); return [`~${o.v}/${o.cap}`, o.full && o.next]; });
 bind(f, n2 => { const o = odyle(t.meter, s, n2); return o.full ? [`se llena en ${fmtLeft(o.full - n2)} · ${fmtClock(o.full, { now: n2 })}`, n2 + Math.min(leftNext(o.full - n2), 60000)] : [`llena (tope ${o.cap})`, 0]; });
