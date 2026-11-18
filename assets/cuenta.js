@@ -1,4 +1,4 @@
-import { $, $$, esc, store, on, emit, modal, toast, bind, myChars, HUB_API, lnaBlocked, LNA_MSG, PAGE } from './core.js?v=0cfa7eaaad';
+import { $, $$, esc, store, on, emit, modal, toast, bind, myChars, HUB_API, lnaBlocked, LNA_MSG, PAGE } from './core.js?v=bf1d5c97b5';
 const VQ = new URL(import.meta.url).search;
 const NO_SYNC = new Set(['hub-cuenta', 'hub-sync', 'hub-live', 'hub-api', 'hub-pj-api', 'hub-alertas-log', 'hub-cid', 'hub-ahora-tl',
 'pets-backup', 'pets-bak-t', 'pets-dirty', 'pets-fx', 'pets-questlog-char', 'pets-questlog-sync']);

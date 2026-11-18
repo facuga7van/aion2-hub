@@ -1,7 +1,8 @@
-import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=0cfa7eaaad';
+import { $, $$, esc, ico, norm, isTyping, store, toast as hubToast, hideToast, on, profile, registerKey, nextOcc, currentOcc, isLive, statusText, fmtLeft, leftNext, fmtClock, bind, bellButton, gname, galt, gameLang } from './core.js?v=bf1d5c97b5';
 const VQ = new URL(import.meta.url).search;  // ?v=<hash>: los módulos lazy van con la misma versión
 const D = JSON.parse($('#pets-data').textContent);
 const ALL = D.pets, BY = new Map(ALL.map(p => [p.id, p]));
+document.addEventListener('contentvisibilityautostatechange', e => { if (e.skipped) for (const a of e.target.getAnimations({ subtree: true })) a.finish(); }, true);
 const G = D.genus;
 const PLE = Object.fromEntries(Object.entries(D.dungeons).map(([k, d]) => [k, d.en]));  // lugar ES -> EN
 for (const p of ALL) for (const r of p.routes) if (r.placeEn) PLE[r.place] = r.placeEn;
@@ -220,7 +221,6 @@ return ids.length ? `<div style="color:var(--c-${c.key})" title="${esc(catLabel(
 colM?.syncExport();
 const co = $('#cOwn'); if (co) co.textContent = own;
 document.documentElement.toggleAttribute('data-pnew', !owned.size);  // primer paso (el HTML lo pone antes de pintar, sin saltos)
-$('#hBak').hidden = !own;
 dirtyUI();
 if (plan) plan.refresh(); else planTabs();  // sin el mapa montado, las pestañas igual llevan la cuenta (y la facción)
 }

@@ -2,7 +2,7 @@ import {
 $, $$, esc, ico, on, onTick, onStore, bind, countdown, fmtClock, fmtLeft, leftNext, schedule, upcoming, nextReset, renderUpcoming,
 nextBelled, bellButton, getBell, evPic, EVENTS, isLive, isVisible, catIcon, tzSentence, versioned, characters, taskList, taskDone, taskProgress,
 setTaskDone, toast, prefs, setPrefs, partsIn, displayTz, store, confTag, clockLeft, gname, galt, alertName, nextOcc, currentOcc, HOUR, MIN,
-} from './core.js?v=0cfa7eaaad';
+} from './core.js?v=bf1d5c97b5';
 const html = document.documentElement;
 /* ---------- resets y mantenimiento ---------- */
 function paintResets() {
