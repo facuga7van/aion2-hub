@@ -662,11 +662,13 @@ const CAT_ICO = { pvp: 'i-pvp', boss: 'i-boss', evento: 'i-evento', reset: 'i-re
 export const catIcon = ev => CAT_ICO[ev.category] || 'i-evento';
 export const bossPic = (r, px = 80, cls = 'up-p', sz = 32) => /^[\w-]+$/.test(r || '') ? `<img class="${cls}" src="${ROOT}assets/jefes/${r}-${px}.webp" width="${sz}" height="${sz}" alt="" loading="lazy" decoding="async">` : '';
 export const evPic = (o, px = 80, cls = 'up-p', sz = 32) => bossPic(o.retrato, px, cls, sz) || (/^[\w-]+$/.test(o.icon || '') ? `<img class="${cls} gi" src="${ROOT}assets/ic/${o.icon}.webp" width="${sz}" height="${sz}" alt="" loading="lazy" decoding="async">` : '');
-export function renderUpcoming(box, { count = 8, bells = true, minor = true, minorLast = false } = {}) {
+export function renderUpcoming(box, { count = 8, bells = true, minor = true, minorLast = false, within = 0 } = {}) {
 const doc = box.ownerDocument;
 const draw = () => {
 const now = Date.now(), seen = new Set();
-const L = upcoming(now, { count: count * 3, minor }).filter(o => o.ev.kind !== 'hourly' || (!seen.has(o.id) && seen.add(o.id))).slice(0, count);
+let L = upcoming(now, { count: count * 3, minor }).filter(o => o.ev.kind !== 'hourly' || (!seen.has(o.id) && seen.add(o.id)));
+const soon = within && L.filter(o => o.start < now + within || isLive(o, now));
+L = (soon?.length ? soon : L).slice(0, count);
 const ol = doc.createElement('ol');
 ol.className = 'up';
 const k = (live, start) => live ? 0 : start;
@@ -1031,15 +1033,17 @@ const main = d.createElement('main');
 main.className = 'mini-main';
 d.body.append(main);
 pipWin = w;
-const stop = renderUpcoming(main, { count: 8, bells: false });
-w.addEventListener('pagehide', () => { stop(); pipWin = null; cfgKey = ''; emit('pip'); });
+const stop = renderUpcoming(main, { count: 8, within: 6 * HOUR });
+const repaint = () => d.querySelectorAll('.bell[data-bell]').forEach(paintBell), offB = on('bells', repaint);
+d.addEventListener('click', e => { const b = e.target.closest('.bell[data-bell]'); if (b) setBell(b.dataset.bell, getBell(b.dataset.bell) ? null : [5]); });
+w.addEventListener('pagehide', () => { stop(); offB(); pipWin = null; cfgKey = ''; emit('pip'); });
 cfgKey = '';
 emit('pip');
 tick();
 return 'pip';
 } catch { /* sin gesto o bloqueado: cae al popup */ }
 }
-window.open(ROOT + '?mini', 'bitacora-mini', 'popup,width=360,height=430');
+window.open(ROOT + '?mini', 'bitacora-mini', 'popup,width=360,height=480');   // 480: las 8 filas enteras arriba de la barra de abajo
 return 'popup';
 }
 /* ---------- arranque ---------- */

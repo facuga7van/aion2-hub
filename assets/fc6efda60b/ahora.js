@@ -8,7 +8,9 @@ if (document.readyState === 'complete') vivo(); else addEventListener('load', vi
 const html = document.documentElement;
 /* ---------- resets y mantenimiento ---------- */
 function paintResets() {
-const now = Date.now();
+const now = Date.now(), same = nextReset('daily', now) === nextReset('weekly', now);
+$('#rs-w').hidden = same;
+$('#rs-d .rs-l').lastChild.textContent = same ? 'Reset diario y semanal' : 'Reset diario';
 for (const [sel, per] of [['#rs-d', 'daily'], ['#rs-w', 'weekly']]) {
 const t = nextReset(per, now), el = $(sel);
 countdown($('.rs-c', el), t);
@@ -26,7 +28,7 @@ $('.rs-t', el).innerHTML = `${esc(range)} ${mw.announced ? confTag({ source: mw.
 function paintHero() {
 const now = Date.now(), nb = nextBelled(now), box = $('#hero');
 const occ = upcoming(now, { count: 20, minor: false }).find(o => o.start > now || o.entry > now);
-if (!occ) { box.innerHTML = '<p class="hero-hint">No hay eventos visibles. Activalos en Ajustes.</p>'; return; }
+if (!occ) { $('#hero-now').hidden = true; box.innerHTML = '<p class="hero-hint">No hay eventos visibles. Activalos en Ajustes.</p>'; return; }
 const ev = occ.ev, name = gname(ev), live = isLive(occ, now), portal = live && occ.entry > now;
 const cur = upcoming(now, { count: 20, minor: false }).find(o => isLive(o, now) && o !== occ && o.id !== ev.id);
 const lbl = !live ? 'empieza en' : portal ? `${ev.entryLabel || 'entrada abierta'} · cierra en` : 'termina en';
@@ -35,14 +37,16 @@ const bits = [ev.entry ? `${ev.entryLabel} ${ev.entry} min` : '', ev.duration ? 
 const same = nb && nb.item.id === ev.id, mine = getBell(ev.id);
 const nbName = nb && (nb.occ.ev ? gname(nb.occ.ev, 'short') || gname(nb.occ.ev) : alertName(nb.item));
 const hint = mine ? `${ico('i-bell-on')} <span>Te aviso ${leadsTxt(mine)}.${nb && !same ? ` Con campana: <b>${esc(nbName)}</b> <span class="cd" id="hero-nb"></span>` : ''}</span>`
-: nb ? `${ico('i-bell-on')} <span>Con campana: <b>${esc(nbName)}</b> <span class="cd" id="hero-nb"></span></span>`
-: `${ico('i-bell')} <span>Tocá la campana y te aviso antes.</span>`;
-box.innerHTML = `${cur ? `<p class="hero-now"><i class="st-dot" aria-hidden="true"></i>En curso: <b>${esc(gname(cur.ev, 'short') || gname(cur.ev))}</b> <span>hasta ${fmtClock(cur.end, { now, day: false })}</span></p>` : ''}
-<div class="hero-main"><p class="hero-k2">${ico(catIcon(ev))}${CAT[ev.category] || 'Evento'}</p><p class="hero-n"${galt(ev) ? ` title="${esc(galt(ev))}"` : ''}>${esc(name)}</p>${ev.what ? `<p class="hero-q">${esc(gname(ev, 'what'))}</p>` : ''}<p class="hero-l">${lbl}</p><p class="hero-c cd" id="hero-c"></p>
-<p class="hero-s"><time>${fmtClock(live ? occ.end : occ.start, { now })}${live ? ' fin' : ''}</time>${bits.map(b => `<span>${esc(b)}</span>`).join('')}${confTag(ev)}</p></div>
-<div class="hero-side">${evPic(ev, 192, 'hero-p', 96)}</div>
-<p class="hero-hint">${hint}</p>`;
-$('.hero-side', box).append(bellButton(ev.id, name));
+: nb ? `${ico('i-bell-on')} <span>Con campana: <b>${esc(nbName)}</b> <span class="cd" id="hero-nb"></span></span>` : '';
+const hn0 = $('#hero-now');
+hn0.hidden = !cur;
+hn0.innerHTML = cur ? `<i class="st-dot" aria-hidden="true"></i><span>En curso: <b>${esc(gname(cur.ev, 'short') || gname(cur.ev))}</b> hasta ${fmtClock(cur.end, { now, day: false })}</span>` : '';
+box.innerHTML = `${evPic(ev, 80, 'hero-p', 44) || ico(catIcon(ev), 'hero-p hero-i')}
+<div class="hero-id"><p class="hero-n" title="${esc(ev.what ? gname(ev, 'what') : galt(ev) || '')}">${esc(name)}</p>
+<p class="hero-s"><span class="hero-k2">${CAT[ev.category] || 'Evento'}</span><time>${fmtClock(live ? occ.end : occ.start, { now })}${live ? ' fin' : ''}</time>${bits.map(b => `<span>${esc(b)}</span>`).join('')}${confTag(ev)}${confTag(ev, { dot: true })}</p></div>
+<p class="hero-cw"><span class="hero-l">${lbl}</span><span class="hero-c cd" id="hero-c"></span></p>
+${hint ? `<p class="hero-hint">${hint}</p>` : ''}`;
+box.append(bellButton(ev.id, name));
 bind($('#hero-c'), n => [fmtLeft(target - n), n + leftNext(target - n)]);
 const hn = $('#hero-nb');
 if (hn) bind(hn, nb.live ? () => 'ya empezó' : clockLeft(nb.occ.start));
@@ -187,7 +191,11 @@ $('#tzline').innerHTML = `${esc(tzSentence())} <button type="button" class="link
 $('#up-sub').textContent = prefs().clock === 'server' ? 'hora del server' : 'en tu reloj';
 }
 function paintAll() { paintResets(); paintHero(); paintTl(); paintTz(); }
-renderUpcoming($('#up'), { count: 10, minorLast: true });   // los de cada hora al final: la primera fila es la de "Lo próximo"
+const ONE = matchMedia('(max-width: 960px), (orientation: portrait) and (min-height: 1400px)');
+let stopUp = () => {};
+const mountUp = () => { stopUp(); stopUp = renderUpcoming($('#up'), html.classList.contains('mini') ? { count: 8, within: 6 * HOUR } : { count: ONE.matches ? 10 : 14, minorLast: true }); };
+ONE.addEventListener?.('change', mountUp);
+mountUp();
 paintAll();
 paintTk();
 paintPins();

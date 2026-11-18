@@ -82,6 +82,7 @@ held = !!srv() && !V.live;
 if (held) setTimeout(() => { if (held) { held = false; paint(); paintSt(); } }, HOLD);
 }
 const SOON = 15 * MIN;                                   // "sale pronto": la cuenta regresiva se enciende
+const NEAR = 60 * MIN;                                   // importantes: a más de 1 h (o sin dato), fila chica; grandes cuando están por salir o vivos
 const GROUPS = [['now', 'Para ir ahora'], ['soon', 'Próximos'], ['stale', 'Sin confirmar', 'hubo mantenimiento'], ['none', 'Sin datos']];
 const TIER_TXT = { 1: () => `Set ${gradeTxt('Unique')}`, 2: () => `Set ${gradeTxt('Legend')} o alma de pet`, 3: () => `Set ${gradeTxt('Rare')}` };
 const grpOf = s => s === 'alive' || s === 'window' || s === 'due' ? 'now' : s === 'spawns' ? 'soon' : s;
@@ -207,9 +208,10 @@ const denyBtn = tm?.src === 'com' && s !== 'stale' && com() === 'compartir'
 ? '<button type="button" class="btn ghost jf-deny" data-deny title="Fuiste y no estaba muerto, o el reporte no cierra: le resta confianza">No estaba</button>' : '';
 const fix = tm?.src === 'vos';                         // con tu timer, el botón corrige (nunca lo pisa sin preguntar)
 const soon = s === 'spawns' && tm.start - now <= SOON ? ' is-soon' : '';
+const far = b.top && !(s === 'alive' || s === 'due' || s === 'window' || (s === 'spawns' && tm.start - now <= NEAR)) ? ' is-far' : '';
 const meta = [lv && `Nivel ${b.level}`, tpTxt(gname(b, 'teleport')) || 'Ubicación sin confirmar', b.top && (tm || srv()) && `cada ${cycTxt(b.respawnMin)}`].filter(Boolean).map(esc).join(' · ');
 const info = `${galt(b) ? esc(galt(b)) + ' · ' : ''}Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)}${b.respawnSource === 'oficial' ? ' (oficial, parche Global)' : ''}`;
-return `<li class="jf-r s-${s}${tm ? ' src-' + tm.src : ''}${soon}${b.top ? ' jf-wc' : ''}" id="b-${b.id}" data-boss="${b.id}" data-lv="${b.level}" data-tier="${b.tier}" tabindex="-1">
+return `<li class="jf-r s-${s}${tm ? ' src-' + tm.src : ''}${soon}${far}${b.top ? ' jf-wc' : ''}" id="b-${b.id}" data-boss="${b.id}" data-lv="${b.level}" data-tier="${b.tier}" tabindex="-1">
 ${b.top ? pic(b, 192, 96) : pic(b, 80, 40)}
 <span class="jf-n" title="${info}"><b>${esc(gname(b))}</b><small>${meta}</small></span>${b.top ? cardDrops(b) : rowDrops(b)}
 <span class="jf-w" title="${esc(tip)}"><span class="jf-s">${st}</span><span class="jf-t">${when}${src}</span></span>
@@ -226,7 +228,7 @@ const world = [], rest = [];
 nextChange = Infinity;
 for (const b of BOSSES) {
 const tm = timer(b, now, K);
-if (tm) for (const x of [tm.start - SOON, tm.start, tm.end, tm.end + KEEP, tm.maint]) if (x > now && x < nextChange) nextChange = x;
+if (tm) for (const x of [tm.start - SOON, tm.start, tm.end, tm.end + KEEP, tm.maint, b.top ? tm.start - NEAR : 0]) if (x > now && x < nextChange) nextChange = x;
 if (b.fac === f) (b.top ? world : rest).push([b, tm]);
 }
 const why = () => { $('#jf-world-why').innerHTML = `sueltan equipo ${grade('Unique')}, el mejor de campo`; };
@@ -272,6 +274,7 @@ else if (fgt) $(fgt)?.focus();
 if (km && KM.matches(':popover-open')) placeKm();
 }
 function bindRows() {
+$('#jf-world').classList.toggle('is-far', !$('#jf-world-l .jf-r:not(.is-far)'));
 for (const li of $('#jf-main').querySelectorAll('[data-boss]')) {
 const b = BY.get(+li.dataset.boss), l = $('[data-left]', li), a = $('[data-ago]', li);
 if (l) { const t = +l.dataset.left; bind(l, n => jLeft(t - n, n)); }
