@@ -5,10 +5,11 @@ characters, taskList, taskDone, setTaskDone, taskProgress, PJ, TK, profile, serv
 const PER = { daily: { t: 'Diarias', when: 'reset diario' }, weekly: { t: 'Semanales', when: 'reset del miércoles' } };
 let editing = false;
 const uid = () => Math.random().toString(36).slice(2, 9);
+const setHtml = (el, h) => { if (el._h !== h) { el.innerHTML = h; el._h = h; } };
 function paint() {
 const now = Date.now(), { list, activo } = characters(), focusId = document.activeElement?.id;
-$('#pj-tabs').innerHTML = list.map(c => { const d = taskProgress(c.id, now).daily, all = d.total && d.done >= d.total;
-return `<button type="button" data-pj="${esc(c.id)}" aria-pressed="${c.id === activo}"><span class="pj-nm">${esc(c.name)}</span>${c.clase ? `<small>${esc(gclass(c.clase))}</small>` : ''}<span class="pj-p${all ? ' all' : ''}" title="Diarias hechas">${all ? ico('i-check') : ''}${d.done}/${d.total}</span>${editing && c.id !== 'main' ? `<span class="pj-x" data-pjdel="${esc(c.id)}" role="button" tabindex="0" aria-label="Quitar ${esc(c.name)}">${ico('i-x')}</span>` : ''}</button>`; }).join('');
+setHtml($('#pj-tabs'), list.map(c => { const d = taskProgress(c.id, now).daily, all = d.total && d.done >= d.total;
+return `<button type="button" data-pj="${esc(c.id)}" aria-pressed="${c.id === activo}"><span class="pj-nm">${esc(c.name)}</span>${c.clase ? `<small>${esc(gclass(c.clase))}</small>` : ''}<span class="pj-p${all ? ' all' : ''}" title="Diarias hechas">${all ? ico('i-check') : ''}${d.done}/${d.total}</span>${editing && c.id !== 'main' ? `<span class="pj-x" data-pjdel="${esc(c.id)}" role="button" tabindex="0" aria-label="Quitar ${esc(c.name)}">${ico('i-x')}</span>` : ''}</button>`; }).join(''));
 for (const per of ['daily', 'weekly']) paintGroup(per, activo, now);
 $('#tk-edit').setAttribute('aria-pressed', String(editing));
 document.body.classList.toggle('tk-editing', editing);
@@ -18,11 +19,11 @@ function paintGroup(per, ch, now) {
 const g = $('#g-' + per), items = taskList().filter(t => t.period === per), done = taskDone(ch, per, now);
 const req = items.filter(t => !t.optional), n = req.filter(t => (done[t.id] || 0) >= (t.count || 1)).length;
 const pct = req.length ? Math.round(n / req.length * 100) : 0, rs = nextReset(per, now);
-g.innerHTML = `<div class="tk-h"><h2 id="h-${per}">${PER[per].t}</h2><span class="tk-n"><b>${n}</b>/${req.length}</span>
+setHtml(g, `<div class="tk-h"><h2 id="h-${per}">${PER[per].t}</h2><span class="tk-n"><b>${n}</b>/${req.length}</span>
 <span class="tk-r">se limpian en <span class="cd" id="rs-${per}"></span> <small>${fmtClock(rs, { now })}</small></span></div>
 <div class="bar" role="progressbar" aria-label="${PER[per].t} hechas" aria-valuemin="0" aria-valuemax="${req.length}" aria-valuenow="${n}"><i style="--w:${pct}%"></i></div>
 <ul class="tk-list">${items.filter(t => !t.optional).map(t => row(t, per, done)).join('')}${items.some(t => t.optional) ? `<li class="tk-sep">Si te sobra tiempo</li>${items.filter(t => t.optional).map(t => row(t, per, done)).join('')}` : ''}${items.length ? '' : '<li class="tk-empty">Sin tareas. Sumá una con el lápiz.</li>'}</ul>
-${legend(items)}<form class="tk-add" data-per="${per}"><input type="text" name="n" maxlength="60" placeholder="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" aria-label="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" required><button class="btn">${ico('i-plus')}Agregar</button></form>`;
+${legend(items)}<form class="tk-add" data-per="${per}"><input type="text" name="n" maxlength="60" placeholder="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" aria-label="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" required><button class="btn">${ico('i-plus')}Agregar</button></form>`);
 bind($('#rs-' + per), n2 => [fmtLeft(rs - n2), n2 + leftNext(rs - n2)]);
 for (const t of items) if (t.event) {
 const el = $(`#ev-${per}-${CSS.escape(t.id)}`), o = currentOcc(t.event, now) || nextOcc(t.event, now);
@@ -51,10 +52,7 @@ ${t.event ? `<span class="tk-ev cd" id="ev-${per}-${esc(t.id)}"></span>` : ''}${
 }
 /* ---------- acciones ---------- */
 const active = () => characters().activo;
-function set(per, id, val) {
-if (!setTaskDone(active(), per, id, val)) return;
-paint();
-}
+const set = (per, id, val) => setTaskDone(active(), per, id, val);
 document.addEventListener('change', e => {
 const c = e.target.closest('[data-chk]');
 if (!c) return;
@@ -206,6 +204,7 @@ on('profile', paint);
 on('prefs', paint);
 on('gamelang', paint);
 on('structure', paint);
+on('tasks', paint);
 onStore('hub-tareas', paint);
 onStore('hub-personajes', paint);
 addEventListener('hashchange', focusHash);

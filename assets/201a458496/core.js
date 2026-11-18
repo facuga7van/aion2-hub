@@ -379,22 +379,60 @@ d.showModal();
 return new Promise(res => d.addEventListener('close', () => { const i = d.returnValue; d.remove(); res(i === '' || i == null ? null : actions[+i]?.value ?? null); }, { once: true }));
 }
 /* ---------- alertas ---------- */
-const AKEY = versioned('hub-alertas', 1, { bells: {}, sound: true, vol: 0.6, quiet: { on: false, from: '00:00', to: '08:00' }, muteUntil: 0, title: true });
+const AKEY = versioned('hub-alertas', 1, { bells: {}, sound: true, voice: false, vol: 0.6, quiet: { on: false, from: '00:00', to: '08:00' }, muteUntil: 0, title: true });
 let A = AKEY.get();
 const saveA = () => AKEY.set(A);
 const ITEMS = new Map();
-export const LEADS = [10, 5, 1, 0];
+export const LEADS = [15, 10, 5, 1, 0];               // 15: un jefe de mundo al otro lado del mapa (decisions.md "Avisos para jugar")
 export function registerAlertable(item) { ITEMS.set(item.id, item); rebuildQueue(Date.now()); }
 export const alertable = id => ITEMS.get(id);
 export const alertName = it => it ? gname(it, 'short') || gname(it, 'label') : '';
 export const alertPrefs = () => A;
-export function setAlertPrefs(patch) { A = { ...A, ...patch }; saveA(); rebuildQueue(Date.now()); emit('bells', A); }
-export const getBell = id => A.bells[id] || null;
+export function setAlertPrefs(patch) { A = { ...A, ...patch }; BC = null; saveA(); rebuildQueue(Date.now()); emit('bells', A); }
+export const RULES = { world: 'Todos los jefes importantes', pets: 'Jefes que sueltan una pet que me falta', alive: 'Avisame cuando un jefe con campana pase a Vivo' };
+const RULE_LEADS = [5];
+let RULED = new Map(), BC = null;
+const ruleOf = id => RULED.get(id) || ITEMS.get(id)?.rules || [];
+const implicit = id => !A.ruleOff?.[id] && ruleOf(id).some(r => A.rules?.[r]);
+export const ruleBell = id => !A.bells[id] && implicit(id);   // la campana está puesta solo por una regla
+export function bells() {
+if (BC) return BC;
+BC = {};
+if (A.rules?.world || A.rules?.pets) for (const id of new Set([...RULED.keys(), ...[...ITEMS.values()].filter(i => i.rules).map(i => i.id)])) if (implicit(id)) BC[id] = RULE_LEADS;
+return Object.assign(BC, A.bells);
+}
+export function setRuled(map) {
+const m = new Map(Object.entries(map));
+if (JSON.stringify([...m]) === JSON.stringify([...RULED])) return;
+RULED = m; BC = null;
+rebuildQueue(Date.now());
+for (const b of $$('.bell')) paintBell(b);
+}
+export const getBell = id => bells()[id] || null;
 export function setBell(id, leads) {
 const b = { ...A.bells };
 if (leads && leads.length) b[id] = [...new Set(leads)].sort((x, y) => y - x); else delete b[id];
-setAlertPrefs({ bells: b });
+setAlertPrefs({ bells: b, ...(!leads?.length && implicit(id) ? { ruleOff: { ...A.ruleOff, [id]: 1 } } : {}) });   // sacar una implícita: apagar esa sola
 for (const el of $$(`.bell[data-bell="${CSS.escape(id)}"]`)) paintBell(el);
+}
+export function setRule(k, val) {
+setAlertPrefs({ rules: { ...A.rules, [k]: val } });
+for (const b of $$('.bell')) paintBell(b);
+}
+export function ruleBox() {
+const d = document.createElement('div');
+d.className = 'rules';
+d.setAttribute('role', 'group');
+d.setAttribute('aria-label', 'Campanas por regla');
+d.innerHTML = Object.entries(RULES).map(([k, t]) => `<label class="chk"><input type="checkbox" data-rule="${k}"${A.rules?.[k] ? ' checked' : ''}> <span>${t}${k === 'world' ? ' <small>(los 4 de mundo de tu facción)</small>' : ''}</span></label>`).join('')
++ '<p class="hint">Cada jefe de una regla queda con campana (5 min antes); la apagás de a uno en su campana.</p>';
+d.addEventListener('change', e => {
+const k = e.target.dataset.rule;
+if (!k) return;
+setRule(k, e.target.checked);
+if (e.target.checked) { audio(); if (!askedOnce) { askedOnce = true; askPermission(); } }
+});
+return d;
 }
 export const isMuted = (now = Date.now()) => A.muteUntil > now;
 export function inQuiet(now = Date.now()) {
@@ -431,6 +469,22 @@ o.start(d); o.stop(d + 1.2);
 });
 return true;
 }
+export function say(text) {
+const S = window.speechSynthesis;
+if (!S || !text) return false;
+const u = new SpeechSynthesisUtterance(text), V = S.getVoices?.() || [], lg = v => String(v.lang).replace('_', '-');
+const v = V.find(v => lg(v) === 'es-AR') || V.find(v => lg(v) === 'es-ES') || V.find(v => /^es\b/i.test(lg(v)));
+if (v) u.voice = v;
+u.lang = v ? lg(v) : 'es-AR';
+u.volume = A.vol;
+S.speak(u);
+return true;
+}
+const NUM = { 15: 'quince', 10: 'diez', 5: 'cinco', 1: 'un' };
+const sayText = (name, lead, it, note) => {
+const tp = /teleport (\d+)/i.exec(note || '')?.[1];
+return (lead ? `${name} en ${NUM[lead] || lead} minuto${lead === 1 ? '' : 's'}` : `${name}, ${(it.nowText || 'empieza ahora').toLowerCase()}`) + (tp ? `, teleport ${tp}` : '');
+};
 const ICON = ROOT + 'assets/icon-192.png';
 export function notify(title, opts = {}) {
 if (!('Notification' in window) || Notification.permission !== 'granted') return false;
@@ -450,7 +504,7 @@ const STALE = 2 * MIN, GRACE = 2 * MIN, DONE = new Set();
 let Q = [];
 function rebuildQueue(now) {
 Q = [];
-for (const [id, leads] of Object.entries(A.bells)) {
+for (const [id, leads] of Object.entries(bells())) {
 const it = ITEMS.get(id);
 if (!it) continue;
 const a = it.next(now - GRACE), b = a && it.next(a.start);
@@ -458,6 +512,10 @@ for (const o of [a, b]) if (o) for (const lead of leads) {
 const at = o.start - lead * MIN, key = `${id}|${o.start}|${lead}`;
 if (at > now - STALE && !DONE.has(key)) Q.push({ id, at, lead, occ: o, key });
 }
+}
+if (A.daily) {
+const rd = nextReset('daily', now), key = 'diarias|' + rd;
+if (rd - HOUR > now - STALE && !DONE.has(key)) Q.push({ id: 'diarias', at: rd - HOUR, lead: 60, occ: { start: rd }, key, daily: true });
 }
 Q.sort((x, y) => x.at - y.at);
 }
@@ -471,26 +529,39 @@ function fire(q, now) {
 if (DONE.has(q.key)) return;
 DONE.add(q.key);
 if (now - q.at > STALE) return;                  // la compu estuvo dormida: un aviso viejo no sirve
+if (q.daily) return fireDaily(q, now);
 const it = ITEMS.get(q.id), name = alertName(it);
 if (!it || (it.until && now >= it.until)) return;  // timer suelto que dejó de valer (p. ej. hubo mantenimiento)
 const title = q.lead ? `${name} en ${q.lead} min` : `¡${name}! ${it.nowText || 'Empieza ahora'}`;
-const body = [fmtClock(q.occ.start, { now }), it.note?.(q.occ)].filter(Boolean).join(' · ');
+const note = it.note?.(q.occ), body = [fmtClock(q.occ.start, { now }), note].filter(Boolean).join(' · ');
+alarm(q.key, title, body, q.id, it.href, sayText(name, q.lead, it, note), q.lead === 0, now);
+}
+function fireDaily(q, now) {
+const rd = q.occ.start, p = taskProgress(characters().activo, now), d = p.daily.total - p.daily.done;
+const w = nextReset('weekly', now) === rd ? p.weekly.total - p.weekly.done : 0;
+if (!d && !w) return;
+const what = [d && `${d} diaria${d > 1 ? 's' : ''}`, w && `${w} semanal${w > 1 ? 'es' : ''}`].filter(Boolean).join(' y ');
+alarm(q.key, `Te faltan ${what}`, `Reset ${w ? 'semanal ' : ''}${fmtClock(rd, { now })} · en 1 h`, 'diarias', ROOT + 'tareas/', `Te faltan ${what}, el reset es en una hora`, false, now);
+}
+function alarm(key, title, body, id, href, spoken, high, now) {
 toast(`${ico('i-bell-on')} <b>${esc(title)}</b> · ${esc(body)}`, { ms: 9000 });
 announce(title);
 if (!leader) return;
 const log = store.get('hub-alertas-log', []);
-if (log.includes(q.key)) return;                 // otra pestaña líder ya lo disparó
-store.set('hub-alertas-log', [...log, q.key].slice(-40));
+if (log.includes(key)) return;                   // otra pestaña líder ya lo disparó
+store.set('hub-alertas-log', [...log, key].slice(-40));
 if (isSilenced(now)) return;                     // horas de silencio o M: solo el toast
-notify(title, { body, tag: 'hub-' + q.id, data: { href: siteHref(it.href || ROOT) } });
-if (A.sound) chime(A.vol, q.lead === 0);
+notify(title, { body, tag: 'hub-' + id, data: { href: siteHref(href || ROOT) } });
+if (A.sound) chime(A.vol, high);
+if (A.voice) A.sound ? setTimeout(() => say(spoken), 900) : say(spoken);   // después de los dos tonos
 }
 export function testAlert() {
 askPermission().then(() => {
 notify('Así te aviso', { body: 'Bitácora Daeva · prueba de alerta', tag: 'hub-prueba' });
 });
 if (A.sound) chime(A.vol);
-toast(`${ico('i-bell-on')} <b>Así te aviso</b> · toast en la página${A.sound ? ', sonido' : ''} y notificación del sistema.`);
+if (A.voice) say('Así te aviso');
+toast(`${ico('i-bell-on')} <b>Así te aviso</b> · toast en la página${A.sound ? ', sonido' : ''}${A.voice ? ', voz' : ''} y notificación del sistema.`);
 }
 export function askPermission() {
 if (!('Notification' in window) || Notification.permission !== 'default') return Promise.resolve(window.Notification?.permission || 'unsupported');
@@ -498,7 +569,7 @@ return Notification.requestPermission().catch(() => 'denied');
 }
 export function nextBelled(now = Date.now()) {
 let best = null;
-for (const id in A.bells) {
+for (const id in bells()) {
 const it = ITEMS.get(id);
 if (!it) continue;
 const cur = it.current?.(now);
@@ -515,11 +586,17 @@ export const storedTimers = (now = Date.now()) => (store.get('hub-timers', []) |
 export function setTimers(list) { store.set('hub-timers', list); syncTimers(); }
 const timerText = t => n => n < t.start ? [fmtLeft(t.start - n), n + leftNext(t.start - n)] : [t.liveText || 'ya puede estar', 0];
 function syncTimers() {
-const now = Date.now();
-for (const [id, it] of ITEMS) if (it.stored) ITEMS.delete(id);
+const now = Date.now(), was = new Map();
+for (const [id, it] of ITEMS) if (it.stored) { was.set(id, !!it.alive); ITEMS.delete(id); }
 for (const t of storedTimers(now)) {
 const ok = n => !(t.until && n >= t.until);
 ITEMS.set(t.id, { ...t, stored: true, note: () => gname(t, 'note'), next: n => n < t.start && ok(n) ? t : null, current: n => n >= t.start && n < t.end && ok(n) ? t : null });
+}
+BC = null;
+if (A.rules?.alive) for (const t of storedTimers(now)) if (t.alive && was.get(t.id) === false && getBell(t.id)) {
+for (const l of getBell(t.id)) DONE.add(`${t.id}|${t.start}|${l}`);   // sin "Ya debería estar" encima
+const name = alertName(t), note = gname(t, 'note');
+alarm(`${t.id}|vivo|${t.start}`, `${name} está vivo`, [`desde ${fmtClock(t.start, { now })}`, note].filter(Boolean).join(' · '), t.id, t.href, sayText(name, 0, { nowText: 'está vivo' }, note).replace(',', ''), true, now);
 }
 rebuildQueue(now);
 nextB = 0;                                         // la tira y las listas se repintan en el próximo tick
@@ -562,7 +639,7 @@ function paintBell(b) {
 const L = getBell(b.dataset.bell);
 b.setAttribute('aria-pressed', String(!!L));
 b.innerHTML = ico(L ? 'i-bell-on' : 'i-bell');
-const t = `${L ? 'Aviso: ' + L.map(leadTxt).join(', ') : 'Avisarme'} · ${b.dataset.label}`;
+const t = `${L ? (ruleBell(b.dataset.bell) ? 'Aviso por regla: ' : 'Aviso: ') + L.map(leadTxt).join(', ') : 'Avisarme'} · ${b.dataset.label}`;
 b.setAttribute('aria-label', t);
 b.title = t;
 }
@@ -603,6 +680,7 @@ const L = getBell(id) || [], perm = window.Notification?.permission;
 m.innerHTML = `<p class="bm-t">Avisarme · <b>${esc(bmAnchor?.dataset.label || id)}</b></p>
 <div class="bm-leads" role="group" aria-label="Antelación">${LEADS.map(l => `<button type="button" data-lead="${l}" aria-pressed="${L.includes(l)}">${l ? l + ' min' : 'Al inicio'}</button>`).join('')}</div>
 ${bmAnchor?.dataset.hint ? `<p class="bm-n">${esc(bmAnchor.dataset.hint)}</p>` : ''}
+${ruleBell(id) ? `<p class="bm-n">Puesta por la regla "${esc(ruleOf(id).filter(r => A.rules?.[r]).map(r => RULES[r]).join('" y "'))}". "Sacar aviso" apaga solo esta.</p>` : ''}
 ${perm === 'denied' ? '<p class="bm-n">El navegador bloqueó las notificaciones: te aviso en la página' + (A.sound ? ' y con sonido' : '') + '.</p>' : ''}
 ${isSilenced() ? '<p class="bm-n">Ahora estás en silencio: el aviso aparece solo en la página.</p>' : ''}
 <div class="bm-f"><button type="button" class="linkbtn" data-test>Probar</button><button type="button" class="linkbtn danger" data-off>Sacar aviso</button></div>`;
@@ -726,7 +804,7 @@ bind($('.st-clock', box), n => [fmtClock(n, { now: n, day: false }), n + MIN - n
 el.replaceChildren(box);
 return;
 }
-const now = Date.now(), belled = new Set(Object.keys(A.bells));
+const now = Date.now(), belled = new Set(Object.keys(bells()));
 const L = upcoming(now, { count: 30 }).filter(o => !o.ev.minor || belled.has(o.id));
 const live = L.find(o => isLive(o, now)), next = L.filter(o => o.start > now).slice(0, 2);
 const box = document.createElement('div');
@@ -894,9 +972,12 @@ ${welcome ? '<p class="hint ob-acc">¿Ya la usás en otro dispositivo? <button t
 <div class="f2"><div class="seg" role="group" aria-label="Qué reloj"><button type="button" data-clock="local">Tu reloj</button><button type="button" data-clock="server">Hora del server</button></div>
 <div class="seg" role="group" aria-label="Formato"><button type="button" data-h12="0">24 h</button><button type="button" data-h12="1">12 h</button></div></div></fieldset>
 <fieldset><legend>Avisos</legend>
-<label class="chk"><input type="checkbox" id="s-snd"${A.sound ? ' checked' : ''}> Sonido</label>
+<div class="chk2"><label class="chk"><input type="checkbox" id="s-snd"${A.sound ? ' checked' : ''}> Sonido</label>
+${'speechSynthesis' in window ? `<label class="chk" title='"Kashapa en cinco minutos, teleport 44"'><input type="checkbox" id="s-voz"${A.voice ? ' checked' : ''}> Voz</label>` : ''}</div>
 <label class="rng">Volumen <input type="range" id="s-vol" min="0.05" max="1" step="0.05" value="${A.vol}"></label>
+<details class="more-av"${A.daily || !A.title || Object.values(A.rules || {}).some(Boolean) ? ' open' : ''}><summary>Más avisos: título, diarias y jefes por regla</summary>
 <label class="chk"><input type="checkbox" id="s-tit"${A.title ? ' checked' : ''}> Cuenta regresiva en el título de la pestaña</label>
+<label class="chk"><input type="checkbox" id="s-dia"${A.daily ? ' checked' : ''}> Avisarme 1 h antes del reset si me faltan diarias (o semanales)</label></details>
 <label class="chk"><input type="checkbox" id="s-qon"${A.quiet.on ? ' checked' : ''}> Horas de silencio (tu reloj)</label>
 <div class="f2 q"><label>Desde <input type="time" id="s-qf" value="${A.quiet.from}"></label><label>Hasta <input type="time" id="s-qt" value="${A.quiet.to}"></label></div>
 <p class="hint">${'Notification' in window ? (Notification.permission === 'granted' ? 'Notificaciones del sistema: permitidas.' : Notification.permission === 'denied' ? 'Notificaciones del sistema: bloqueadas en este navegador (igual te aviso en la página).' : 'El permiso de notificaciones se pide la primera vez que tocás una campana.') : 'Este navegador no tiene notificaciones: te aviso en la página.'}</p>
@@ -906,6 +987,7 @@ ${welcome ? '<p class="hint ob-acc">¿Ya la usás en otro dispositivo? <button t
 const box = document.createElement('div');
 box.innerHTML = html;
 if (!welcome) $('fieldset', box).after(cuentaBox());
+if (!welcome) $('.more-av', box).append(ruleBox());   // plegado: Ajustes en el celu sigue corto (cuenta.mjs)
 const srv = $('#s-srv', box), reg = $('#s-reg', box);
 const paintSrv = () => {
 const r = reg.value, cur = store.get('hub-server', null), L = serverList(r), wf = welcome && store.get('hub-faccion', null);
@@ -948,8 +1030,10 @@ box.addEventListener('change', e => {
 const t = e.target;
 if (t.dataset.vis) setPrefs({ vis: { ...P.vis, [t.dataset.vis]: t.checked } });
 else if (t.id === 's-snd') { setAlertPrefs({ sound: t.checked }); if (t.checked) audio(); }
+else if (t.id === 's-voz') { setAlertPrefs({ voice: t.checked }); if (t.checked) say('Así te aviso'); }
 else if (t.id === 's-vol') setAlertPrefs({ vol: +t.value });
 else if (t.id === 's-tit') setAlertPrefs({ title: t.checked });
+else if (t.id === 's-dia') { setAlertPrefs({ daily: t.checked }); if (t.checked) { audio(); askPermission(); } }   // gesto: acá se puede pedir permiso
 else if (['s-qon', 's-qf', 's-qt'].includes(t.id)) setAlertPrefs({ quiet: { on: $('#s-qon', box).checked, from: $('#s-qf', box).value || '00:00', to: $('#s-qt', box).value || '08:00' } });
 });
 $('#s-vol', box)?.addEventListener('input', e => setAlertPrefs({ vol: +e.target.value }));
@@ -1018,32 +1102,59 @@ out[per] = { done: L.filter(x => (d[x.id] || 0) >= (x.count || 1)).length, total
 return out;
 }
 /* ---------- ventana flotante (Document Picture-in-Picture) ---------- */
+export function miniTabs(doc, panels) {
+const bar = doc.createElement('div');
+bar.className = 'seg mtabs';
+bar.setAttribute('role', 'tablist');
+bar.setAttribute('aria-label', 'Qué mostrar');
+bar.innerHTML = [['viene', 'Viene'], ['tareas', 'Tareas']].map(([k, l]) => `<button type="button" role="tab" id="mt-${k}" data-mtab="${k}" aria-controls="${panels[k].id}">${l}</button>`).join('');
+for (const [k, el] of Object.entries(panels)) { el.setAttribute('role', 'tabpanel'); el.setAttribute('aria-labelledby', 'mt-' + k); }
+const pick = (k, focus) => {
+doc.documentElement.dataset.mtab = k;
+for (const b of bar.children) { const sel = b.dataset.mtab === k; b.setAttribute('aria-selected', sel); b.tabIndex = sel ? 0 : -1; if (sel && focus) b.focus(); }
+};
+bar.addEventListener('click', e => { const b = e.target.closest('[data-mtab]'); if (b) { store.set('hub-mini-tab', b.dataset.mtab); pick(b.dataset.mtab, true); } });
+bar.addEventListener('keydown', e => {
+if (!['ArrowLeft', 'ArrowRight', 'Home', 'End'].includes(e.key)) return;
+e.preventDefault();
+const k = e.key === 'Home' ? 'viene' : e.key === 'End' ? 'tareas' : doc.documentElement.dataset.mtab === 'tareas' ? 'viene' : 'tareas';
+store.set('hub-mini-tab', k);
+pick(k, true);
+});
+pick(store.get('hub-mini-tab', 'viene') === 'tareas' ? 'tareas' : 'viene');
+return bar;
+}
 export async function popOut() {
 if (pipWin) { pipWin.focus?.(); return 'pip'; }
 if ('documentPictureInPicture' in window) {
 try {
-const w = await window.documentPictureInPicture.requestWindow({ width: 340, height: 372 });
-const d = w.document;
-for (const n of $$('link[rel=stylesheet]')) d.head.append(Object.assign(d.createElement('link'), { rel: 'stylesheet', href: n.href }));
+const w = await window.documentPictureInPicture.requestWindow({ width: 340, height: 416 });   // 416: pestañas + 8 filas
+const d = w.document, css = [...$$('link[rel=stylesheet]')].map(n => n.href), tkCss = new URL('ahora.css', import.meta.url).href;
+for (const href of css.includes(tkCss) ? css : [...css, tkCss]) d.head.append(Object.assign(d.createElement('link'), { rel: 'stylesheet', href }));
 d.documentElement.className = 'mini pip';
 d.documentElement.lang = 'es-AR';
 d.title = 'Bitácora · Próximos';
 d.body.append(d.importNode($('#hub-sprite'), true));
 const main = d.createElement('main');
 main.className = 'mini-main';
+main.innerHTML = '<div id="pip-up"></div><div id="pip-tk" class="tk-box"></div>';
+const up = main.firstChild, tk = main.lastChild;
+main.prepend(miniTabs(d, { viene: up, tareas: tk }));
 d.body.append(main);
 pipWin = w;
-const stop = renderUpcoming(main, { count: 8, within: 6 * HOUR });
+const stop = renderUpcoming(up, { count: 8, within: 6 * HOUR });
+let stopTk = () => {};
+import('./hoy.js').then(m => { if (pipWin === w) stopTk = m.renderTodo(tk); }).catch(() => { tk.textContent = 'No pude cargar las tareas. Abrí Tareas en la página.'; });
 const repaint = () => d.querySelectorAll('.bell[data-bell]').forEach(paintBell), offB = on('bells', repaint);
 d.addEventListener('click', e => { const b = e.target.closest('.bell[data-bell]'); if (b) setBell(b.dataset.bell, getBell(b.dataset.bell) ? null : [5]); });
-w.addEventListener('pagehide', () => { stop(); offB(); pipWin = null; cfgKey = ''; emit('pip'); });
+w.addEventListener('pagehide', () => { stop(); stopTk(); offB(); pipWin = null; cfgKey = ''; emit('pip'); });
 cfgKey = '';
 emit('pip');
 tick();
 return 'pip';
 } catch { /* sin gesto o bloqueado: cae al popup */ }
 }
-window.open(ROOT + '?mini', 'bitacora-mini', 'popup,width=360,height=480');   // 480: las 8 filas enteras arriba de la barra de abajo
+window.open(ROOT + '?mini', 'bitacora-mini', 'popup,width=360,height=520');   // 520: pestañas y las 8 filas enteras arriba de la barra de abajo
 return 'popup';
 }
 /* ---------- arranque ---------- */
@@ -1120,7 +1231,7 @@ renderStrip();
 on('structure', renderStrip); on('prefs', renderStrip); on('profile', renderStrip); on('bells', renderStrip); on('mute', renderStrip); on('tasks', renderStrip);
 onStore('hub-tareas', renderStrip); onStore('hub-personajes', renderStrip);
 onTick(now => { checkAlerts(now); titleAndFavicon(now); }, { hidden: true });
-onStore('hub-alertas', () => { A = AKEY.get(); rebuildQueue(Date.now()); emit('bells', A); for (const b of $$('.bell')) paintBell(b); });
+onStore('hub-alertas', () => { A = AKEY.get(); BC = null; rebuildQueue(Date.now()); emit('bells', A); for (const b of $$('.bell')) paintBell(b); });
 onStore('hub-prefs', () => { P = PREFS.get(); emit('prefs', P); });
 onStore('hub-idioma-juego', () => setGameLang(store.get('hub-idioma-juego', 'es'), { remote: true }));
 html.dataset.gl = GL;

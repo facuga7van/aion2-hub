@@ -1,6 +1,6 @@
 import {
 $, esc, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, toast, announce, store, versioned, norm, profile, setProfile, serverName, serverList,
-FACCION, serverFaccion, setFaccion, ROOT, bellButton, registerPalette, registerKey, partsIn, wallToUtc, displayTz,
+FACCION, serverFaccion, setFaccion, ROOT, bellButton, ruleBox, registerPalette, registerKey, partsIn, wallToUtc, displayTz,
 LNA_MSG, gname, galt, gboth, gameLang, modal, DATA, MIN, HOUR,
 } from './core.js';
 import { V, KILLS, KEEP, WIN, timer, state, setKill, publish, api, srv, kkey, bellId, tpTxt, SRC_TXT } from './vivo.js';
@@ -500,9 +500,9 @@ IP.className = 'bellmenu jf-ipop';
 IP.popover = 'auto';
 IP.setAttribute('role', 'dialog');
 IP.setAttribute('aria-label', 'De dónde salen los horarios');
-IP.innerHTML = '<p>Datos de telemetría de jugadores y reportes; no son horarios oficiales.</p><p>Ciclos: parche oficial (Gartua y Lagta) y telemetría; pueden variar unos minutos.</p><p><b>Teleport 6</b> es el punto de teletransporte más cercano al jefe, con su número del mapa.</p><button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button>';
+IP.innerHTML = '<p>Datos de telemetría de jugadores y reportes; no son horarios oficiales.</p><p>Ciclos: parche oficial (Gartua y Lagta) y telemetría; pueden variar unos minutos.</p><p><b>Teleport 6</b> es el punto de teletransporte más cercano al jefe, con su número del mapa.</p><button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button><p class="bm-t">Campanas por regla</p><div id="jf-rules"></div>';
 document.body.append(IP);
-$('#jf-i').addEventListener('click', () => { IP.showPopover(); placeAt(IP, $('#jf-i')); $('#jf-i').setAttribute('aria-expanded', 'true'); });
+$('#jf-i').addEventListener('click', () => { $('#jf-rules').replaceChildren(ruleBox()); IP.showPopover(); placeAt(IP, $('#jf-i')); $('#jf-i').setAttribute('aria-expanded', 'true'); });
 IP.addEventListener('toggle', e => { if (e.newState === 'closed') $('#jf-i').setAttribute('aria-expanded', 'false'); });
 $('#jf-fbtn').addEventListener('click', () => {
 const o = $('#jf-bar').classList.toggle('open');

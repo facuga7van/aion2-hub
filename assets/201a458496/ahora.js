@@ -1,8 +1,9 @@
 import {
 $, $$, esc, ico, on, onTick, onStore, bind, countdown, fmtClock, fmtLeft, leftNext, schedule, upcoming, nextReset, renderUpcoming,
-nextBelled, bellButton, getBell, evPic, EVENTS, isLive, isVisible, catIcon, tzSentence, versioned, characters, taskList, taskDone, taskProgress,
-setTaskDone, toast, prefs, setPrefs, partsIn, displayTz, store, confTag, clockLeft, gname, galt, alertName, nextOcc, currentOcc, HOUR, MIN,
+nextBelled, bellButton, getBell, evPic, EVENTS, isLive, isVisible, catIcon, tzSentence, versioned,
+toast, prefs, setPrefs, partsIn, displayTz, store, confTag, clockLeft, gname, galt, alertName, nextOcc, currentOcc, miniTabs, HOUR, MIN,
 } from './core.js';
+import { renderTodo } from './hoy.js';
 const vivo = () => setTimeout(() => import('./vivo.js' + new URL(import.meta.url).search), 3000);   // ?v=<hash>: el mismo módulo que importa Jefes
 if (document.readyState === 'complete') vivo(); else addEventListener('load', vivo, { once: true });
 const html = document.documentElement;
@@ -53,31 +54,9 @@ if (hn) bind(hn, nb.live ? () => 'ya empezó' : clockLeft(nb.occ.start));
 }
 const CAT = { pvp: 'PvP', boss: 'Jefe', evento: 'Evento' };
 const leadsTxt = L => { const t = L.map(l => l ? `${l} min` : 'al inicio'); return (t.length > 1 ? t.slice(0, -1).join(', ') + ' y ' + t.at(-1) : t[0]) + (L.some(l => l) ? (L.includes(0) && L.length > 1 ? '' : ' antes') : ''); };
-/* ---------- tu día: las diarias y, si hoy toca, las semanales con horario (Asedio, Nahma…); se marcan acá mismo ---------- */
-function paintTk() {
-const now = Date.now(), { list, activo } = characters(), ch = list.find(c => c.id === activo);
-const pr = taskProgress(activo, now), done = { daily: taskDone(activo, 'daily', now), weekly: taskDone(activo, 'weekly', now) };
-const daily = taskList().filter(t => t.period === 'daily' && !t.optional);
-const rd = nextReset('daily', now), occ = {};
-const today = taskList().filter(t => t.period === 'weekly' && t.event && !t.optional)
-.filter(t => { const o = currentOcc(t.event, now) || nextOcc(t.event, now); return o && o.start < rd && (occ[t.id] = o); });
-const pct = pr.daily.total ? Math.round(pr.daily.done / pr.daily.total * 100) : 0;
-const row = t => { const per = t.period, v = done[per][t.id] || 0, max = t.count || 1, ok = v >= max, id = 'ah-t-' + t.id;
-const sub = per === 'weekly' ? `Semanal · <span class="cd" id="ah-ev-${esc(t.id)}"></span>` : t.detail ? esc(gname(t, 'detail')) : '';
-return max > 1 ? `<li class="tk-i${ok ? ' ok' : ''}"><a href="tareas/#t-${esc(t.id)}"><span class="tk-nm">${esc(gname(t))} <b>${v}/${max}</b></span>${sub ? `<small>${sub}</small>` : ''}</a></li>`
-: `<li class="tk-i${ok ? ' ok' : ''}"><input type="checkbox" id="${id}" data-tk="${esc(t.id)}" data-per="${per}"${ok ? ' checked' : ''}><label for="${id}"><span class="tk-nm">${esc(gname(t))}</span>${sub ? `<small>${sub}</small>` : ''}</label></li>`; };
-$('#tk').innerHTML = `<div class="tk-p"><span class="tk-c">${esc(ch.name)}</span><span><b>${pr.daily.done}</b>/${pr.daily.total} diarias</span><span><b>${pr.weekly.done}</b>/${pr.weekly.total} semanales</span></div>
-<div class="bar" role="img" aria-label="${pct}% de las diarias"><i style="--w:${pct}%"></i></div>
-<ul class="tk-l">${daily.slice(0, 6).map(row).join('')}${today.length ? `<li class="tk-sep">Hoy también</li>${today.map(row).join('')}` : ''}</ul>${pr.daily.total && pr.daily.done >= pr.daily.total ? '<p class="tk-ok">Diarias listas hasta el reset.</p>' : ''}`;
-for (const t of today) { const o = occ[t.id], el = $('#ah-ev-' + CSS.escape(t.id)), cl = clockLeft(o.start); bind(el, n => isLive(o, n) ? ['en curso ahora', o.end] : cl(n)); }
-}
-$('#tk').addEventListener('change', e => {
-const c = e.target.closest('[data-tk]');
-if (!c) return;
-setTaskDone(characters().activo, c.dataset.per, c.dataset.tk, c.checked ? 1 : 0);
-paintTk();
-document.getElementById(c.id)?.focus();
-});
+/* ---------- te falta hoy: las diarias sin hacer y lo de hoy de las semanales (hoy.js) ---------- */
+renderTodo($('#tk'));
+$('#widgets').before(miniTabs(document, { viene: $('#up'), tareas: $('#tk') }));
 /* ---------- línea de tiempo (12/24 h, estilo shugo) ---------- */
 const PH = matchMedia('(max-width: 640px)');
 PH.addEventListener?.('change', () => paintTl());
@@ -197,18 +176,13 @@ const mountUp = () => { stopUp(); stopUp = renderUpcoming($('#up'), html.classLi
 ONE.addEventListener?.('change', mountUp);
 mountUp();
 paintAll();
-paintTk();
 paintPins();
-on('structure', () => { paintResets(); paintHero(); paintTl(); paintTk(); });
+on('structure', () => { paintResets(); paintHero(); paintTl(); });
 on('prefs', paintAll);
 on('profile', paintAll);
 on('bells', paintHero);
-on('gamelang', () => { paintHero(); paintTl(); paintTk(); });
-on('reset', paintTk);
-onStore('hub-tareas', paintTk);
-onStore('hub-personajes', paintTk);
+on('gamelang', () => { paintHero(); paintTl(); });
 onStore('hub-ahora', paintPins);
-document.addEventListener('visibilitychange', () => { if (!document.hidden) paintTk(); });
 onTick(moveNow);
 $('#tl').addEventListener('click', e => {
 const b = e.target.closest('[data-what]'), ev = b && EVENTS.get(b.dataset.what);
