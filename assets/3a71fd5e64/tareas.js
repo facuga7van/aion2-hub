@@ -1,5 +1,5 @@
 import {
-$, esc, ico, on, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal, evPic,
+$, esc, ico, on, emit, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal, evPic,
 characters, taskList, taskDone, setTaskDone, taskProgress, PJ, TK, profile, serverName, registerKey, confOf, confTag, clockLeft, gname, gclass, HOUR,
 setTimers, bellButton, ROOT, MIN, OD, odyle, DATA, dm, TASKS,
 } from './core.js';
@@ -18,6 +18,7 @@ setTimers(out, 'odyle');
 const PER = { daily: { t: 'Diarias', when: 'reset diario' }, weekly: { t: 'Semanales', when: 'reset del miércoles' } };
 let editing = false;
 const uid = () => Math.random().toString(36).slice(2, 9);
+const saveTK = o => { const r = TK.set(o); emit('tasks'); return r; };
 const setHtml = (el, h) => { if (el._h !== h) { el.innerHTML = h; el._h = h; } };
 function paint() {
 const now = Date.now(), { list, activo } = characters(), focusId = document.activeElement?.id;
@@ -61,18 +62,18 @@ return H.length ? `<div class="tk-hid"><p class="tk-sep">Ocultas (${H.length})</
 }
 function juegoList(per, items) {
 const X = TASKS.extras.filter(t => t.period === per && !items.some(x => x.id === t.id));
-return X.length ? `<div class="tk-jg"><p class="tk-sep">Del juego</p><ul>${X.map(t => `<li data-jg="${esc(t.id)}"><span>${esc(gname(t))}<small title="Fuente: ${esc(t.source)}">${esc(gname(t, 'detail'))}</small></span><button type="button" class="btn ghost" data-addx="${esc(t.id)}" aria-label="Sumar ${esc(gname(t))}">Sumar</button></li>`).join('')}</ul></div>` : '';
+return X.length ? `<button type="button" class="linkbtn tk-jgmas" data-jgopen="${per}">+ ${X.length} del juego</button><div class="tk-jg"><p class="tk-sep">Del juego</p><ul>${X.map(t => `<li data-jg="${esc(t.id)}"><span>${esc(gname(t))}<small title="Fuente: ${esc(t.source)}">${esc(gname(t, 'detail'))}</small></span><button type="button" class="btn ghost" data-addx="${esc(t.id)}" aria-label="Sumar ${esc(gname(t))}">Sumar</button></li>`).join('')}</ul></div>` : '';
 }
 function addExtra(id) {
 const t = TK.get(), ch = active();
-TK.set({ ...t, addPj: { ...t.addPj, [ch]: [...(t.addPj?.[ch] || []), id] } });
+saveTK({ ...t, addPj: { ...t.addPj, [ch]: [...(t.addPj?.[ch] || []), id] } });
 paint();
 document.getElementById('t-' + id)?.focus();
 }
 function showTask(id) {
 const t = TK.get(), ch = active(), hp = { ...t.hidePj, [ch]: (t.hidePj[ch] || []).filter(x => x !== id) };
 if (!hp[ch].length) delete hp[ch];
-TK.set({ ...t, hidden: t.hidden.filter(x => x !== id), hidePj: hp });
+saveTK({ ...t, hidden: t.hidden.filter(x => x !== id), hidePj: hp });
 paint();
 document.getElementById('t-' + id)?.focus();
 }
@@ -127,6 +128,8 @@ set(c.closest('[data-per]').dataset.per, c.dataset.chk, c.checked ? 1 : 0);
 $('#tk-cols').addEventListener('click', e => {
 const ax = e.target.closest('[data-addx]');
 if (ax) { addExtra(ax.dataset.addx); return; }
+const jo = e.target.closest('[data-jgopen]');
+if (jo) { editing = true; paint(); $(`#g-${jo.dataset.jgopen} [data-addx]`)?.focus(); return; }
 const sh = e.target.closest('[data-show]');
 if (sh) { showTask(sh.dataset.show); return; }
 const b = e.target.closest('[data-inc],[data-dec],[data-del],[data-od]');
@@ -144,30 +147,30 @@ const f = e.target, name = f.n.value.trim();
 if (!name) return;
 const t = TK.get();
 t.custom = [...t.custom, { id: 'u-' + uid(), name, period: f.dataset.per }];
-TK.set(t);
+saveTK(t);
 paint();
 toast(`Sumé <b>${esc(name)}</b> a las ${f.dataset.per === 'daily' ? 'diarias' : 'semanales'}.`);
 $(`#g-${f.dataset.per} .tk-add input`)?.focus();
 });
 function removeTask(id) {
 const t = TK.get(), item = taskList().find(x => x.id === id), ch = active(), many = PJ.get().list.length > 1, nm = esc(gname(item));
-const before = structuredClone(t), undo = { label: 'Deshacer', run: () => { TK.set(before); paint(); } };
+const before = structuredClone(t), undo = { label: 'Deshacer', run: () => { saveTK(before); paint(); } };
 const all = o => { if (item.custom) o.custom = o.custom.filter(x => x.id !== id); else o.hidden = [...o.hidden, id]; return o; };
 if (item.extra) {   // "Del juego": sale de addPj de este personaje (vuelve a "Del juego"), sin claves vacías
 const ap = { ...t.addPj, [ch]: t.addPj[ch].filter(x => x !== id) }, o = { ...t, addPj: ap };
 if (!ap[ch].length) delete ap[ch];
 if (!Object.keys(ap).length) delete o.addPj;
-TK.set(o);
+saveTK(o);
 paint();
 toast(`Quité <b>${nm}</b>.`, { action: undo });
 return;
 }
 const allMsg = `${item.custom ? 'Borré' : 'Oculté'} <b>${nm}</b>${many ? ' en todos tus personajes' : ''}.`;
-TK.set(many ? { ...t, hidePj: { ...t.hidePj, [ch]: [...(t.hidePj[ch] || []), id] } } : all(t));
+saveTK(many ? { ...t, hidePj: { ...t.hidePj, [ch]: [...(t.hidePj[ch] || []), id] } } : all(t));
 paint();
 if (!many) { toast(allMsg, { action: undo }); return; }
 const who = characters().list.find(c => c.id === ch)?.name || '';
-toast(`Oculté <b>${nm}</b> para <b>${esc(who)}</b>.`, { ms: 8000, action: [undo, { label: 'En todos', run: () => { TK.set(all(structuredClone(before))); paint(); toast(allMsg, { action: undo }); } }] });
+toast(`Oculté <b>${nm}</b> para <b>${esc(who)}</b>.`, { ms: 8000, action: [undo, { label: 'En todos', run: () => { saveTK(all(structuredClone(before))); paint(); toast(allMsg, { action: undo }); } }] });
 }
 $('#pj-tabs').addEventListener('click', e => {
 const del = e.target.closest('[data-pjdel]');
@@ -194,7 +197,7 @@ if (wasEmpty) {                                   // lo marcado en "Mi personaje
 const t = TK.get();
 if (t.done.main) { t.done = { ...t.done, [added[0].id]: t.done.main }; delete t.done.main; }
 if (t.addPj?.main) { t.addPj = { ...t.addPj, [added[0].id]: t.addPj.main }; delete t.addPj.main; }
-if (t.done[added[0].id] || t.addPj?.[added[0].id]) TK.set(t);
+if (t.done[added[0].id] || t.addPj?.[added[0].id]) TK.set(t);   // sin emit: PJ todavía no tiene al nuevo
 const o = OD.get();
 if (o.c.main) { o.c = { ...o.c, [added[0].id]: o.c.main }; delete o.c.main; OD.set(o); }
 }
@@ -227,7 +230,7 @@ const t = TK.get();
 delete t.done[id];
 delete t.hidePj[id];
 if (t.addPj) { delete t.addPj[id]; if (!Object.keys(t.addPj).length) delete t.addPj; }
-TK.set(t);
+saveTK(t);
 const o = OD.get();
 if (o.c[id]) { delete o.c[id]; OD.set(o); }
 paint();

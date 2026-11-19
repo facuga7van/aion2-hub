@@ -12,7 +12,7 @@ const done = { daily: taskDone(ch, 'daily', now), weekly: taskDone(ch, 'weekly',
 const L = taskList().filter(t => !t.optional), rd = nextReset('daily', now), occ = {};
 const okOf = t => (done[t.period][t.id] || 0) >= (t.count || 1), show = t => !okOf(t) || kept.has(`${ch}:${t.period}:${t.id}`);
 const daily = L.filter(t => t.period === 'daily'), listo = daily.every(okOf);
-const today = t => { if (!t.event) return t.count > 1 && !t.extra; const o = currentOcc(t.event, now) || nextOcc(t.event, now); return o && o.start < rd && (occ[t.id] = o); };
+const today = t => { if (!t.event) return t.count > 1 && (!t.extra || done.weekly[t.id] > 0); const o = currentOcc(t.event, now) || nextOcc(t.event, now); return o && o.start < rd && (occ[t.id] = o); };
 const also = L.filter(t => t.period === 'weekly' && today(t) && show(t));
 const row = t => {
 const per = t.period, v = done[per][t.id] || 0, max = t.count || 1, ok = v >= max, id = 'ah-t-' + t.id, nm = esc(gname(t));
