@@ -14,7 +14,8 @@ const now = Date.now(), nb = nextBelled(now), box = $('#hero');
 const L = upcoming(now, { count: 20, minor: false }), occ = L.find(o => o.start > now || o.entry > now);
 const tm = storedTimers(now).filter(t => t.up && t.start > now).sort((a, b) => a.start - b.start)[0];
 const first = tm && (!occ || tm.start < occ.start), done = !first && !!occ && occDone(occ);
-const nx = done && L.slice(L.indexOf(occ) + 1).find(o => !isLive(o, now) && !occDone(o));
+const tk = done && new Set(taskList().map(t => t.event));
+const nx = done && L.slice(L.indexOf(occ) + 1).find(o => tk.has(o.id) && !isLive(o, now) && !occDone(o));
 paintNow(now, first ? '' : occ?.id, nx);
 box.classList.toggle('is-done', done);
 if (first) return heroTimer(tm, now, nb, box);
@@ -22,7 +23,7 @@ if (!occ) { box.innerHTML = '<p class="hero-hint">No hay eventos visibles. Activ
 const ev = occ.ev, name = gname(ev), live = isLive(occ, now), portal = live && occ.entry > now;
 const lbl = !live ? 'empieza en' : portal ? `${ev.entryLabel || 'entrada abierta'} · cierra en` : ev.durTxt ? '≈ termina en' : 'termina en';
 const target = !live ? occ.start : portal ? occ.entry : occ.end;
-const bits = [ev.entry ? `${ev.entryLabel} ${ev.entry} min` : '', ev.durTxt || (ev.duration ? `dura ${ev.duration >= 60 ? ev.duration / 60 + ' h' : ev.duration + ' min'}` : ''), occ.maint === 'quizas' ? 'puede caer en el mantenimiento' : '',
+const bits = [ev.entry && !portal ? `${ev.entryLabel} ${ev.entry} min` : '', ev.durTxt || (ev.duration ? `dura ${ev.duration >= 60 ? ev.duration / 60 + ' h' : ev.duration + ' min'}` : ''), occ.maint === 'quizas' ? 'puede caer en el mantenimiento' : '',
 occ.approx === 'grupo' ? GRUPO_TXT : occ.approx ? 'hora estimada según tu grupo' : ''].filter(Boolean);
 const hint = bellHint(ev.id, nb), C = characters(), per = done && taskList().find(t => t.event === ev.id).period;
 const chip = done ? `<span class="hero-ok"${C.list.length > 1 ? ` title="${esc(C.list.find(c => c.id === C.activo).name)} ya la hizo"` : ''}>✓ hecha ${per === 'weekly' ? 'esta semana' : 'hoy'}</span>` : '';

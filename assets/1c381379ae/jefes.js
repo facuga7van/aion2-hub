@@ -106,7 +106,6 @@ const grade = g => `<b class="jf-gq ${qcls(g)}">${esc(gradeTxt(g))}</b>`;   // e
 const pct = n => n < 0.01 ? '<0,01 %' : `${n.toLocaleString('es-AR', { maximumFractionDigits: n >= 10 ? 0 : n >= 1 ? 1 : 2 })} %`;
 const icImg = (it, px) => `<img src="${IC}${esc(it.icon)}.webp" width="${px}" height="${px}" alt="" loading="lazy" decoding="async">`;
 const dropsOf = b => DR.bosses[b.id] || { t: 3, d: [], p: [] };
-const teSirve = () => false;
 function pieces(b) {
 const by = new Map();
 for (const [id, ch, via] of dropsOf(b).d) {
@@ -124,7 +123,7 @@ return dropsOf(b).d.filter(([id]) => IT[id].pet).map(([id]) => ({ id, pet: IT[id
 const petName = s => { const p = DATA.pets?.find(x => String(x[0]) === String(s.pet)); return p ? gname({ name: p[1], nameEn: p[2] }) : gname(IT[s.id]); };
 const tipTxt = (id, ch) => `${gname(IT[id])} · ${gradeTxt(IT[id].grade)} · ${pct(ch)}`;
 const icon = (id, ch, px, btn) => {
-const c = `jf-ic ${qcls(IT[id].grade)}${teSirve(id) ? ' is-want' : ''}`;
+const c = `jf-ic ${qcls(IT[id].grade)}`;
 return btn ? `<button type="button" class="${c}" tabindex="-1" data-it="${id}" data-ch="${ch}" aria-label="${esc(tipTxt(id, ch))}">${icImg(IT[id], px)}</button>`
 : `<span class="${c}" data-it="${id}" data-ch="${ch}">${icImg(IT[id], px)}</span>`;
 };
@@ -156,7 +155,7 @@ TIP.style.top = (r.top - h - 8 < 8 ? r.bottom + 8 : r.top - h - 8) + 'px';
 }
 function hideTip() { if (tipFor) { tipFor = null; TIP.hidePopover(); } }
 let dpB = null, dpBox = null, zona = null;
-const dli = (it, id, ch, px, one) => `<li class="${qcls(it.grade)}${teSirve(id) ? ' is-want' : ''}" data-id="${id}">${icImg(it, px)}<span class="jf-dn"><b>${esc(gname(it))}</b><small>${esc(gradeTxt(it.grade))}</small></span><span class="jf-dc">${ch == null ? '' : (one ? '≈ ' : '') + pct(ch)}</span></li>`;
+const dli = (it, id, ch, px, one) => `<li class="${qcls(it.grade)}" data-id="${id}">${icImg(it, px)}<span class="jf-dn"><b>${esc(gname(it))}</b><small>${esc(gradeTxt(it.grade))}</small></span><span class="jf-dc">${ch == null ? '' : (one ? '≈ ' : '') + pct(ch)}</span></li>`;
 function dropsHtml(b) {
 const x = dropsOf(b), own = x.d.filter(d => !d[2]);
 const sec = (h, L, cls = '') => L.length ? `<section class="jf-ds${cls}"><h3>${h}</h3><ul class="jf-dl">${L.map(([id, ch]) => dli(IT[id], id, ch, 36)).join('')}</ul></section>` : '';
@@ -414,12 +413,18 @@ MM.popover = 'auto';
 MM.setAttribute('role', 'dialog');
 document.body.append(MM);
 let mmB = null;
+function chatLine(b, now = Date.now()) {
+const tm = timer(b, now), s = tm ? state(tm, now) : 'none', ap = tm?.src === 'com' ? '≈ ' : '', rel = t => ap + fmtLeft(Math.abs(t - now));
+const w = tm && { alive: `vivo hace ${rel(tm.start)}`, due: `debería estar desde hace ${rel(tm.start)}`, window: `puede estar, hasta dentro de ${rel(tm.end)}`,
+spawns: `sale en ${rel(tm.start)}`, stale: 'sin confirmar (hubo mantenimiento)' }[s] || `sin hora (sale cada ${cycTxt(b.respawnMin)})`;
+return [`${gname(b)} (${FACCION[b.fac]})`, tpTxt(gname(b, 'teleport')), w + (ap && s !== 'stale' ? ' · reportado' : '')].filter(Boolean).join(' · ');
+}
 function openMm(b) {
 mmB = b;
 const fav = favs().has(b.id), oc = ocultos().has(b.id);
 MM.setAttribute('aria-label', gname(b));
 MM.innerHTML = `<p class="bm-t"><b>${esc(gname(b))}</b></p><p class="jf-mi">Nivel ${b.level} · sale cada ${cycTxt(b.respawnMin)}${b.respawnSource === 'oficial' ? ' (oficial)' : ''}</p>
-<div class="jf-mm-b"><button type="button" class="btn ghost" data-dv>Ver drops</button>${oc ? '' : `<button type="button" class="btn ghost" data-fav>${fav ? 'Quitar de fijados' : 'Fijar arriba'}</button>`}<button type="button" class="btn ghost" data-ocu>${oc ? 'Mostrar en la lista' : 'Ocultar'}</button></div>`;
+<div class="jf-mm-b"><button type="button" class="btn ghost" data-dv>Ver drops</button><button type="button" class="btn ghost" data-chat>Copiar para el chat</button>${oc ? '' : `<button type="button" class="btn ghost" data-fav>${fav ? 'Quitar de fijados' : 'Fijar arriba'}</button>`}<button type="button" class="btn ghost" data-ocu>${oc ? 'Mostrar en la lista' : 'Ocultar'}</button></div>`;
 MM.showPopover();
 placeAt(MM, $(`#b-${b.id} [data-menu]`));
 $('button', MM).focus();
@@ -438,6 +443,13 @@ MM.addEventListener('click', e => {
 const b = mmB;
 if (!b) return;
 if (e.target.closest('[data-dv]')) { MM.hidePopover(); openDrops(b); return; }
+if (e.target.closest('[data-chat]')) {
+const t = chatLine(b);
+MM.hidePopover();
+(navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast(`Copiado para el chat: <b>${esc(t)}</b>`),
+() => toast(`No pude copiar. Copialo a mano: <code>${esc(t)}</code>`, { ms: 12000 }));
+return;
+}
 if (e.target.closest('[data-fav]')) {
 const on = !favs().has(b.id);
 setFav(b, on);

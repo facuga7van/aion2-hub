@@ -644,7 +644,7 @@ ${img(s.icon, 40, 'sk-ic')}<span class="sk-n"><b>${esc(gname(nm))}</b>${gameLang
 const act = sk.filter(s => s.category === 'Active'), pas = sk.filter(s => s.category === 'Passive'), sti = sk.filter(s => s.category === 'Dp' && s.level > 0);
 const off = act.filter(s => !use(s));
 return `<section class="pj-sec sk-w" aria-labelledby="sk-h"><h3 id="sk-h" class="pj-h">Skills${gl('skills')} <small>de dónde sale el nivel de cada una y hasta dónde la suben los mejores</small></h3>
-<div class="sk-top"><p class="sk-can">${can ? `<span>Podés subir:</span> ${can}` : ''}</p><details class="sk-how"><summary>Cómo leer</summary>
+<div class="sk-top"><p class="sk-can">${can ? `<span>Podés subir:</span> ${can}<button type="button" class="linkbtn sk-all" data-skx hidden>Ver todas</button>` : ''}</p><details class="sk-how"><summary>Cómo leer</summary>
 <ul class="sk-k"><li class="s-ba"><i></i>Base, con puntos (hasta ${BASE_CAP})</li><li class="s-da"><i></i>Daevanion (hasta 4)</li><li class="s-eq"><i></i>Equipo</li><li class="s-ar"><i></i>Arcanas</li><li class="s-cap"><i></i>Tope normal ${NORMAL_CAP}</li>${top.size ? '<li class="s-tl"><i></i>Los mejores</li>' : ''}</ul>
 <p class="pj-note">«Con puntos» sube hasta el nivel de los top, como Próximos pasos; la pista de cada fila dice hasta dónde se puede (base ${BASE_CAP}), por eso hay más filas con pista. Arriba de ${NORMAL_CAP} se sube con líneas de skill de Arcanas (hasta +4 por línea) y del equipo (+1 por línea). «Que no usás»: activas que no están en tu barra o que no subiste con puntos.</p></details></div>
 <div class="sk-gp"><h4 class="pj-h4">Activas</h4><ul class="sk-l">${act.filter(use).map(row).join('')}</ul></div>
@@ -653,7 +653,8 @@ ${sti.length ? `<div class="sk-gp"><h4 class="pj-h4">Estigmas${gl('stig')} <smal
 ${off.length ? `<details class="sk-gp sk-off"><summary>${off.length} que no usás</summary><ul class="sk-l">${off.map(row).join('')}</ul></details>` : ''}</section>`;
 }
 function skFilter(b) {
-const g = b.getAttribute('aria-pressed') === 'true' ? '' : b.dataset.skf;
+const g = b && b.getAttribute('aria-pressed') !== 'true' ? b.dataset.skf : '', all = $('#pj-x .sk-all');
+if (all) { if (!g && document.activeElement === all) $('#pj-x [data-skf]')?.focus(); all.hidden = !g; }
 for (const x of $$('#pj-x [data-skf]')) x.setAttribute('aria-pressed', String(x.dataset.skf === g));
 for (const r of $$('#pj-x .sk[data-sk]')) r.hidden = !!g && !r.dataset.g.split(' ').includes(g);
 for (const p of $$('#pj-x .sk-gp')) p.hidden = !!g && !p.querySelector('.sk:not([hidden])');
@@ -668,9 +669,9 @@ return { want, rec: n => n.type !== 'None' && !n.open && want.has(String(n.nodeI
 }
 function daeHtml() {
 const bd = cur.d.daevanion || [], parts = skillParts(cur.d, cur.x.items, cur.x.boards);
-const recN = b => { const R = recOf(b, parts); return (cur.x.boards[b.id]?.nodeList || []).filter(R.rec).length; };
+const recN = b => { const R = recOf(b, parts), l = (cur.x.boards[b.id]?.nodeList || []).filter(n => n.type !== 'None' && !n.open), n = l.filter(R.rec).length; return n > 30 && n > l.length / 2 ? 0 : n; };
 return `<section class="pj-sec" aria-labelledby="dae-h"><h3 id="dae-h" class="pj-h">Daevanion${gl('dae')} <small>tocá un nodo para ver qué da</small></h3>
-<div class="dae-tabs" role="group" aria-label="Tableros">${bd.map((b, i) => { const n = recN(b); return `<button type="button" data-board="${i}" aria-pressed="${i === BOARD}"><b>${esc(gname(b))}</b><span class="bar" aria-hidden="true"><i style="--w:${Math.min(100, +b.percent || 0)}%"></i></span><small>${b.open} de ${b.total}${n ? ` · <b class="dae-n" aria-hidden="true">${n}</b><span class="sr">, ${n} que abren los top</span>` : ''}</small></button>`; }).join('')}</div>
+<div class="dae-tabs" role="group" aria-label="Tableros">${bd.map((b, i) => { const n = recN(b); return `<button type="button" data-board="${i}" aria-pressed="${i === BOARD}"><b>${esc(gname(b))}</b><span class="bar" aria-hidden="true"><i style="--w:${Math.min(100, +b.percent || 0)}%"></i></span><small>${b.open} de ${b.total}${n ? ` · <b class="dae-n" aria-hidden="true" title="${n} nodos que abren los top y vos no">${n}</b><span class="sr">, ${n} nodos que abren los top y vos no</span>` : ''}</small></button>`; }).join('')}</div>
 <div class="dae-w"><div class="dae-g" id="dae-g"></div><aside class="dae-s" id="dae-s"></aside></div></section>`;
 }
 function paintBoard() {
@@ -691,10 +692,12 @@ return `<button type="button" class="dn${n.open ? ' o' : ''}${rec ? ' rec' : ''}
 const open = nodes.filter(n => n.open && n.type !== 'Start'), shut = nodes.filter(n => !n.open && n.type !== 'Start');
 const pts = l => l.reduce((s, n) => s + (NODE_COST[n.grade] || 0), 0);
 const cost = n => NODE_COST[n.grade] || 0, recL = shut.filter(isRec).sort((x, y) => (y.type === 'SkillLevel') - (x.type === 'SkillLevel') || cost(x) - cost(y)), recN = recL.length;
-const rb = n => `<li><button type="button" data-node="${n.nodeId}"><b>${esc((n.effectList || []).map(x => x.desc).join(', ') || n.name)}</b><small>${cost(n)} punto${cost(n) === 1 ? '' : 's'}</small></button></li>`;
+const dsc = n => (n.effectList || []).map(x => x.desc).join(', ') || n.name, recG = [];
+for (const n of recL) { const g = recG.find(g => dsc(g[0]) === dsc(n) && cost(g[0]) === cost(n)); g ? g.push(n) : recG.push([n]); }
+const rb = ([n, ...o]) => `<li><button type="button" data-node="${n.nodeId}"><b>${esc(dsc(n))}</b><small title="Costo de cada nodo, sin contar el camino hasta él">${o.length ? `×${o.length + 1} · ` : ''}${cost(n)} punto${cost(n) === 1 ? '' : 's'}</small></button></li>`;
 $('#dae-s').innerHTML = `<p class="dae-c"><b>${open.length}</b> de ${open.length + shut.length} nodos abiertos · falta${pts(shut) === 1 ? ` <b>1</b> punto` : `n <b>${pts(shut)}</b> puntos`}</p>
 <div class="dae-node" id="dae-node" aria-live="polite"><p class="pj-empty">Tocá un nodo.</p></div>
-${recN ? `<div class="dae-rec"><p>Lo abren los top y vos no</p><ul>${recL.slice(0, 6).map(rb).join('')}</ul></div>${recN > 6 ? `<details class="dae-recm"><summary>${recN - 6} más</summary><ul>${recL.slice(6).map(rb).join('')}</ul></details>` : ''}` : ''}
+${recN ? `<div class="dae-rec"><p>Lo abren los top y vos no</p><ul>${recG.slice(0, 6).map(rb).join('')}</ul></div>${recG.length > 6 ? `<details class="dae-recm"><summary>${recG.length - 6} más</summary><ul>${recG.slice(6).map(rb).join('')}</ul></details>` : ''}` : ''}
 <ul class="dae-k"><li>${icoGame('board_icon_legend_open', 22)}Skill activa (+1 nivel)</li><li>${icoGame('board_icon_rare_open', 22)}Skill pasiva o stat raro</li><li>${icoGame('board_icon_unique_open', 22)}Stat único</li><li>${icoGame('board_icon_common_open', 22)}Stat común</li><li><span class="dae-kc">${icoGame('board_icon_common', 22)}</span>Cerrado</li>${want.size ? `<li><span class="dae-kr"></span>Lo abren los top ${esc(KIND_ES[kindOf(cur)])} y vos no (${recN})</li>` : ''}</ul>
 ${t.openStatEffectList?.length ? `<details class="dae-sum"><summary>Lo que suma este tablero</summary><ul>${[...(t.openSkillEffectList || []), ...t.openStatEffectList].map(x => `<li>${esc(x.desc)}</li>`).join('')}</ul></details>` : ''}`;
 }
@@ -721,6 +724,7 @@ else if (t.closest('#pj-xretry')) { cur.err = null; paintPanel(); loadDetail(cur
 else if (t.closest('[data-est]')) est(t.closest('[data-est]'));
 else if (t.closest('[data-pin]')) pinStep(t.closest('[data-pin]'));
 else if (t.closest('[data-skf]')) skFilter(t.closest('[data-skf]'));
+else if (t.closest('[data-skx]')) skFilter(null);
 else if (t.closest('[data-kind]')) {
 const k = t.closest('[data-kind]').dataset.kind, m = store.get(BLD, {});
 m[ref.k.toLowerCase()] = k;
