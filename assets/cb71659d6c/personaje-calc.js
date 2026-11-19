@@ -304,7 +304,7 @@ return t == null ? 0 : Math.max(1, Math.min(BASE_CAP, Math.round(t - Math.max(x?
 };
 const low = kind === 'support' && top.cls ? [] : (d.skills || []).filter(s => s.category !== 'Dp' && inBar(s) && (parts.get(String(s.id))?.base ?? BASE_CAP) < goal(s)).map(s => ({ s, n: goal(s) - parts.get(String(s.id)).base }));
 if (low.length) cand.push({ id: 'pts', icon: low[0].s.icon, title: `Subí ${low.length > 1 ? `${low.length} skills` : low[0].s.name} con puntos de skill`, gain: [`+${pl(low.reduce((t, x) => t + x.n, 0), 'nivel', 'niveles')} de skill`, ...(top.size ? ['hasta el nivel de los top'] : [])],
-skills: low.slice(0, 4).map(({ s, n }) => ({ icon: s.icon, name: s.name, n })), cost: 'Solo si te quedan puntos: la ficha oficial no muestra cuántos tenés', il: 0, dmg: 0.3, sure: 'estimado', heal: 1 });
+skills: low.slice(0, 4).map(({ s, n }) => ({ icon: s.icon, name: s.name, n })), ids: low.map(x => String(x.s.id)), cost: 'Solo si te quedan puntos: la ficha oficial no muestra cuántos tenés', il: 0, dmg: 0.3, sure: 'estimado', heal: 1 });
 const ar = (d.daevanion || [])[4];
 if (ar && ar.open < ar.total && il >= 2600 && kind !== 'pvp') cand.push({ id: 'ariel', icon: null, board: 1, title: 'Juntá Fragmentos de Ariel en Expedición difícil', gain: ['daño a jefes y amplificación PvE', `${pl(ar.total - ar.open, 'nodo')} por abrir`],
 cost: '100 fragmentos = 1 cristal de Ariel, hasta 30 por personaje', il: 0, dmg: 0.02, sure: 'estimado' });

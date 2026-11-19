@@ -2,18 +2,21 @@ import {
 $, $$, esc, ico, on, onTick, onStore, bind, fmtClock, fmtLeft, leftNext, schedule, upcoming, renderUpcoming,
 nextBelled, bellButton, getBell, evPic, EVENTS, isLive, isVisible, catIcon, tzSentence, versioned,
 toast, prefs, setPrefs, partsIn, displayTz, store, confTag, clockLeft, gname, galt, alertName, nextOcc, currentOcc, miniTabs, HOUR, MIN,
-storedTimers, bossPic, maintNow, maintEnd, GRUPO_TXT, myChars,
+storedTimers, bossPic, maintNow, maintEnd, GRUPO_TXT, myChars, keepImgs, occDone, characters, taskList,
 } from './core.js';
 import { renderTodo } from './hoy.js';
 import './vivo.js';
 const html = document.documentElement;
 /* ---------- lo próximo: siempre lo más cercano (o lo que tiene el portal abierto); lo de la campana va abajo ---------- */
-function paintHero() {
+const paintHero = () => keepImgs($('#hero'), drawHero);   // un borde que no cambia el héroe no vuelve a pedir su retrato
+function drawHero() {
 const now = Date.now(), nb = nextBelled(now), box = $('#hero');
-const occ = upcoming(now, { count: 20, minor: false }).find(o => o.start > now || o.entry > now);
+const L = upcoming(now, { count: 20, minor: false }), occ = L.find(o => o.start > now || o.entry > now);
 const tm = storedTimers(now).filter(t => t.up && t.start > now).sort((a, b) => a.start - b.start)[0];
-const first = tm && (!occ || tm.start < occ.start);
-paintNow(now, first ? '' : occ?.id);
+const first = tm && (!occ || tm.start < occ.start), done = !first && !!occ && occDone(occ);
+const nx = done && L.slice(L.indexOf(occ) + 1).find(o => !isLive(o, now) && !occDone(o));
+paintNow(now, first ? '' : occ?.id, nx);
+box.classList.toggle('is-done', done);
 if (first) return heroTimer(tm, now, nb, box);
 if (!occ) { box.innerHTML = '<p class="hero-hint">No hay eventos visibles. Activalos en Ajustes.</p>'; return; }
 const ev = occ.ev, name = gname(ev), live = isLive(occ, now), portal = live && occ.entry > now;
@@ -21,10 +24,11 @@ const lbl = !live ? 'empieza en' : portal ? `${ev.entryLabel || 'entrada abierta
 const target = !live ? occ.start : portal ? occ.entry : occ.end;
 const bits = [ev.entry ? `${ev.entryLabel} ${ev.entry} min` : '', ev.durTxt || (ev.duration ? `dura ${ev.duration >= 60 ? ev.duration / 60 + ' h' : ev.duration + ' min'}` : ''), occ.maint === 'quizas' ? 'puede caer en el mantenimiento' : '',
 occ.approx === 'grupo' ? GRUPO_TXT : occ.approx ? 'hora estimada según tu grupo' : ''].filter(Boolean);
-const hint = bellHint(ev.id, nb);
+const hint = bellHint(ev.id, nb), C = characters(), per = done && taskList().find(t => t.event === ev.id).period;
+const chip = done ? `<span class="hero-ok"${C.list.length > 1 ? ` title="${esc(C.list.find(c => c.id === C.activo).name)} ya la hizo"` : ''}>✓ hecha ${per === 'weekly' ? 'esta semana' : 'hoy'}</span>` : '';
 box.innerHTML = `${evPic(ev, 80, 'hero-p', 44) || ico(catIcon(ev), 'hero-p hero-i')}
 <div class="hero-id"><p class="hero-n" title="${esc(ev.what ? gname(ev, 'what') : galt(ev) || '')}">${esc(name)}</p>
-<p class="hero-s"><span class="hero-k2">${CAT[ev.category] || 'Evento'}</span><time>${occ.approx && !live || live && ev.durTxt ? '≈ ' : ''}${fmtClock(live ? occ.end : occ.start, { now })}${live ? ' fin' : ''}</time>${bits.map(b => `<span>${esc(b)}</span>`).join('')}${confTag(ev)}${confTag(ev, { dot: true })}</p></div>
+<p class="hero-s"><span class="hero-k2">${CAT[ev.category] || 'Evento'}</span><time>${occ.approx && !live || live && ev.durTxt ? '≈ ' : ''}${fmtClock(live ? occ.end : occ.start, { now })}${live ? ' fin' : ''}</time>${chip}${bits.map(b => `<span>${esc(b)}</span>`).join('')}${confTag(ev)}${confTag(ev, { dot: true })}</p></div>
 <p class="hero-cw"><span class="hero-l">${lbl}</span><span class="hero-c cd" id="hero-c"></span></p>
 ${hint ? `<p class="hero-hint">${hint}</p>` : ''}`;
 box.append(bellButton(ev.id, name));
@@ -49,12 +53,13 @@ return mine ? `${ico('i-bell-on')} <span>Te aviso ${leadsTxt(mine)}.${nb && !sam
 : nb ? `${ico('i-bell-on')} <span>Con campana: <b>${esc(nbName)}</b> <span class="cd" id="hero-nb"></span></span>` : '';
 }
 const bindNb = nb => { const hn = $('#hero-nb'); if (hn) bind(hn, nb.live ? () => 'ya empezó' : clockLeft(nb.occ.start)); };
-function paintNow(now, id) {
+function paintNow(now, id, nx) {
 const el = $('#hero-now'), mw = maintNow(now);
 const cur = !mw && upcoming(now, { count: 20, minor: false }).find(o => isLive(o, now) && o.id !== id);
-el.hidden = !mw && !cur;
+el.hidden = !mw && !cur && !nx;
 el.innerHTML = mw ? `<i class="st-dot" aria-hidden="true"></i><span>Mantenimiento en curso · hasta <b>${maintEnd(mw, now)}</b></span>`
-: cur ? `<i class="st-dot" aria-hidden="true"></i><span>En curso: <b>${esc(gname(cur.ev, 'short') || gname(cur.ev))}</b> hasta ${fmtClock(cur.end, { now, day: false })}</span>` : '';
+: cur ? `<i class="st-dot" aria-hidden="true"></i><span>En curso: <b>${esc(gname(cur.ev, 'short') || gname(cur.ev))}</b> hasta ${fmtClock(cur.end, { now, day: false })}</span>`
+: nx ? `<span>Te falta: <b>${esc(gname(nx.ev, 'short') || gname(nx.ev))}</b> ${fmtClock(nx.start, { now })}</span>` : '';
 }
 const CAT = { pvp: 'PvP', boss: 'Jefe', evento: 'Evento' };
 const leadsTxt = L => { const t = L.map(l => l ? `${l} min` : 'al inicio'); return (t.length > 1 ? t.slice(0, -1).join(', ') + ' y ' + t.at(-1) : t[0]) + (L.some(l => l) ? (L.includes(0) && L.length > 1 ? '' : ' antes') : ''); };
@@ -108,7 +113,7 @@ return `<div class="tl-row" id="tl-${ev.id}"><button type="button" class="tl-l" 
 const resets = c.list.filter((o, i, L) => o.ev.category === 'reset' && o.start > t0 && o.start < t1 && !(o.id === 'reset-diario' && L.some(w => w.id === 'reset-semanal' && w.start === o.start)))
 .map(o => `<i class="tl-rs${o.id === 'reset-semanal' ? ' wk' : ''}" style="left:${pct(o.start)}"><span>${o.id === 'reset-semanal' ? 'Reset semanal' : 'Reset'}</span></i>`).join('');
 const maint = c.mw.filter(m => m.maxEnd > t0 && m.start < t1).map(m => `<i class="tl-mt" style="left:${pct(m.start)};width:calc(${pct(m.maxEnd)} - ${pct(m.start)})" title="Mantenimiento ${m.announced ? 'anunciado' : 'estimado'}"><span>Mantenimiento</span></i>`).join('');
-$('#tl').innerHTML = `<div class="tl" style="--rows:${n}"><div class="tl-axis">${axis.join('')}</div><div class="tl-body">${rows}<div class="tl-ov">${maint}${resets}<i class="tl-now" id="tl-now"><span></span></i></div></div></div>`;
+keepImgs($('#tl'), () => { $('#tl').innerHTML = `<div class="tl" style="--rows:${n}"><div class="tl-axis">${axis.join('')}</div><div class="tl-body">${rows}<div class="tl-ov">${maint}${resets}<i class="tl-now" id="tl-now"><span></span></i></div></div></div>`; });
 tlNow = $('#tl-now');
 tlMin = -1;
 moveNow(now);
@@ -201,6 +206,9 @@ on('structure', () => { paintHero(); paintTl(); });
 on('prefs', paintAll);
 on('profile', paintAll);
 on('bells', paintHero);
+on('tasks', paintHero);
+onStore('hub-tareas', paintHero);
+onStore('hub-personajes', paintHero);
 on('gamelang', () => { paintHero(); paintTl(); });
 onStore('hub-ahora', paintPins);
 onTick(moveNow);

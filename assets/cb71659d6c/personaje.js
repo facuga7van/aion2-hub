@@ -336,6 +336,7 @@ const show = (d, id) => {
 const pr = d.profile, ref = { k: keyOf(p.r, p.s, pr.name), r: p.r, s: p.s, n: pr.name, id, c: pr.class, l: pr.level, f: fac(pr.raceId), i: pr.image };
 ids.set(ref.k.toLowerCase(), id);
 const was = cur;
+if (!was || !same(was.ref, ref)) BOARD = 0;          // el tablero elegido es de esa ficha: otro personaje arranca en el primero
 cur = { ref, d, x: was && same(was.ref, ref) && was.d.cachedAt === d.cachedAt ? was.x : null };
 if (hashOf(ref.k) !== location.hash) history.replaceState(null, '', hashOf(ref.k));
 remember(ref);
@@ -621,35 +622,55 @@ return [...on.filter(s => s.id !== 'gear'), ...on.filter(s => s.id === 'gear')].
 const skName = s => ({ name: s.name, nameEn: s.nameEn && s.nameEn !== s.name ? s.nameEn : SK[s.id]?.[0] || s.nameEn });
 const hint = (s, x) => s.category === 'Dp' ? (s.level < STIG_CAP ? skillHint(s, x) : '') : x && (x.base < BASE_CAP || x.dae < x.daeMax) ? skillHint(s, x) : '';
 function skillsHtml() {
-const parts = skillParts(cur.d, cur.x.items, cur.x.boards), sk = cur.d.skills || [];
-const top = topSkills(cur, kindOf(cur)), use = s => useful(s, parts.get(String(s.id)));
+const parts = skillParts(cur.d, cur.x.items, cur.x.boards), sk = cur.d.skills || [], k = kindOf(cur);
+const top = topSkills(cur, k), use = s => useful(s, parts.get(String(s.id)));
+const pts = !estStored(cur.ref).no.includes('paso:pts') && curated(cur)?.top?.[k]?.slots ? plan(cur.d, cur.x.items, cur.x.boards, k, top, styleOf(cur, k)).steps.find(s => s.id === 'pts')?.ids : null;
+const grp = { pts: new Set(pts || []), dae: new Set(sk.filter(s => s.category !== 'Dp' && use(s) && parts.get(String(s.id))?.dae < parts.get(String(s.id))?.daeMax).map(s => String(s.id))),
+sti: new Set(sk.filter(s => s.category === 'Dp' && s.equipped && s.level > 0 && s.level < STIG_CAP).map(s => String(s.id))) };
+const GL = { pts: 'con puntos', dae: 'con Daevanion', sti: 'estigma' }, gOf = s => Object.keys(grp).filter(g => grp[g].has(String(s.id))).join(' ');
+const can = Object.entries(grp).filter(([, l]) => l.size).map(([g, l]) => `<button type="button" class="linkbtn" data-skf="${g}" aria-pressed="false"><b>${l.size}</b> ${GL[g]}${g === 'sti' && l.size > 1 ? 's' : ''}</button>`).join('<i aria-hidden="true"> · </i>');
 const row = s => {
 const x = parts.get(String(s.id)) || { base: s.level, dae: 0, gear: 0, arc: 0 }, nm = skName(s);
 const stig = s.category === 'Dp', max = stig ? STIG_CAP : Math.max(25, s.level), w = v => (v / max * 100).toFixed(2) + '%';
 const seg = stig ? `<i class="s-st" style="--w:${w(s.level)}"></i>` : `<i class="s-ba" style="--w:${w(x.base)}"></i><i class="s-da" style="--w:${w(x.dae)}"></i><i class="s-eq" style="--w:${w(x.gear)}"></i><i class="s-ar" style="--w:${w(x.arc)}"></i>`;
 const desc = stig ? `Nivel ${s.level}` : `Nivel ${s.level}: base ${x.base}, Daevanion ${x.dae}, equipo ${x.gear}, Arcanas ${x.arc}`;
 const tl = top.get(String(s.id));
-return `<li class="sk${use(s) || stig ? '' : ' off'}" data-sk="${s.id}">
+return `<li class="sk${use(s) || stig ? '' : ' off'}" data-sk="${s.id}" data-g="${gOf(s)}">
 ${img(s.icon, 40, 'sk-ic')}<span class="sk-n"><b>${esc(gname(nm))}</b>${gameLang() === 'en' && galt(nm) ? `<small lang="es">${esc(galt(nm))}</small>` : ''}</span>
 <span class="sk-bar" role="img" aria-label="${esc(desc)}" data-parts="${stig ? s.level : [x.base, x.dae, x.gear, x.arc].join(',')}">${seg}<b class="sk-cap" style="--x:${w(stig ? STIG_CAP : NORMAL_CAP)}" title="${stig ? 'Tope de las estigmas' : 'Tope normal: 10 con puntos + 4 de Daevanion'}"></b>${tl && !stig ? `<b class="sk-tl" style="--x:${w(Math.min(tl, max))}" title="Los mejores la tienen en ${Math.round(tl)}"></b>` : ''}</span>
 <b class="sk-lv">${s.level || '—'}</b>
 <small class="sk-h">${[hint(s, x), tl && `los top: ${Math.round(tl)}`, !use(s) && !stig && 'no la usás'].filter(Boolean).map(esc).join(' · ')}</small></li>`;
 };
 const act = sk.filter(s => s.category === 'Active'), pas = sk.filter(s => s.category === 'Passive'), sti = sk.filter(s => s.category === 'Dp' && s.level > 0);
-const sorted = l => [...l.filter(use), ...l.filter(s => !use(s))];
-return `<section class="pj-sec" aria-labelledby="sk-h"><h3 id="sk-h" class="pj-h">Skills${gl('skills')} <small>de dónde sale el nivel de cada una y hasta dónde la suben los mejores</small></h3>
+const off = act.filter(s => !use(s));
+return `<section class="pj-sec sk-w" aria-labelledby="sk-h"><h3 id="sk-h" class="pj-h">Skills${gl('skills')} <small>de dónde sale el nivel de cada una y hasta dónde la suben los mejores</small></h3>
+<div class="sk-top"><p class="sk-can">${can ? `<span>Podés subir:</span> ${can}` : ''}</p><details class="sk-how"><summary>Cómo leer</summary>
 <ul class="sk-k"><li class="s-ba"><i></i>Base, con puntos (hasta ${BASE_CAP})</li><li class="s-da"><i></i>Daevanion (hasta 4)</li><li class="s-eq"><i></i>Equipo</li><li class="s-ar"><i></i>Arcanas</li><li class="s-cap"><i></i>Tope normal ${NORMAL_CAP}</li>${top.size ? '<li class="s-tl"><i></i>Los mejores</li>' : ''}</ul>
-<h4 class="pj-h4">Activas</h4><ul class="sk-l">${sorted(act).map(row).join('')}</ul>
-<h4 class="pj-h4">Pasivas</h4><ul class="sk-l">${pas.map(row).join('')}</ul>
-${sti.length ? `<h4 class="pj-h4">Estigmas${gl('stig')} <small>solo con Fragmentos de Estigma, tope ${STIG_CAP}</small></h4><ul class="sk-l sk-sti">${sti.sort((a, b) => b.level - a.level).map(row).join('')}</ul>` : ''}
-<p class="pj-note">Arriba de ${NORMAL_CAP} se sube con líneas de skill de Arcanas (hasta +4 por línea) y del equipo (+1 por línea). Atenuadas: activas que no están en tu barra o que no subiste con puntos.</p></section>`;
+<p class="pj-note">«Con puntos» sube hasta el nivel de los top, como Próximos pasos; la pista de cada fila dice hasta dónde se puede (base ${BASE_CAP}), por eso hay más filas con pista. Arriba de ${NORMAL_CAP} se sube con líneas de skill de Arcanas (hasta +4 por línea) y del equipo (+1 por línea). «Que no usás»: activas que no están en tu barra o que no subiste con puntos.</p></details></div>
+<div class="sk-gp"><h4 class="pj-h4">Activas</h4><ul class="sk-l">${act.filter(use).map(row).join('')}</ul></div>
+<div class="sk-gp"><h4 class="pj-h4">Pasivas</h4><ul class="sk-l">${pas.map(row).join('')}</ul></div>
+${sti.length ? `<div class="sk-gp"><h4 class="pj-h4">Estigmas${gl('stig')} <small>solo con Fragmentos de Estigma, tope ${STIG_CAP}</small></h4><ul class="sk-l sk-sti">${sti.sort((a, b) => b.level - a.level).map(row).join('')}</ul></div>` : ''}
+${off.length ? `<details class="sk-gp sk-off"><summary>${off.length} que no usás</summary><ul class="sk-l">${off.map(row).join('')}</ul></details>` : ''}</section>`;
+}
+function skFilter(b) {
+const g = b.getAttribute('aria-pressed') === 'true' ? '' : b.dataset.skf;
+for (const x of $$('#pj-x [data-skf]')) x.setAttribute('aria-pressed', String(x.dataset.skf === g));
+for (const r of $$('#pj-x .sk[data-sk]')) r.hidden = !!g && !r.dataset.g.split(' ').includes(g);
+for (const p of $$('#pj-x .sk-gp')) p.hidden = !!g && !p.querySelector('.sk:not([hidden])');
 }
 /* ---------- Daevanion: los tableros dibujados con los nodos del juego ---------- */
 let BOARD = 0;
+function recOf(b, parts = skillParts(cur.d, cur.x.items, cur.x.boards)) {
+const byName = new Map((cur.d.skills || []).map(s => [s.name, s]));
+const uses = n => { if (n.type !== 'SkillLevel') return true; const s = byName.get(String(n.effectList?.[0]?.desc || '').replace(/ \+\d+$/, '')); return !!s && useful(s, parts.get(String(s.id))); };
+const want = new Set((curated(cur)?.top?.[kindOf(cur)]?.daevanion?.[b.name]?.nodes || []).map(String));
+return { want, rec: n => n.type !== 'None' && !n.open && want.has(String(n.nodeId)) && uses(n) };
+}
 function daeHtml() {
-const bd = cur.d.daevanion || [];
+const bd = cur.d.daevanion || [], parts = skillParts(cur.d, cur.x.items, cur.x.boards);
+const recN = b => { const R = recOf(b, parts); return (cur.x.boards[b.id]?.nodeList || []).filter(R.rec).length; };
 return `<section class="pj-sec" aria-labelledby="dae-h"><h3 id="dae-h" class="pj-h">Daevanion${gl('dae')} <small>tocá un nodo para ver qué da</small></h3>
-<div class="dae-tabs" role="group" aria-label="Tableros">${bd.map((b, i) => `<button type="button" data-board="${i}" aria-pressed="${i === BOARD}"><b>${esc(gname(b))}</b><span class="bar" aria-hidden="true"><i style="--w:${Math.min(100, +b.percent || 0)}%"></i></span><small>${b.open} de ${b.total}</small></button>`).join('')}</div>
+<div class="dae-tabs" role="group" aria-label="Tableros">${bd.map((b, i) => { const n = recN(b); return `<button type="button" data-board="${i}" aria-pressed="${i === BOARD}"><b>${esc(gname(b))}</b><span class="bar" aria-hidden="true"><i style="--w:${Math.min(100, +b.percent || 0)}%"></i></span><small>${b.open} de ${b.total}${n ? ` · <b class="dae-n" aria-hidden="true">${n}</b><span class="sr">, ${n} que abren los top</span>` : ''}</small></button>`; }).join('')}</div>
 <div class="dae-w"><div class="dae-g" id="dae-g"></div><aside class="dae-s" id="dae-s"></aside></div></section>`;
 }
 function paintBoard() {
@@ -658,21 +679,22 @@ if (!g) return;
 if (!t) { g.innerHTML = '<p class="tip-err">No pude leer este tablero.</p>'; return; }
 const nodes = (t.nodeList || []).filter(n => n.type !== 'None'), rows = nodes.map(n => n.row), cols = nodes.map(n => n.col);
 const r0 = Math.min(...rows) - 1, c0 = Math.min(...cols) - 1, R = Math.max(...rows) - r0, C = Math.max(...cols) - c0;
-const icons = new Map((cur.d.skills || []).map(s => [s.name, s.icon])), byName = new Map((cur.d.skills || []).map(s => [s.name, s])), parts = skillParts(cur.d, cur.x.items, cur.x.boards);
-const uses = n => { if (n.type !== 'SkillLevel') return true; const s = byName.get(String(n.effectList?.[0]?.desc || '').replace(/ \+\d+$/, '')); return !!s && useful(s, parts.get(String(s.id))); };
-const want = new Set((curated(cur)?.top?.[kindOf(cur)]?.daevanion?.[b.name]?.nodes || []).map(String));
+const icons = new Map((cur.d.skills || []).map(s => [s.name, s.icon])), { want, rec: isRec } = recOf(b);
 const cls = CLS_KEY[cur.d.profile.class] || 'chanter';
 g.style.setProperty('--c', C);
 g.style.setProperty('--r', R);
 g.innerHTML = nodes.map(n => {
 const eff = (n.effectList || []).map(x => x.desc).join(', '), sk = n.type === 'SkillLevel' && icons.get(String(n.effectList?.[0]?.desc || '').replace(/ \+\d+$/, ''));
-const file = n.type === 'Start' ? `board_icon_start_${cls}` : `board_icon_${String(n.grade).toLowerCase()}${n.open ? '_open' : ''}`, rec = !n.open && want.has(String(n.nodeId)) && uses(n);
+const file = n.type === 'Start' ? `board_icon_start_${cls}` : `board_icon_${String(n.grade).toLowerCase()}${n.open ? '_open' : ''}`, rec = isRec(n);
 return `<button type="button" class="dn${n.open ? ' o' : ''}${rec ? ' rec' : ''}${n.type === 'SkillLevel' ? ' s' : ''}" data-node="${n.nodeId}" style="grid-area:${n.row - r0}/${n.col - c0};--bg:url(${IC}${file}.webp)" aria-label="${esc(eff || n.name)}${n.open ? ', abierto' : ', cerrado'}${rec ? ', lo abren los top' : ''}" title="${esc(eff || n.name)}">${sk ? img(sk, 24, 'dn-sk') : ''}</button>`;
 }).join('');
 const open = nodes.filter(n => n.open && n.type !== 'Start'), shut = nodes.filter(n => !n.open && n.type !== 'Start');
-const pts = l => l.reduce((s, n) => s + (NODE_COST[n.grade] || 0), 0), recN = shut.filter(n => want.has(String(n.nodeId)) && uses(n)).length;
+const pts = l => l.reduce((s, n) => s + (NODE_COST[n.grade] || 0), 0);
+const cost = n => NODE_COST[n.grade] || 0, recL = shut.filter(isRec).sort((x, y) => (y.type === 'SkillLevel') - (x.type === 'SkillLevel') || cost(x) - cost(y)), recN = recL.length;
+const rb = n => `<li><button type="button" data-node="${n.nodeId}"><b>${esc((n.effectList || []).map(x => x.desc).join(', ') || n.name)}</b><small>${cost(n)} punto${cost(n) === 1 ? '' : 's'}</small></button></li>`;
 $('#dae-s').innerHTML = `<p class="dae-c"><b>${open.length}</b> de ${open.length + shut.length} nodos abiertos · falta${pts(shut) === 1 ? ` <b>1</b> punto` : `n <b>${pts(shut)}</b> puntos`}</p>
 <div class="dae-node" id="dae-node" aria-live="polite"><p class="pj-empty">Tocá un nodo.</p></div>
+${recN ? `<div class="dae-rec"><p>Lo abren los top y vos no</p><ul>${recL.slice(0, 6).map(rb).join('')}</ul></div>${recN > 6 ? `<details class="dae-recm"><summary>${recN - 6} más</summary><ul>${recL.slice(6).map(rb).join('')}</ul></details>` : ''}` : ''}
 <ul class="dae-k"><li>${icoGame('board_icon_legend_open', 22)}Skill activa (+1 nivel)</li><li>${icoGame('board_icon_rare_open', 22)}Skill pasiva o stat raro</li><li>${icoGame('board_icon_unique_open', 22)}Stat único</li><li>${icoGame('board_icon_common_open', 22)}Stat común</li><li><span class="dae-kc">${icoGame('board_icon_common', 22)}</span>Cerrado</li>${want.size ? `<li><span class="dae-kr"></span>Lo abren los top ${esc(KIND_ES[kindOf(cur)])} y vos no (${recN})</li>` : ''}</ul>
 ${t.openStatEffectList?.length ? `<details class="dae-sum"><summary>Lo que suma este tablero</summary><ul>${[...(t.openSkillEffectList || []), ...t.openStatEffectList].map(x => `<li>${esc(x.desc)}</li>`).join('')}</ul></details>` : ''}`;
 }
@@ -682,6 +704,8 @@ if (!n || !box) return;
 for (const el of $$('.dn.sel')) el.classList.remove('sel');
 $(`.dn[data-node="${id}"]`)?.classList.add('sel');
 box.innerHTML = `<b>${esc((n.effectList || []).map(x => x.desc).join(', ') || n.name)}</b><small>${n.type === 'Start' ? 'Inicio del tablero' : `${n.open ? 'Abierto' : 'Cerrado'} · ${NODE_COST[n.grade] || 0} punto${NODE_COST[n.grade] === 1 ? '' : 's'} · ${GRADE[n.grade] || ''}`}</small>`;
+const r = box.getBoundingClientRect();
+if (matchMedia('(max-width:1100px)').matches && (r.top < 0 || r.bottom > innerHeight)) box.scrollIntoView({ block: 'nearest' });
 }
 /* ---------- acciones ---------- */
 out.addEventListener('click', e => {
@@ -696,6 +720,7 @@ else if (t.closest('#pj-ref')) openChar({ r: ref.r, s: ref.s, n: ref.n }, true);
 else if (t.closest('#pj-xretry')) { cur.err = null; paintPanel(); loadDetail(cur); }
 else if (t.closest('[data-est]')) est(t.closest('[data-est]'));
 else if (t.closest('[data-pin]')) pinStep(t.closest('[data-pin]'));
+else if (t.closest('[data-skf]')) skFilter(t.closest('[data-skf]'));
 else if (t.closest('[data-kind]')) {
 const k = t.closest('[data-kind]').dataset.kind, m = store.get(BLD, {});
 m[ref.k.toLowerCase()] = k;

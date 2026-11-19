@@ -759,10 +759,19 @@ const CAT_ICO = { pvp: 'i-pvp', boss: 'i-boss', evento: 'i-evento', reset: 'i-re
 export const catIcon = ev => CAT_ICO[ev.category] || 'i-evento';
 export const bossPic = (r, px = 80, cls = 'up-p', sz = 32) => /^[\w-]+$/.test(r || '') ? `<img class="${cls}" src="${ROOT}assets/jefes/${r}-${px}.webp" width="${sz}" height="${sz}" alt="" loading="lazy" decoding="async">` : '';
 export const evPic = (o, px = 80, cls = 'up-p', sz = 32) => bossPic(o.retrato, px, cls, sz) || (/^[\w-]+$/.test(o.icon || '') ? `<img class="${cls} gi" src="${ROOT}assets/ic/${o.icon}.webp" width="${sz}" height="${sz}" alt="" loading="lazy" decoding="async">` : '');
+export function keepImgs(box, paint) {
+const old = new Map();   // src → <img>: el mismo ícono puede ir en varias filas
+for (const i of box.querySelectorAll('img')) old.set(i.getAttribute('src'), [...old.get(i.getAttribute('src')) || [], i]);
+paint();
+for (const i of box.querySelectorAll('img')) {
+const o = old.get(i.getAttribute('src'))?.shift();
+if (o && o !== i) { o.className = i.className; i.replaceWith(o); }
+}
+}
 export function renderUpcoming(box, { count = 8, bells = true, minor = true, minorLast = false, within = 0 } = {}) {
 const doc = box.ownerDocument;
 const draw = () => {
-const now = Date.now(), seen = new Set();
+const now = Date.now(), seen = new Set(), ch = characters().activo;
 let L = upcoming(now, { count: count * 3, minor }).filter(o => o.ev.kind !== 'hourly' || (!seen.has(o.id) && seen.add(o.id)));
 const soon = within && L.filter(o => o.start < now + within || isLive(o, now));
 L = soon?.length ? soon : L;
@@ -783,24 +792,24 @@ bind($('.up-c', li), timerText(t));
 ol.append(li);
 continue;
 }
-const li = doc.createElement('li'), live = isLive(o, now), portal = live && o.entry > now;
-li.className = 'up-r' + (live ? ' live' : '') + (o.maint === 'quizas' ? ' quizas' : '') + (minorLast && o.ev.minor ? ' up-min' : '');
+const li = doc.createElement('li'), live = isLive(o, now), portal = live && o.entry > now, dn = occDone(o, ch, now);
+li.className = 'up-r' + (live ? ' live' : '') + (o.maint === 'quizas' ? ' quizas' : '') + (minorLast && o.ev.minor ? ' up-min' : '') + (dn ? ' up-done' : '');
 li.dataset.ev = o.id;
 const tags = [o.maint === 'quizas' && '<em class="tag warn" title="Puede caer dentro del mantenimiento del miércoles">¿mantenimiento?</em>',
 confOf(o.ev) === 'sin' && confTag(o.ev)].filter(Boolean).join('');
 const edge = portal ? o.entry : live ? o.end : o.start;
 const when = portal ? `cierra ${fmtClock(o.entry, { now, day: false })}` : live ? `hasta ${o.ev.durTxt ? '≈' : ''}${fmtClock(o.end, { now, day: false })}` : fmtClock(o.start, { now });
 const st = live ? (portal ? esc(o.ev.entryLabel) : 'en curso') : o.ev.kind === 'hourly' ? 'cada hora' : o.approx === 'grupo' ? GRUPO_TXT : '';
-li.innerHTML = `${evPic(o.ev) || ico(catIcon(o.ev), 'up-i')}<span class="up-n"><span class="up-nt">${o.approx ? '≈ ' : ''}${esc(gname(o.ev, 'short') || gname(o.ev))}</span>${tags}${st ? `<small class="up-st${live ? '' : ' up-ev'}">${st}</small>` : ''}</span><time class="up-t" datetime="${new Date(edge).toISOString()}">${when}</time><span class="up-c cd"></span>`;
+li.innerHTML = `${evPic(o.ev) || ico(catIcon(o.ev), 'up-i')}<span class="up-n">${dn ? '<span class="up-nl">' : ''}<span class="up-nt">${o.approx ? '≈ ' : ''}${esc(gname(o.ev, 'short') || gname(o.ev))}</span>${dn ? `${ico('i-check', 'up-ok')}<span class="sr">, hecha</span></span>` : ''}${tags}${st ? `<small class="up-st${live ? '' : ' up-ev'}">${st}</small>` : ''}</span><time class="up-t" datetime="${new Date(edge).toISOString()}">${when}</time><span class="up-c cd"></span>`;
 if (bells) li.append(bellButton(o.id, gname(o.ev)));
 countdown($('.up-c', li), edge);
 ol.append(li);
 }
 if (!rows.length) ol.innerHTML = '<li class="up-empty">No hay eventos visibles. Activalos en Ajustes.</li>';
-box.replaceChildren(ol);
+keepImgs(box, () => box.replaceChildren(ol));
 };
 draw();
-const offs = [on('structure', draw), on('prefs', draw), on('profile', draw), on('gamelang', draw)];
+const offs = [on('structure', draw), on('prefs', draw), on('profile', draw), on('gamelang', draw), on('tasks', draw), onStore('hub-tareas', draw), onStore('hub-personajes', draw)];
 return () => offs.forEach(f => f());
 }
 /* ---------- tira "Ahora" (36 px, todas las páginas) ---------- */
@@ -1121,6 +1130,10 @@ return [...TASKS.items, ...t.custom.map(c => ({ ...c, custom: true }))].filter(x
 export function taskDone(charId, period, now = Date.now()) {
 const g = TK.get().done[charId]?.[period];
 return g && g.stamp === lastReset(period, now) ? g.items : {};
+}
+export function occDone(o, charId = characters().activo, now = Date.now()) {
+const t = taskList(charId).find(x => x.event === o.id);
+return !!t && (taskDone(charId, t.period, now)[t.id] || 0) >= (t.count || 1) && o.start < nextReset(t.period, now);
 }
 export function setTaskDone(charId, period, id, val, now = Date.now()) {
 const t = TK.get(), items = { ...taskDone(charId, period, now) };
