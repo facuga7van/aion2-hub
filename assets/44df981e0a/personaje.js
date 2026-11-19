@@ -463,7 +463,7 @@ ${img(p.image, 72, 'pj-pt pj-pt-l', '')}
 <div class="pj-bld" id="pj-bld"></div>
 <nav class="seg pj-tabs" aria-label="Vistas de la ficha">${[['pasos', 'Próximos pasos'], ['equipo', 'Equipo'], ['skills', 'Skills'], ['daevanion', 'Daevanion'], ['logros', 'Logros'], ['builds', 'Builds']].map(([k, l]) => `<button type="button" data-tab="${k}" aria-pressed="${k === TAB}">${l}</button>`).join('')}</nav>
 <div class="pj-x" id="pj-x"></div>
-<p class="pj-src">Datos públicos de la ficha oficial del juego, a través del servidor de la Bitácora (guarda cada ficha 30 min). Sitio de fans, no afiliado. <button type="button" class="linkbtn" data-hub="credits">Fuentes y créditos</button></p>
+<p class="pj-src">Datos públicos de la ficha oficial del juego, a través del servidor de la Bitácora (guarda cada ficha 30 min).</p>
 </article>`;
 paintBuild();
 markIl();
@@ -550,7 +550,7 @@ const note = !noTop ? '' : `Sin top ${KIND_ES[k]} esta semana: ${y ? 'te compara
 const by = new Map((cur.d.equipment || []).map(e => [e.slot, e]));
 const G = C?.top?.[k]?.slots ? gearView(cur.d, cur.x.items, cur.x.boards, C.top[k], {}, styleOf(cur, k)) : null;
 const eqT = G ? `Equipo: <b>${G.ok} de ${G.of}</b> líneas como los top` : 'Equipo: tus piezas, línea por línea';
-const eqL = document.documentElement.classList.contains('mini') ? `<p class="st-eq">${eqT}</p>` : `<button type="button" class="st-eq" data-tab="equipo">${eqT}<span class="st-eqv"> · ver</span></button>`;
+const eqL = document.documentElement.classList.contains('mini') ? `<p class="st-eq">${eqT}${G?.need[0] ? ` · te falta ${esc(G.need[0].name)}` : ''}</p>` : `<button type="button" class="st-eq" data-tab="equipo">${eqT}<span class="st-eqv"> · ver</span></button>`;
 const hid = new Set(estStored(cur.ref).no.filter(x => x.startsWith('paso:')).map(x => x.slice(5))), off = P.steps.filter(s => hid.has(s.id));
 const pin = pinOf(cur, k, P.steps), on = pinFirst(P.steps.filter(s => !hid.has(s.id)), pin);
 const act = on.filter(s => s.id !== 'gear'), gear = on.find(s => s.id === 'gear'), nVis = gear ? ST_VIS - 1 : ST_VIS;
@@ -596,9 +596,9 @@ const eq = cur.d.equipment || [], by = new Map(eq.map(e => [e.slot, e])), known 
 const groups = SLOTS.map(([t, l]) => [t, l.map(([s, lb]) => [s, lb, by.get(s)])]);
 const extra = eq.filter(e => !known.has(e.slot)).map(e => [e.slot, e.slotName, e]);    // un slot nuevo de la ficha no se pierde
 if (extra.length) groups[2][1].push(...extra);
-const strip = SLOTS.flatMap(g => g[1]).filter(([s]) => s < 41 && by.has(s)).map(([s]) => `<li><span class="gv-si">${img(by.get(s).icon, 40)}<small>–</small></span></li>`).join('');
-return `<section class="pj-sec gvs" aria-labelledby="eq-h" aria-busy="true"><div class="gv-sum"><div class="gv-hd"><h3 id="eq-h" class="pj-h">Equipo <small class="gv-c">${cur.x ? 'comparando tus piezas con los top…' : 'leyendo tus piezas…'}</small></h3></div>
-<ol class="gv-strip" aria-hidden="true">${strip}</ol><div class="gv-go"></div>${gvKr(false)}</div>
+const strip = SLOTS.flatMap(g => g[1]).filter(([s]) => s < 41 && by.has(s) && (!cur.x || it[s]?.subStatRandom && it[s].subStats?.length)).map(([s]) => `<li><span class="gv-si">${img(by.get(s).icon, 40)}<small>–</small></span></li>`).join('');
+return `<section class="pj-sec gvs" aria-labelledby="eq-h" aria-busy="true"><div class="gv-sum"><div class="gv-hd"><h3 id="eq-h" class="pj-h">Equipo <small class="gv-c">${cur.x ? 'comparando tus piezas con los top…' : 'leyendo tus piezas…'}</small></h3><small class="gv-src" aria-hidden="true"></small></div>
+<p class="gv-need" aria-hidden="true"></p><ol class="gv-strip" aria-hidden="true">${strip}</ol><div class="gv-go"></div>${gvKr(false)}</div>
 ${groups.map(([t, l]) => `<h4 class="pj-h4">${t}</h4><ul class="gv-g">${l.map(([s, lb, e]) => !e
 ? `<li class="gv-p empty"><span class="eq-i"></span><span class="eq-t"><small>${esc(lb)}</small><span class="eq-n">Vacío</span></span></li>`
 : `<li class="gv-p ${gcls(e.grade)}" data-slot="${s}"><button type="button" class="gv-ph" aria-haspopup="dialog"><span class="eq-i">${img(e.icon, 44)}${e.enchant ? `<b class="eq-en">+${e.enchant}</b>` : ''}</span>
@@ -607,7 +607,7 @@ ${petHtml()}</section>`;
 }
 const gvKr = only => `<div class="gv-kr"><details class="gv-how"${matchMedia('(max-width:640px)').matches ? '' : ' open'}><summary>Cómo leer</summary><ul class="gv-k" aria-label="Cómo leer cada línea">
 <li><i class="gv-mk ok">${ico('i-check')}</i>la buscan los top</li><li><i class="gv-mk">•</i>tuya, ellos no</li><li><i class="gv-ad">＋</i>te falta</li>
-<li class="gv-hon"><span class="qb"><i style="--q:70%"></i></span><span>qué tan alto salió (seguro, ±3 por redondeo)</span></li><li>líneas${gl('lineas')}</li></ul></details>
+<li class="gv-hon"><span class="qb"><i style="--q:70%"></i></span><span>qué tan alto salió (seguro, ±3 por redondeo)</span></li></ul></details>
 <label class="gv-only"><input type="checkbox"${only ? ' checked' : ''}> Solo lo que falta</label></div>`;
 const petHtml = () => `<div class="pj-pw">${cur.d.pet ? `<span>${img(cur.d.pet.icon, 36)}<small>Pet</small> ${esc(gname(cur.d.pet))} · Nv ${+cur.d.pet.level || 0}</span>` : ''}${cur.d.wings ? `<span>${img(cur.d.wings.icon, 36)}<small>Alas</small> ${esc(gname(cur.d.wings))}${cur.d.wings.enchant ? ` +${cur.d.wings.enchant}` : ''}</span>` : ''}</div>`;
 const EQ_ST = new Set(['amp-arma', 'amp-acc', 'amp-brac', 'amp-arm', 'enc', 'arc', 'gs', 'gs-up', 'ms', 'gear']);

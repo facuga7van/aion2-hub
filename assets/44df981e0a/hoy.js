@@ -7,7 +7,7 @@ on('reset', () => kept.clear());
 export function renderTodo(box) {
 const paint = () => {
 const now = Date.now(), { list, activo: ch } = characters(), pr = taskProgress(ch, now);
-const C = countedChars(now), pend = new Map(C.map(c => [c.id, c.d])), other = C.find(c => c.id !== ch && c.d);
+const C = countedChars(now), counted = new Set(C.map(c => c.id)), other = C.find(c => c.id !== ch && c.d);
 const done = { daily: taskDone(ch, 'daily', now), weekly: taskDone(ch, 'weekly', now) };
 const L = taskList().filter(t => !t.optional), rd = nextReset('daily', now), occ = {};
 const okOf = t => (done[t.period][t.id] || 0) >= (t.count || 1), show = t => !okOf(t) || kept.has(`${ch}:${t.period}:${t.id}`);
@@ -21,8 +21,8 @@ if (max > 1) return `<li class="tk-i tk-cnt${ok ? ' ok' : ''}" data-tk="${esc(t.
 const sub = per === 'weekly' ? `Semanal · <span class="cd" id="ah-ev-${esc(t.id)}"></span>` : t.detail ? esc(gname(t, 'detail')) : '';
 return `<li class="tk-i${ok ? ' ok' : ''}"><input type="checkbox" id="${id}" data-tk="${esc(t.id)}" data-per="${per}"${ok ? ' checked' : ''}><label for="${id}"><span class="tk-nm">${nm}</span>${sub ? `<small>${sub}</small>` : ''}</label></li>`;
 };
-const chip = c => { const n = pend.get(c.id), lab = n ? `, falta${n > 1 ? 'n' : ''} ${n}` : n === 0 ? ', listas' : '';
-return `<button type="button" data-pj="${esc(c.id)}" aria-pressed="${c.id === ch}"${lab ? ` aria-label="${esc(c.name + lab)}"` : ''}><span class="tk-pn">${esc(c.name)}</span>${n ? `<small class="tk-pc">${n}</small>` : n === 0 ? ico('i-check', 'tk-pc') : ''}</button>`; };
+const chip = c => { const p = taskProgress(c.id, now).daily, n = p.total - p.done, out = !counted.has(c.id), lab = (n ? `, falta${n > 1 ? 'n' : ''} ${n}` : ', listas') + (out ? ', sin marcas esta semana' : '');
+return `<button type="button" data-pj="${esc(c.id)}" aria-pressed="${c.id === ch}" aria-label="${esc(c.name + lab)}"${out ? ' class="tk-out" title="sin marcas esta semana: no entra en el aviso"' : ''}><span class="tk-pn">${esc(c.name)}</span>${n ? `<small class="tk-pc">${n}</small>` : ico('i-check', 'tk-pc')}</button>`; };
 const who = list.length > 1 ? `<span class="seg tk-pj" role="group" aria-label="Personaje">${list.map(chip).join('')}</span>`
 : `<span class="tk-c">${esc(list[0].name)}</span>`;
 const od = taskList().find(t => t.meter), ods = od && OD.get().c[ch];

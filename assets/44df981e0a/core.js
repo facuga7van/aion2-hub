@@ -358,8 +358,8 @@ tT = setTimeout(hideToast, ms);
 export function hideToast() { clearTimeout(tT); $('#hub-toast')?.classList.remove('on'); }
 export function announce(text) { const l = $('#hub-live'); if (l) { l.textContent = ''; setTimeout(() => { l.textContent = text; }, 30); } }
 export const dm = iso => `${+iso.slice(8, 10)}-${'ene feb mar abr may jun jul ago sep oct nov dic'.split(' ')[iso.slice(5, 7) - 1]}`;
-export const revTxt = ({ rev, client, patch } = {}) => [client && (client < patch ? `Datos del juego al ${dm(client)} · parche del ${dm(patch)} todavía sin releer` : `Datos al parche del ${dm(patch)}`),
-rev && `revisado el ${dm(rev)}`].filter(Boolean).join(' · ').replace(/^r/, 'R');
+export const revTxt = ({ rev, client, patch } = {}) => client ? (client < patch ? `Números del juego al ${dm(client)}. El parche del ${dm(patch)} todavía no está cargado.` : `Al día con el parche del ${dm(patch)}.`)
+: rev ? `Revisado el ${dm(rev)}` : '';
 export const CREDITS = [
 ['Horarios y eventos', 'Notas y avisos oficiales de PLAYNC (NCSOFT). Lo que no tiene aviso oficial sale de los datos del cliente Global que publica aion2data.com (https://aion2data.com/timers), cruzados con questlog.gg; va rotulado "Datos del juego". El minuto de Nahma y de los jefes de artefacto según el grupo de emparejamiento: questlog.gg en vivo, cruzado con el aviso oficial de emparejamiento y aion2status.com (https://aion2status.com/en/abyss-bosses). Duración del Festival de Shugo: aion2.gg y metabot.', revTxt(DATA.rev?.horarios)],
 ['Tareas', 'Cuántas llaves, intentos y premios da cada cosa: datos del cliente Global que publica aion2data.com (https://aion2data.com/checklist), con las notas oficiales de PLAYNC. La Energía de Odyle además coincide con metabot.gg y las guías de allthings.how y daevaguides.com. Lo que falta confirmar lleva un punto.', revTxt(DATA.rev?.tareas)],

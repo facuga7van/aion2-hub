@@ -131,7 +131,13 @@ const n = lines.filter(l => l.st === 'ok').length, m = lines.filter(l => l.st !=
 if (counted) { ok += n; of += m; }
 out.push({ slot: e.slot, cs, lines, sk, miss, skMiss, fixed, counted, aGusto, ok: counted ? n : null, of: counted ? m : null });
 }
-return { pieces: out, ok: S ? ok : null, of: S ? of : null, thin, none: !S };
+const nd = new Map();
+for (const p of out) for (const l of p.miss) {
+const g = nd.get(l.id) || nd.set(l.id, { id: l.id, name: l.name, n: 0, share: 0, slots: [] }).get(l.id);
+g.n++; g.share = Math.max(g.share, l.share || 0); g.slots.push(p.slot);
+}
+const need = [...nd.values()].sort((a, b) => b.n - a.n || b.share - a.share);
+return { pieces: out, ok: S ? ok : null, of: S ? of : null, thin, none: !S, need };
 }
 const FIERCE = new Set(['311030002', '311040002', '311050002']);
 export function kindGuess(d, items, sets = {}) {

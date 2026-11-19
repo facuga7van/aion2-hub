@@ -1,7 +1,7 @@
 import {
 $, esc, ico, on, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal, evPic,
 characters, taskList, taskDone, setTaskDone, taskProgress, PJ, TK, profile, serverName, registerKey, confOf, confTag, clockLeft, gname, gclass, HOUR,
-setTimers, bellButton, ROOT, MIN, OD, odyle, DATA, dm,
+setTimers, bellButton, ROOT, MIN, OD, odyle, DATA, dm, TASKS,
 } from './core.js';
 const odBell = ch => 'odyle:' + ch;
 function pubOdyle(now) {
@@ -21,8 +21,8 @@ const uid = () => Math.random().toString(36).slice(2, 9);
 const setHtml = (el, h) => { if (el._h !== h) { el.innerHTML = h; el._h = h; } };
 function paint() {
 const now = Date.now(), { list, activo } = characters(), focusId = document.activeElement?.id;
-setHtml($('#pj-tabs'), list.map(c => { const d = taskProgress(c.id, now).daily, all = d.total && d.done >= d.total;
-return `<button type="button" data-pj="${esc(c.id)}" aria-pressed="${c.id === activo}"><span class="pj-nm">${esc(c.name)}</span>${c.clase ? `<small>${esc(gclass(c.clase))}</small>` : ''}<span class="pj-p${all ? ' all' : ''}" title="Diarias hechas">${all ? ico('i-check') : ''}${d.done}/${d.total}</span>${editing && c.id !== 'main' ? `<span class="pj-x" data-pjdel="${esc(c.id)}" role="button" tabindex="0" aria-label="Quitar ${esc(c.name)}">${ico('i-x')}</span>` : ''}</button>`; }).join(''));
+setHtml($('#pj-tabs'), list.map(c => { const d = taskProgress(c.id, now).daily, all = d.total && d.done >= d.total, k = d.total - d.done;
+return `<button type="button" data-pj="${esc(c.id)}" aria-pressed="${c.id === activo}"><span class="pj-nm">${esc(c.name)}</span>${c.clase ? `<small>${esc(gclass(c.clase))}</small>` : ''}<span class="pj-p${all ? ' all' : ''}" title="${k > 0 ? `Falta${k > 1 ? 'n' : ''} ${k} diaria${k > 1 ? 's' : ''}` : 'Diarias listas'}">${all ? ico('i-check') : ''}${d.done}/${d.total}</span>${editing && c.id !== 'main' ? `<span class="pj-x" data-pjdel="${esc(c.id)}" role="button" tabindex="0" aria-label="Quitar ${esc(c.name)}">${ico('i-x')}</span>` : ''}</button>`; }).join(''));
 for (const per of ['daily', 'weekly']) paintGroup(per, activo, now);
 pubOdyle(now);
 setHtml($('#tk-pie'), pie());
@@ -38,7 +38,7 @@ const pct = req.length ? Math.round(n / req.length * 100) : 0, rs = nextReset(pe
 setHtml(g, `<div class="tk-h"><h2 id="h-${per}">${PER[per].t}</h2><span class="tk-n"><b>${n}</b>/${req.length}</span>
 <span class="tk-r">se limpian en <span class="cd" id="rs-${per}"></span> <small>${fmtClock(rs, { now })}</small></span></div>
 <div class="bar" role="progressbar" aria-label="${PER[per].t} hechas" aria-valuemin="0" aria-valuemax="${req.length}" aria-valuenow="${n}"><i style="--w:${pct}%"></i></div>
-<ul class="tk-list">${req.map(t => row(t, per, done)).join('')}${met.map(t => meterRow(t, ch)).join('')}${opt.length ? `<li class="tk-sep">Si te sobra tiempo</li>${opt.map(t => row(t, per, done)).join('')}` : ''}${items.length ? '' : '<li class="tk-empty">Sin tareas. Sumá una con el lápiz.</li>'}</ul>
+<ul class="tk-list">${req.map(t => row(t, per, done)).join('')}${met.map(t => meterRow(t, ch)).join('')}${opt.length ? `<li class="tk-sep">Si te sobra tiempo</li>${opt.map(t => row(t, per, done)).join('')}` : ''}${items.length ? '' : '<li class="tk-empty">Sin tareas. Sumá una con el lápiz.</li>'}</ul>${hiddenList(per, ch)}
 <form class="tk-add" data-per="${per}"><input type="text" name="n" maxlength="60" placeholder="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" aria-label="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" required><button class="btn">${ico('i-plus')}Agregar</button></form>`);
 bind($('#rs-' + per), n2 => [fmtLeft(rs - n2), n2 + leftNext(rs - n2)]);
 for (const t of met) {   // estimado y "se llena en": cambian solos con el reloj (bind), el HTML no
@@ -54,9 +54,21 @@ const el = $(`#ev-${per}-${CSS.escape(t.id)}`), o = currentOcc(t.event, now) || 
 if (el && o) { const cl = clockLeft(o.start); el.classList.toggle('pronto', o.start - now < 2 * HOUR); bind(el, n2 => isLive(o, n2) ? statusText(o, n2) : cl(n2)); }
 }
 }
+function hiddenList(per, ch) {
+const T = TK.get(), mine = T.hidePj[ch] || [], { list } = characters(), many = list.length > 1, who = list.find(c => c.id === ch)?.name || '';
+const H = [...TASKS.items, ...T.custom].filter(t => t.period === per && (T.hidden.includes(t.id) || mine.includes(t.id)));
+return H.length ? `<div class="tk-hid"><p class="tk-sep">Ocultas (${H.length})</p><ul>${H.map(t => `<li><span>${esc(gname(t))}${many ? ` <small>${T.hidden.includes(t.id) ? 'en todos' : 'solo en ' + esc(who)}</small>` : ''}</span><button type="button" class="btn ghost" data-show="${esc(t.id)}" aria-label="Mostrar ${esc(gname(t))}">Mostrar</button></li>`).join('')}</ul></div>` : '';
+}
+function showTask(id) {
+const t = TK.get(), ch = active(), hp = { ...t.hidePj, [ch]: (t.hidePj[ch] || []).filter(x => x !== id) };
+if (!hp[ch].length) delete hp[ch];
+TK.set({ ...t, hidden: t.hidden.filter(x => x !== id), hidePj: hp });
+paint();
+document.getElementById('t-' + id)?.focus();
+}
 const lvOf = t => t.custom ? 'oficial' : t.unverified?.length ? 'sin' : confOf(t);
 const old = DATA.rev?.tareas?.client < DATA.rev?.tareas?.patch && DATA.rev.tareas;
-const pie = () => `${taskList().some(t => lvOf(t) === 'sin') ? '<span><i class="cfl c-sin"></i>sin confirmar: tocá el punto</span>' : ''}<span>Cantidades y horarios: datos del juego${old ? ` al ${dm(old.client)}, antes del parche del ${dm(old.patch)}` : ''}.</span>`;
+const pie = () => `${taskList().some(t => lvOf(t) === 'sin') ? '<span><i class="cfl c-sin"></i>sin confirmar: tocá el punto</span>' : ''}<span>${old ? `Números al ${dm(old.client)}: el parche del ${dm(old.patch)} puede haber cambiado alguno.` : 'Cantidades y horarios: datos del juego.'}</span>`;
 const nowrapEnd = (txt, tail) => { const s = String(txt || ''), i = s.lastIndexOf(' '); return tail ? `${esc(s.slice(0, i + 1))}<span class="nw">${esc(s.slice(i + 1))}${tail}</span>` : esc(s); };
 function row(t, per, done) {
 const v = done[t.id] || 0, max = t.count || 1, ok = v >= max, id = `t-${esc(t.id)}`;
@@ -103,6 +115,8 @@ if (!c) return;
 set(c.closest('[data-per]').dataset.per, c.dataset.chk, c.checked ? 1 : 0);
 });
 $('#tk-cols').addEventListener('click', e => {
+const sh = e.target.closest('[data-show]');
+if (sh) { showTask(sh.dataset.show); return; }
 const b = e.target.closest('[data-inc],[data-dec],[data-del],[data-od]');
 if (!b) return;
 const li = b.closest('[data-t]'), per = li.dataset.per, id = li.dataset.t;
