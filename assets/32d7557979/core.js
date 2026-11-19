@@ -344,10 +344,10 @@ tick();
 /* ---------- toast, aviso de estado, modal ---------- */
 let tT;
 export function toast(html, { ms = 4200, action = null } = {}) {
-const el = $('#hub-toast');
+const el = $('#hub-toast'), acts = [action].flat().filter(Boolean);
 el.innerHTML = html;
-if (action) el.append(' ', Object.assign(document.createElement('button'), { type: 'button', className: 'linkbtn', textContent: action.label, onclick: () => { hideToast(); action.run(); } }));
-el.classList.toggle('act', !!action);
+for (const a of acts) el.append(' ', Object.assign(document.createElement('button'), { type: 'button', className: 'linkbtn', textContent: a.label, onclick: () => { hideToast(); a.run(); } }));
+el.classList.toggle('act', acts.length > 0);
 const host = [...document.querySelectorAll('dialog[open]')].pop() || document.body;
 if (el.parentNode !== host) host.append(el);
 if (el.showPopover) { if (el.matches(':popover-open')) el.hidePopover(); el.showPopover(); }
@@ -357,12 +357,15 @@ tT = setTimeout(hideToast, ms);
 }
 export function hideToast() { clearTimeout(tT); $('#hub-toast')?.classList.remove('on'); }
 export function announce(text) { const l = $('#hub-live'); if (l) { l.textContent = ''; setTimeout(() => { l.textContent = text; }, 30); } }
+export const dm = iso => `${+iso.slice(8, 10)}-${'ene feb mar abr may jun jul ago sep oct nov dic'.split(' ')[iso.slice(5, 7) - 1]}`;
+export const revTxt = ({ rev, client, patch } = {}) => [client && (client < patch ? `Datos del juego al ${dm(client)} · parche del ${dm(patch)} todavía sin releer` : `Datos al parche del ${dm(patch)}`),
+rev && `revisado el ${dm(rev)}`].filter(Boolean).join(' · ').replace(/^r/, 'R');
 export const CREDITS = [
-['Horarios y eventos', 'Notas y avisos oficiales de PLAYNC (NCSOFT). Lo que no tiene aviso oficial sale de los datos del cliente Global que publica aion2data.com (https://aion2data.com/timers), cruzados con questlog.gg; va rotulado "Datos del juego". El minuto de Nahma y de los jefes de artefacto según el grupo de emparejamiento: questlog.gg en vivo, cruzado con el aviso oficial de emparejamiento y aion2status.com (https://aion2status.com/en/abyss-bosses). Duración del Festival de Shugo: aion2.gg y metabot.', 'Datos al parche del 18-nov · revisado el 18-nov'],
-['Tareas', 'Cuántas llaves, intentos y premios da cada cosa: datos del cliente Global que publica aion2data.com (https://aion2data.com/checklist), con las notas oficiales de PLAYNC. La Energía de Odyle además coincide con metabot.gg y las guías de allthings.how y daevaguides.com. Lo que tiene una sola fuente lleva un punto que la muestra.', 'Datos al parche del 18-nov · revisado el 18-nov'],
+['Horarios y eventos', 'Notas y avisos oficiales de PLAYNC (NCSOFT). Lo que no tiene aviso oficial sale de los datos del cliente Global que publica aion2data.com (https://aion2data.com/timers), cruzados con questlog.gg; va rotulado "Datos del juego". El minuto de Nahma y de los jefes de artefacto según el grupo de emparejamiento: questlog.gg en vivo, cruzado con el aviso oficial de emparejamiento y aion2status.com (https://aion2status.com/en/abyss-bosses). Duración del Festival de Shugo: aion2.gg y metabot.', revTxt(DATA.rev?.horarios)],
+['Tareas', 'Cuántas llaves, intentos y premios da cada cosa: datos del cliente Global que publica aion2data.com (https://aion2data.com/checklist), con las notas oficiales de PLAYNC. La Energía de Odyle además coincide con metabot.gg y las guías de allthings.how y daevaguides.com. Lo que falta confirmar lleva un punto.', revTxt(DATA.rev?.tareas)],
 ['Jefes en vivo', 'Telemetría de jugadores: la app de escritorio de questlog.gg ve los jefes en las partidas de sus usuarios. Llega a través del servidor de la Bitácora. Si activás los reportes de la comunidad, también lo que avisan otros jugadores de tu server ("Estimado").'],
-['Jefes: nombres, teleports y retratos', 'Base de datos de Aion 2 de questlog.gg. Ciclos: los de Gartua y Lagta, del parche Global oficial; los demás, los que usa la telemetría de questlog.gg, sin contradicciones en tres servers de regiones distintas. El juego no los publica.', 'Revisado el 17-nov'],
-['Jefes: drops', 'Qué suelta cada jefe y con qué chance: base de datos de questlog.gg cruzada con los datos del cliente Global que publica aion2data.com (https://aion2data.com/monsters). Íconos del CDN oficial de PLAYNC, re-guardados chicos.', 'Datos al parche del 11-nov · revisado el 17-nov'],
+['Jefes: nombres, teleports y retratos', 'Base de datos de Aion 2 de questlog.gg. Ciclos: los de Gartua y Lagta, del parche Global oficial; los demás, los que usa la telemetría de questlog.gg, sin contradicciones en tres servers de regiones distintas. El juego no los publica.', revTxt(DATA.rev?.jefes)],
+['Jefes: drops', 'Qué suelta cada jefe y con qué chance: base de datos de questlog.gg cruzada con los datos del cliente Global que publica aion2data.com (https://aion2data.com/monsters). Íconos del CDN oficial de PLAYNC, re-guardados chicos.', revTxt(DATA.rev?.drops)],
 ['Personaje', 'Ficha pública de PLAYNC (equipo, skills, Daevanion, nivel de objeto) e íconos del CDN oficial de PLAYNC, re-guardados chicos. Nombres de skills en inglés, tablas de amplificación y builds de la comunidad: questlog.gg. Lo que usan los top: el armory público de PLAYNC sobre la lista de mayor CP de questlog.gg. Guías de builds: aion2data.com (https://aion2data.com). Puertas de contenido: notas oficiales de parche de PLAYNC y los datos del cliente Global de aion2data.com (https://aion2data.com/item-level).'],
 ['Personaje: títulos y logros', 'Conteo y títulos equipados: ficha pública de PLAYNC. Catálogo de títulos y logros (pasos, metas, recompensas, estatuas del Panteón): base de datos de questlog.gg, cruzada con los datos del cliente de aion2data.com (https://aion2data.com). Qué es "importante": criterio propio con lo que equipan los top. La lista de tus títulos y tu Panteón se carga desde characters.json de la app de escritorio de questlog.gg, en tu navegador. Íconos: CDN oficial de PLAYNC.'],
 ['Pets', 'Datos, mapas, coordenadas de spawns y retratos: base de datos y mapa interactivo de questlog.gg (Aion 2 global). Tiendas y eventos de las Especiales: aion2vault.com, wikily.gg y notas de NCSOFT. Grieta (Spacetime Rift): guía de expcarry.com. La colección se carga desde characters.json de la app de escritorio de questlog.gg.'],
@@ -544,11 +547,12 @@ const note = it.note?.(q.occ), body = [fmtClock(q.occ.start, { now }), note].fil
 alarm(q.key, title, body, q.id, it.href, sayText(name, q.lead, it, note), q.lead === 0, now);
 }
 function fireDaily(q, now) {
-const rd = q.occ.start, p = taskProgress(characters().activo, now), d = p.daily.total - p.daily.done;
-const w = nextReset('weekly', now) === rd ? p.weekly.total - p.weekly.done : 0;
+const rd = q.occ.start, wk = nextReset('weekly', now) === rd, C = countedChars(now).map(c => ({ ...c, w: wk ? c.w : 0 }));
+const d = C.reduce((s, c) => s + c.d, 0), w = C.reduce((s, c) => s + c.w, 0);
 if (!d && !w) return;
 const what = [d && `${d} diaria${d > 1 ? 's' : ''}`, w && `${w} semanal${w > 1 ? 'es' : ''}`].filter(Boolean).join(' y ');
-alarm(q.key, `Te faltan ${what}`, `Reset ${w ? 'semanal ' : ''}${fmtClock(rd, { now })} · en 1 h`, 'diarias', ROOT + 'tareas/', `Te faltan ${what}, el reset es en una hora`, false, now);
+const who = C.length > 1 ? C.filter(c => c.d + c.w).map(c => `${c.name} ${c.d + c.w}`).join(', ') + ' · ' : '';
+alarm(q.key, `Te faltan ${what}`, `${who}Reset ${w ? 'semanal ' : ''}${fmtClock(rd, { now })} · en 1 h`, 'diarias', ROOT + 'tareas/', `Te faltan ${what}, el reset es en una hora`, false, now);
 }
 function alarm(key, title, body, id, href, spoken, high, now) {
 toast(`${ico('i-bell-on')} <b>${esc(title)}</b> · ${esc(body)}`, { ms: 9000 });
@@ -812,7 +816,7 @@ return a;
 export const maintNow = (now = Date.now()) => schedule(now).mw.find(w => w.start <= now && now < w.maxEnd) || null;
 export const maintEnd = (w, now = Date.now()) => (w.announced ? '' : '~') + fmtClock(w.maxEnd, { now, day: false });
 const NARROW = matchMedia('(max-width: 420px)');
-const dailyLeft = now => { const c = characters().activo, p = taskProgress(c, now).daily; return p.total - p.done; };
+const dailyLeft = now => countedChars(now).reduce((s, c) => s + c.d, 0);
 function renderStrip() {
 const el = $('#hub-strip');
 if (!el) return;
@@ -1088,7 +1092,7 @@ return `El server de ${r.name} usa hora de ${r.tzName}, ${Math.abs(d)} h ${d > 0
 }
 /* ---------- tareas: estado compartido (Tareas, Ahora y la paleta) ---------- */
 export const PJ = versioned('hub-personajes', 1, { list: [], activo: null });
-export const TK = versioned('hub-tareas', 1, { custom: [], hidden: [], done: {} });
+export const TK = versioned('hub-tareas', 1, { custom: [], hidden: [], hidePj: {}, done: {} });
 export function myChars() {
 const old = store.get('hub-pj-mio', null), p = PJ.get();
 if (old?.k) {
@@ -1110,8 +1114,8 @@ const p = PJ.get();
 const list = p.list.length ? p.list : [{ id: 'main', name: 'Mi personaje' }];
 return { list, activo: list.some(c => c.id === p.activo) ? p.activo : list[0].id };
 }
-export function taskList() {
-const t = TK.get(), hid = new Set(t.hidden);
+export function taskList(charId = characters().activo) {
+const t = TK.get(), hid = new Set([...t.hidden, ...(t.hidePj[charId] || [])]);
 return [...TASKS.items, ...t.custom.map(c => ({ ...c, custom: true }))].filter(x => !hid.has(x.id));
 }
 export function taskDone(charId, period, now = Date.now()) {
@@ -1129,10 +1133,15 @@ return ok;
 export function taskProgress(charId, now = Date.now()) {
 const out = {};
 for (const per of ['daily', 'weekly']) {
-const L = taskList().filter(x => x.period === per && !x.optional), d = taskDone(charId, per, now);
+const L = taskList(charId).filter(x => x.period === per && !x.optional), d = taskDone(charId, per, now);
 out[per] = { done: L.filter(x => (d[x.id] || 0) >= (x.count || 1)).length, total: L.length };
 }
 return out;
+}
+export function countedChars(now = Date.now()) {
+const { list, activo } = characters(), D = TK.get().done, recent = id => ['daily', 'weekly'].some(p => D[id]?.[p]?.stamp > now - 7 * DAY);
+return list.filter(c => c.id === activo || recent(c.id)).sort((a, b) => (b.id === activo) - (a.id === activo))
+.map(c => { const p = taskProgress(c.id, now); return { ...c, d: p.daily.total - p.daily.done, w: p.weekly.total - p.weekly.done }; });
 }
 export const OD = versioned('hub-odyle', 1, { c: {} });
 export function odyle(m, s, now) {

@@ -94,6 +94,45 @@ m.arc = src?.arcana || null;   // el set de cada carta en los top (estilo: tu ca
 return m;
 };
 export const CSLOT = { 1: 'weapon', 2: 'offhand', 3: 'helmet', 4: 'shoulder', 5: 'torso', 6: 'pants', 7: 'gloves', 8: 'boots', 19: 'cape', 10: 'necklace', 11: 'earring', 12: 'earring', 13: 'ring', 14: 'ring', 15: 'bracelet', 16: 'bracelet', 17: 'belt', 22: 'amulet', 23: 'rune', 24: 'rune' };
+export const SK_MIN = 0.2;
+export function rollOf(line, pool) {
+const r = (pool || []).find(p => p[0] === line.id);
+const v = parseFloat(String(line.value ?? '').replace(',', '.'));
+if (!r || !isFinite(v)) return null;
+const [, min, max] = r, dist = x => x < min ? min - x : x > max ? x - max : 0;
+const s = dist(v * 100) < dist(v) ? 100 : 1, x = v * s;
+const out = dist(x) > Math.max(6, 0.15 * (max - min));
+return { q: max > min ? Math.max(0, Math.min(1, (x - min) / (max - min))) : 1, min, max, s, out, pctv: /%/.test(String(line.value)) };
+}
+export const GV_MIN = 0.9;
+export const gvWant = (x, thin) => (x?.lines || []).filter(l => (l.tier === 'Best' || (l.tier === 'Good' && l.share >= 0.5)) && l.share >= (thin ? GV_MIN : 0)).sort((a, b) => b.share - a.share);
+export function gearView(d, items = {}, boards = {}, T = null, pools = {}, mine = new Set()) {
+const S = T?.slots || null, thin = !!S && (T.confidence === 'baja' || T.n < 8), min = thin ? GV_MIN : 0;
+const parts = skillParts(d, items, boards), sks = new Map((d.skills || []).map(s => [String(s.id), s])), uses = id => useful(sks.get(String(id)), parts.get(String(id)));
+const out = [];
+let ok = 0, of = 0;
+for (const e of d.equipment || []) {
+const it = items[e.slot], cs = CSLOT[e.slot] || ARC_C[e.slot - 41];
+if (!it || !cs) continue;
+const x = S?.[cs], want = (x?.lines || []).filter(l => (l.tier === 'Best' || l.tier === 'Good') && l.share >= min);
+const fixed = it.subStatRandom === false && !!(it.subStats || []).length, counted = !!S && !fixed && e.slot < 41 && !!x?.lines?.length;
+const lines = (it.subStats || []).map(s => {
+const id = String(s.id).toLowerCase(), t = (x?.lines || []).find(l => l.id === id), r0 = rollOf({ id, value: s.value }, pools[it.id]?.lines), r = r0 && !r0.out ? r0 : null;
+const few = thin && t && (t.tier === 'Best' || t.tier === 'Good') && !want.includes(t);
+return { id, value: s.value, st: !counted ? 'own' : mine.has(`ln:${cs}:${id}`) ? 'mine' : want.includes(t) ? 'ok' : few ? 'few' : 'own', share: t?.share ?? null, k: t?.k ?? null, n: t?.of ?? null, q: r ? r.q : null, r };
+});
+const sk = (it.subSkills || []).map(s => ({ id: String(s.id), name: s.name, level: s.level, st: uses(s.id) ? 'use' : 'dead' }));
+const has = new Set(lines.map(l => l.id)), hasSk = new Set(sk.map(l => l.id));
+const aGusto = lines.some(l => l.st === 'mine') && !lines.some(l => l.st === 'own') && !sk.some(l => l.st === 'dead');
+const room = aGusto ? 0 : Math.min(3, lines.filter(l => l.st === 'own').length + sk.filter(l => l.st === 'dead').length + Math.max(0, (it.subStatCount || 0) - lines.length - sk.length));
+const miss = counted ? gvWant(x, thin).filter(l => !has.has(l.id)).slice(0, room) : [];
+const skMiss = S && !fixed ? (x?.skillLines || []).filter(l => l.share >= Math.max(SK_MIN, min) && !hasSk.has(String(l.id)) && uses(l.id)).sort((a, b) => b.share - a.share).slice(0, room - miss.length) : [];
+const n = lines.filter(l => l.st === 'ok').length, m = lines.filter(l => l.st !== 'mine' && l.st !== 'few').length;
+if (counted) { ok += n; of += m; }
+out.push({ slot: e.slot, cs, lines, sk, miss, skMiss, fixed, counted, aGusto, ok: counted ? n : null, of: counted ? m : null });
+}
+return { pieces: out, ok: S ? ok : null, of: S ? of : null, thin, none: !S };
+}
 const FIERCE = new Set(['311030002', '311040002', '311050002']);
 export function kindGuess(d, items, sets = {}) {
 const sup = new Set((sets.support || []).map(x => String(x.id))), pvpS = new Set((sets.pvp || []).map(x => String(x.id)));

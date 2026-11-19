@@ -1,12 +1,13 @@
 import {
 esc, ico, on, onStore, emit, bind, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, characters, taskList, taskDone,
-setTaskDone, taskProgress, PJ, gname, clockLeft, schedule, maintEnd, HOUR, OD, odyle,
+setTaskDone, taskProgress, countedChars, PJ, gname, clockLeft, schedule, maintEnd, HOUR, OD, odyle,
 } from './core.js';
 const kept = new Set();
 on('reset', () => kept.clear());
 export function renderTodo(box) {
 const paint = () => {
 const now = Date.now(), { list, activo: ch } = characters(), pr = taskProgress(ch, now);
+const C = countedChars(now), pend = new Map(C.map(c => [c.id, c.d])), other = C.find(c => c.id !== ch && c.d);
 const done = { daily: taskDone(ch, 'daily', now), weekly: taskDone(ch, 'weekly', now) };
 const L = taskList().filter(t => !t.optional), rd = nextReset('daily', now), occ = {};
 const okOf = t => (done[t.period][t.id] || 0) >= (t.count || 1), show = t => !okOf(t) || kept.has(`${ch}:${t.period}:${t.id}`);
@@ -20,18 +21,20 @@ if (max > 1) return `<li class="tk-i tk-cnt${ok ? ' ok' : ''}" data-tk="${esc(t.
 const sub = per === 'weekly' ? `Semanal · <span class="cd" id="ah-ev-${esc(t.id)}"></span>` : t.detail ? esc(gname(t, 'detail')) : '';
 return `<li class="tk-i${ok ? ' ok' : ''}"><input type="checkbox" id="${id}" data-tk="${esc(t.id)}" data-per="${per}"${ok ? ' checked' : ''}><label for="${id}"><span class="tk-nm">${nm}</span>${sub ? `<small>${sub}</small>` : ''}</label></li>`;
 };
-const who = list.length > 1 ? `<span class="seg tk-pj" role="group" aria-label="Personaje">${list.map(c => `<button type="button" data-pj="${esc(c.id)}" aria-pressed="${c.id === ch}">${esc(c.name)}</button>`).join('')}</span>`
+const chip = c => { const n = pend.get(c.id), lab = n ? `, falta${n > 1 ? 'n' : ''} ${n}` : n === 0 ? ', listas' : '';
+return `<button type="button" data-pj="${esc(c.id)}" aria-pressed="${c.id === ch}"${lab ? ` aria-label="${esc(c.name + lab)}"` : ''}><span class="tk-pn">${esc(c.name)}</span>${n ? `<small class="tk-pc">${n}</small>` : n === 0 ? ico('i-check', 'tk-pc') : ''}</button>`; };
+const who = list.length > 1 ? `<span class="seg tk-pj" role="group" aria-label="Personaje">${list.map(chip).join('')}</span>`
 : `<span class="tk-c">${esc(list[0].name)}</span>`;
 const od = taskList().find(t => t.meter), ods = od && OD.get().c[ch];
 const odRow = ods ? `<li class="tk-i tk-odl"><span class="tk-nm">${esc(gname(od))}</span><small class="cd" id="ah-od"></small></li>` : '';
 const pct = pr.daily.total ? Math.round(pr.daily.done / pr.daily.total * 100) : 0, rows = (listo ? [] : daily.filter(show)).map(row).join('');
 box.classList.toggle('tk-listo', listo);
 box.innerHTML = `<div class="tk-p">${who}<span><b>${pr.daily.done}</b>/${pr.daily.total} diarias</span><span><b>${pr.weekly.done}</b>/${pr.weekly.total} semanales</span><span class="tk-r"><span class="tk-rs"></span><span class="tk-rw"></span></span></div>
-<div class="bar" role="img" aria-label="${pct}% de las diarias"><i style="--w:${pct}%"></i></div>${listo ? '<p class="tk-ok">Diarias listas ✓</p>' : ''}
+<div class="bar" role="img" aria-label="${pct}% de las diarias"><i style="--w:${pct}%"></i></div>${listo ? `<p class="tk-ok">Diarias listas ✓${other ? ` · <button type="button" class="linkbtn" data-pj="${esc(other.id)}">a ${esc(other.name)} le falta${other.d > 1 ? 'n' : ''} ${other.d}</button>` : ''}</p>` : ''}
 <div class="tk-cols">${rows ? `<ul class="tk-l">${rows}</ul>` : ''}${also.length || odRow ? `<ul class="tk-l"><li class="tk-sep">Hoy también</li>${also.map(row).join('')}${odRow}</ul>` : ''}</div>`;
 if (ods) bind(box.querySelector('#ah-od'), n => { const o = odyle(od.meter, ods, n); return o.full ? [`~${o.v}/${o.cap} · llena en ${fmtLeft(o.full - n)}`, Math.min(n + leftNext(o.full - n), o.next)] : [`llena (tope ${o.cap})`, 0]; });
 bind(box.querySelector('.tk-rs'), n => {
-const left = rd - n, soon = !listo && left < 2 * HOUR;
+const left = rd - n, soon = (!listo || !!other) && left < 2 * HOUR;
 box.classList.toggle('tk-soon', soon);
 return [soon ? `Te quedan ${fmtLeft(left)} para el reset` : `reset en ${fmtLeft(left)}`, n + leftNext(left)];
 });

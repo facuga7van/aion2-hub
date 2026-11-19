@@ -1,5 +1,6 @@
 import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js';
-import { useful, skillParts, CSLOT, GOD, godFam, GR_F, GR_N } from './personaje-calc.js';
+import { useful, skillParts, CSLOT, GOD, godFam, GR_F, GR_N, rollOf, SK_MIN, gearView, gvWant, kindGuess } from './personaje-calc.js';
+export { rollOf };
 await new Promise(r => { const l = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: new URL('./personaje-builds.css', import.meta.url).href, onload: r, onerror: r }), pj = document.querySelector('link[href$="personaje.css"]'); pj ? pj.after(l) : document.head.append(l); });
 let X;                                         // {api, MSG, img, gcls, GRADE, nf, curated, CLS_KEY, gl} que pasa personaje.js
 export const init = ctx => { X = ctx; };
@@ -52,7 +53,6 @@ const godName = (f, en) => gname({ name: GOD[f]?.[0], nameEn: GOD[f]?.[1] }) || 
 const grF = g => GR_F[g] || g || '';
 const msGr = st => st.grade ? `<small class="cu-msq ${X.gcls(st.grade)}">${esc(grF(st.grade))}${st.v ? ` +${n1(st.v)}${unit(st.id)}` : ''}</small>` : '';
 const cslot = s => CSLOT[s] || ARC[s - 41]?.[0];
-const SK_MIN = 0.2;
 const MS_TOP = 0.15;
 export const often = s => s >= 0.9 ? 'casi todos' : s >= 0.7 ? 'la mayoría' : s >= 0.55 ? 'más de la mitad' : s >= 0.4 ? 'la mitad' : s >= 0.2 ? 'algunos' : 'pocos';
 const share = (s, what = 'la usan') => `<span class="sh" role="img" aria-label="${what} ${often(s)} (${pct(s)} %)"><i style="--q:${pct(s)}%"></i></span>`;
@@ -93,10 +93,7 @@ const tile = ({ id, pic, name, lv, have, dim, sub, s, title }) => `<li class="cu
 <span class="cu-in">${esc(name)}</span>${sub ? `<small>${sub}</small>` : ''}${s != null ? share(s) : ''}</li>`;
 const MY = '<em class="cu-my">tu elección</em>';
 const card = (cls, h, body) => `<section class="cu-card ${cls}"><h4 class="cu-ch">${h}</h4>${body}</section>`;
-function topHtml(C, k, cls, cur) {
-const T = C.top?.[k], all = C.top?.all?.n;
-const myCh = cur && X.mine ? X.mine(cur, k) : new Set(), myIn = s => myCh.has('stig:' + s.id);
-const estB = key => cur && X.estBtn ? ' ' + (myCh.has(key) ? X.estBtn(key, 'no', 'Sugerime lo de los top') : X.estBtn(key, 'si', 'Es mi elección')) : '';
+function haveOf(cur) {
 const mine = {}, myV = {}, myMs = {};
 for (const [slot, it] of Object.entries(cur?.x?.items || {})) {
 const cs = cslot(+slot), m = mine[cs] ||= new Set();
@@ -108,10 +105,27 @@ if (isFinite(v)) ((myV[cs] ||= {})[id] ||= []).push(v);
 for (const l of it?.subSkills || []) m.add('sk:' + l.id);
 for (const s of it?.magicStoneStat || []) (myMs[cs] ||= []).push(String(s.id).toLowerCase());
 }
-const myEq = s => (cur?.d.equipment || []).filter(e => e.slot < 41 && CSLOT[e.slot] === s);
+return { mine, myV, myMs };
+}
+const myEqOf = (cur, s) => (cur?.d.equipment || []).filter(e => e.slot < 41 && CSLOT[e.slot] === s);
+function usesOf(cur) {
 const parts = cur?.x ? skillParts(cur.d, cur.x.items || {}, cur.x.boards || {}) : null;
 const mySk = new Map((cur?.d.skills || []).map(x => [String(x.id), x]));
-const uses = id => parts ? useful(mySk.get(String(id)), parts.get(String(id))) : null;
+return { parts, uses: id => parts ? useful(mySk.get(String(id)), parts.get(String(id))) : null };
+}
+const skWantOf = (x, uses) => (x?.skillLines || []).filter(l => l.share >= SK_MIN && uses(l.id) !== false);
+function ampHtml(t, E, cur) {
+if (!(t >= 0.5)) return '';
+const me = cur && E.length ? Math.min(...E.map(e => e.exceed || 0)) : null, tr = Math.round(t);
+const no = me != null && cur?.x && E.every(e => cur.x.items?.[e.slot] && !cur.x.items[e.slot].maxExceedEnchantLevel);
+const lab = `Amplificación: los top la llevan a +${n1(t)}${no ? '; la tuya no se amplifica' : me != null ? `; vos, +${me}` : ''}`;
+return `<span class="cu-pa" role="img" aria-label="${lab}" title="${lab}"><span class="eq-amp">${[1, 2, 3, 4, 5].map(i => `<i class="${[!no && (me ?? tr) >= i && 'on', tr >= i && 'tg'].filter(Boolean).join(' ')}"></i>`).join('')}</span><small${me != null && !no ? ` class="${me < tr ? 'low' : 'ok'}"` : ''}>${no ? 'la tuya no se amplifica; la de los top sí' : me != null ? `vos +${me} · top +${tr}` : `top +${tr}`}</small></span>`;
+}
+function topHtml(C, k, cls, cur) {
+const T = C.top?.[k], all = C.top?.all?.n;
+const myCh = cur && X.mine ? X.mine(cur, k) : new Set(), myIn = s => myCh.has('stig:' + s.id);
+const estB = key => cur && X.estBtn ? ' ' + (myCh.has(key) ? X.estBtn(key, 'no', 'Sugerime lo de los top') : X.estBtn(key, 'si', 'Es mi elección')) : '';
+const { mine, myV, myMs } = haveOf(cur), myEq = s => myEqOf(cur, s), { parts, uses } = usesOf(cur);
 const myLv = new Map((cur?.d.skills || []).map(x => [String(x.id), x.level || 0]));
 const myStig = new Set((cur?.d.skills || []).filter(x => x.category === 'Dp' && x.level > 0).map(x => String(x.id)));
 const have = cur?.x ? (s, id) => !!mine[s]?.has(id) : () => false;
@@ -141,16 +155,9 @@ const skName = l => gname({ name: l.name, nameEn: SK[l.id]?.[0] });
 const skHave = (s, l) => have(s, 'sk:' + l.id);
 const okI = '<span class="sr">La tenés: </span>';
 const skPill = (s, l) => `<li class="sk${skHave(s, l) ? ' have' : ''}" data-sk="${esc(l.id)}" title="+ nivel de ${esc(skName(l))}: la llevan ${often(l.share)} los top (${pct(l.share)} %)${skHave(s, l) ? '. Vos la tenés' : ''}">${skHave(s, l) ? ico('i-check') + okI : skIcon(l.id, 16)}${esc(skName(l))}</li>`;
-const skWant = s => (T.slots[s]?.skillLines || []).filter(l => l.share >= SK_MIN && uses(l.id) !== false);
+const skWant = s => skWantOf(T.slots[s], uses);
 const slots = [...TSLOTS, ...ARC.map(([c]) => c)].filter(s => T.slots[s]?.lines?.length || T.slots[s]?.skillLines?.length);
-const ampP = s => {
-const t = T.slots[s]?.exceed;
-if (!(t >= 0.5)) return '';
-const E = myEq(s), me = cur && E.length ? Math.min(...E.map(e => e.exceed || 0)) : null, tr = Math.round(t);
-const no = me != null && cur?.x && E.every(e => cur.x.items?.[e.slot] && !cur.x.items[e.slot].maxExceedEnchantLevel);
-const lab = `Amplificación: los top la llevan a +${n1(t)}${no ? '; la tuya no se amplifica' : me != null ? `; vos, +${me}` : ''}`;
-return `<span class="cu-pa" role="img" aria-label="${lab}" title="${lab}"><span class="eq-amp">${[1, 2, 3, 4, 5].map(i => `<i class="${[!no && (me ?? tr) >= i && 'on', tr >= i && 'tg'].filter(Boolean).join(' ')}"></i>`).join('')}</span><small${me != null && !no ? ` class="${me < tr ? 'low' : 'ok'}"` : ''}>${no ? 'la tuya no se amplifica; la de los top sí' : me != null ? `vos +${me} · top +${tr}` : `top +${tr}`}</small></span>`;
-};
+const ampP = s => ampHtml(T.slots[s]?.exceed, myEq(s), cur);
 const pvpMs = s => (myMs[s] || []).filter(isPvp).length, hyb = pvpAll(cur) >= HYB;
 const piece = s => {
 const x = T.slots[s], it = x.items?.[0], best = x.lines.filter(l => l.tier === 'Best'), en = Math.round(x.enchant || 0), a = T.arcana?.[s]?.[0];
@@ -288,33 +295,93 @@ ${gs ? card('cu-gsc', `Piedra sagrada${X.gl('gs')} <small>${cur?.x ? 'tilde = ya
 ${msTop.length ? card('cu-msc', `${gi('Icon_Usable_MagicStone_a_001', 24)}Piedras de maná <small>las que más ponen los top</small>`, msBody) : ''}
 ${skills ? card('cu-skc', `Skills que más suben${X.gl('skills')} <small>nivel de los top${cur ? ' y el tuyo' : ''}</small>`, `<ul class="cu-is cu-sk">${skills}</ul>`) : ''}
 </div>
-<h4 class="pj-h4 cu-eh">Qué buscar en cada pieza${X.gl('lineas')} <small>${cur?.x ? 'tilde = la tenés (tu valor · el de los top) · ' : ''}marcas = amplificación · ${parts ? 'líneas de skill: solo las de skills que usás' : 'una línea de skill sirve solo si usás esa skill'}</small></h4>
-<ul class="cu-eq">${slots.map(piece).join('')}</ul>
-${cur?.x ? `<details class="cu-weak"><summary>Tus líneas con más margen <small>las que buscan los top, de la que más puede subir a la que menos</small></summary><div class="cu-wk">${loading('Midiendo tus líneas…')}</div></details>` : ''}
+${cur ? '<p class="cu-togo">Tus piezas contra los top, línea por línea: <button type="button" class="linkbtn" data-tab="equipo">en Equipo</button></p>'
+: `<h4 class="pj-h4 cu-eh">Qué buscar en cada pieza${X.gl('lineas')} <small>marcas = amplificación · una línea de skill sirve solo si usás esa skill</small></h4>
+<ul class="cu-eq">${slots.map(piece).join('')}</ul>`}
 ${difHtml}
 <details class="cu-more"><summary>Todas las líneas, pieza por pieza <small>también las que usan algunos, con el promedio de los top y sus piedras de maná</small></summary><p class="cu-leg">Número = promedio de los top que la llevan${dif.size ? ' · borde punteado = cambia entre Estándar y PvP' : ''} · tachada = línea de skill que no usás (vale 0)${k === 'pvp' ? '' : ' · rojo = PvP'}</p><ul class="cu-st">${rows}</ul></details>
 </div>`;
 }
-const WK_MAX = 10;
-async function weakHtml(C, k, cur) {
-const T = C.top?.[k]?.slots || {}, its = cur.x?.items || {}, eq = (cur.d.equipment || []).filter(e => e.slot < 41 && its[e.slot]);
-const ids = [...new Set(eq.map(e => its[e.slot]).filter(it => it.subStatRandom && it.subStats?.length).map(it => String(it.id)))];
-const P = ids.length ? (await getLines(ids.join(','))).items || {} : {}, L = [];
-for (const e of eq) {
-const it = its[e.slot], cs = CSLOT[e.slot], want = new Set((T[cs]?.lines || []).filter(l => l.tier === 'Best' || l.tier === 'Good').map(l => l.id));
-for (const s of it.subStats || []) {
-const id = String(s.id).toLowerCase(), r = want.has(id) && rollOf({ id, value: s.value }, P[it.id]?.lines);
-if (r && !r.out) L.push({ e, cs, id, v: s.value, r });
-}
-}
-if (!L.length) return '<p class="pj-empty">No tenés líneas de las que buscan los top con rango conocido.</p>';
-L.sort((a, b) => a.r.q - b.r.q);
-const top = L.filter(x => x.r.q >= 0.95).length;   // al tope o casi: no se listan (no hay nada que mejorar ahí)
-L.splice(L.length - top);
-if (!L.length) return `<p class="pj-empty">Tus ${top} líneas de las que buscan los top ya salieron al tope o casi.</p>`;
-const li = x => `<li data-slot="${x.e.slot}" data-line="${esc(x.id)}">${X.img(x.e.icon, 32)}<span class="cu-wn"><b>${esc(T[x.cs]?.name || '')}</b><small>${esc(stLabel(x.id))} ${esc(fv(x.v))}</small></span><span class="qb" role="img" aria-label="Salió al ${pct(x.r.q)} % del rango (${rng(x.r)})" title="Rango en Global: ${rng(x.r)}"><i style="--q:${pct(x.r.q)}%"></i></span><small class="q-p">${pct(x.r.q)} %</small></li>`;
-const more = L.length - WK_MAX;
-return `<ol class="cu-wl">${L.slice(0, WK_MAX).map(li).join('')}</ol>${more > 0 || top ? `<p class="cu-gsn">${more > 0 ? `Y ${more} más, del ${pct(L[WK_MAX].r.q)} % para arriba. ` : ''}${top ? `${top} ya ${top > 1 ? 'salieron' : 'salió'} al tope o casi.` : ''}</p>` : ''}<p class="cu-gsn">100 % = salió al tope de lo que puede dar esa pieza.</p>`;
+/* ---------- Equipo: tus piezas con tus líneas contra los top de tu build (gearView, en personaje-calc.js) ---------- */
+const PL = new Map();                          // rangos ya traídos (ids → items): repintar sin esperar
+let ONLY = false;                              // "Solo lo que falta": no se guarda
+const OPEN = new Set();                        // celu: tarjetas desplegadas (sobreviven al repintado de "Es mi elección")
+let LAST = null;                               // de qué personaje son ONLY y OPEN: otro personaje empieza de cero
+const narrow = () => matchMedia('(max-width:640px)').matches;
+const qbar = r => r ? `<span class="qb" role="img" aria-label="Salió al ${pct(r.q)} % del rango (${rng(r)})" title="Rango en Global: ${rng(r)}"><i style="--q:${r.q >= 0.95 ? 100 : pct(r.q)}%"></i></span>` : '<span class="qb-na" aria-hidden="true"></span>';   // rango desconocido: el lugar, sin barra (vacía diría "salió bajo")
+const fewTop = s => s >= 0.25 ? often(s) : s >= 0.1 ? 'algunos' : null;   // "A veces" (10–25 %): sin marca propia, "algunos" en el title
+const gLine = (p, l) => {
+const key = `ln:${p.cs}:${l.id}`, f = l.share != null && fewTop(l.share), c = p.counted;
+const mk = !c || l.st === 'few' ? '<i class="gv-mk" aria-hidden="true"></i>' : l.st === 'ok' ? `<i class="gv-mk ok" aria-hidden="true">${ico('i-check')}</i><span class="sr">La buscan los top: </span>` : l.st === 'mine' ? '<i class="gv-mk my" aria-hidden="true">★</i>' : '<i class="gv-mk" aria-hidden="true">•</i>';
+const tt = !c ? '' : l.st === 'ok' ? `La buscan ${often(l.share)} los top en esta pieza (${pct(l.share)} %)` : l.st === 'mine' ? 'Tu elección: no te sugerimos cambiarla' : l.st === 'few' ? `La llevan ${l.k} de ${l.n} top: con tan pocos, no cuenta` : f ? `La llevan ${f} de los top en esta pieza (${pct(l.share)} %)` : 'Los top no la buscan en esta pieza';
+const eb = (v, i, t) => X.estBtn(key, v, `<i aria-hidden="true">${i}</i><span class="t">${t}</span>`, '', t);
+const b = c && l.st !== 'ok' && l.st !== 'few' && X.estBtn ? (l.st === 'mine' ? eb('no', '↺', 'Sugerime lo de los top') : eb('si', '☆', 'Es mi elección')) : '';
+return `<li class="gv-ln ${c ? l.st : 'nc'}" data-line="${esc(l.id)}"${tt ? ` title="${esc(tt)}"` : ''}>${mk}<span class="gv-nm">${esc(stLabel(l.id))}${l.st === 'mine' ? ' ' + MY : ''}</span><b>${esc(fv(l.value))}</b>${qbar(l.r)}${b}</li>`;
+};
+const skNm = l => gname({ name: l.name, nameEn: SK[l.id]?.[0] });
+const gSk = l => `<li class="gv-ln gsk ${l.st}" data-sk="${esc(l.id)}">${l.st === 'dead' ? '<i class="gv-mk x" aria-hidden="true">✕</i>' : `<i class="gv-mk">${skIcon(l.id, 16)}</i>`}<span class="gv-nm">${esc(skNm(l))} +${+l.level || 0}</span>${l.st === 'dead' ? '<small>no la usás: vale 0</small>' : ''}</li>`;
+const gMiss = p => [...p.miss.map(l => `<li data-id="${esc(l.id)}" title="La buscan ${often(l.share)} los top en esta pieza (${pct(l.share)} %)"><i aria-hidden="true">＋</i><span class="sr">Te falta: </span>${esc(l.name)}</li>`),
+...p.skMiss.map(l => `<li class="gsk" data-sk="${esc(l.id)}" title="+ nivel de ${esc(skNm(l))}: la llevan ${often(l.share)} los top (${pct(l.share)} %)"><i aria-hidden="true">＋</i><span class="sr">Te falta: </span>${skIcon(l.id, 16)}${esc(skNm(l))}</li>`)].join('');
+export function gear(el, cur, kind) {
+if (LAST !== cur.ref.k) { OPEN.clear(); ONLY = false; LAST = cur.ref.k; }
+const C = X.curated(cur), T = C?.top?.[kind], S = T?.slots, its = cur.x.items || {}, eq = cur.d.equipment || [], by = new Map(eq.map(e => [e.slot, e]));
+const ids = [...new Set(Object.values(its).filter(it => it?.subStatRandom && it.subStats?.length).map(it => String(it.id)))].sort().join(',');
+const myCh = X.mine(cur, kind), G = gearView(cur.d, its, cur.x.boards || {}, T, PL.get(ids) || {}, myCh), gp = new Map(G.pieces.map(p => [p.slot, p]));
+const LB = new Map(X.SLOTS.flatMap(g => g[1])), hyb = pvpAll(cur) >= HYB, KN = KIND_ES[kind], wk = /^\d{4}-\d\d-\d\d/.test(C?.v || '') ? `semana del ${C.v.slice(8, 10)}/${C.v.slice(5, 7)}` : '';
+const nm = p => !p?.counted ? '' : p.of ? `${p.ok}/${p.of}` : p.lines.length ? '★' : '–', full = p => !!(p?.counted && p.of && p.ok === p.of), hasMiss = p => !!p?.miss.length;
+const nmL = p => !p?.counted ? 'sin cuenta' : p.of ? `${p.ok} de ${p.of}` : p.lines.length ? 'a tu gusto' : 'sin líneas';
+const fam = s => (its[s]?.godStoneStat || []).map(g => godFam(g.icon)).filter(Boolean), dupG = fam(1)[0] && fam(1)[0] === fam(2)[0];
+const warn = (e, it, p) => {
+const W = [], pv = kind === 'pvp' || myCh.has('ms') ? 0 : (it.magicStoneStat || []).filter(m => isPvp(m.id)).length, x = S?.[p.cs], tIt = x?.items?.[0];
+if ((it.magicStoneSlotCount || 0) > (it.magicStoneStat || []).length) W.push('<p class="gv-w bad">Ranura de piedra de maná vacía</p>');
+if ((it.godStoneSlotCount || 0) > (it.godStoneStat || []).length) W.push('<p class="gv-w bad">Ranura de piedra sagrada vacía</p>');
+if (e.slot === 2 && dupG) W.push('<p class="gv-w bad">La misma piedra sagrada que el arma: aplica una sola</p>');
+if (pv) W.push(`<p class="gv-w pvp${hyb ? ' hyb' : ''}" title="Solo suman contra jugadores${hyb ? `; ${HYB_T}` : ''}">${pv} piedra${pv > 1 ? 's' : ''} PvP${X.estBtn ? X.estBtn('ms', 'si', 'Es mi elección') : ''}</p>`);
+if (p.fixed) W.push(`<p class="gv-w fx">Líneas fijas: lo que cambia es la pieza.${tIt && ![tIt.id, ...(tIt.ids || [])].map(String).includes(String(it.id ?? e.id)) ? ` Los top ${KN} llevan <b>${esc(gname(tIt))}</b> (${often(tIt.share)}).` : ''}</p>`);
+return W.join('');
+};
+const amp = (e, it, x) => !it?.maxExceedEnchantLevel ? '' : x?.exceed >= 0.5 ? ampHtml(x.exceed, [e], cur)
+: `<span class="eq-amp" aria-label="Amplificación +${e.exceed || 0} de ${it.maxExceedEnchantLevel}">${Array.from({ length: it.maxExceedEnchantLevel }, (_, i) => `<i${i < (e.exceed || 0) ? ' class="on"' : ''}></i>`).join('')}</span>`;
+const card = ([s, lb]) => {
+const e = by.get(s), it = its[s], p = gp.get(s);
+if (!e) { const w = s < 41 ? gvWant(S?.[CSLOT[s]], G.thin).slice(0, 3) : [];
+return `<li class="gv-p empty${w.length ? ' miss' : ''}"><span class="eq-i"></span><span class="eq-t"><small>${esc(lb)}</small><span class="eq-n">Vacío</span></span>${w.length ? `<ul class="gv-m" aria-label="Lo que llevan los top acá">${gMiss({ miss: w, skMiss: [] })}</ul>` : ''}</li>`; }
+const o = OPEN.has(s), lv = it?.level ? ` · nivel ${it.level}` : '';
+return `<li class="gv-p ${X.gcls(e.grade)}${hasMiss(p) ? ' miss' : ''}${o ? ' open' : ''}" data-slot="${s}" id="gv-${s}" tabindex="-1">
+<button type="button" class="gv-ph"${narrow() ? ` aria-expanded="${o}"` : ' aria-haspopup="dialog"'}><span class="eq-i">${X.img(e.icon, 44)}${e.enchant ? `<b class="eq-en">+${e.enchant}</b>` : ''}</span>
+<span class="eq-t"><small>${esc(lb)}${lv}</small><span class="eq-n">${esc(gname(e))}</span></span><b class="gv-n${full(p) ? ' full' : ''}" aria-label="${nmL(p)}">${nm(p)}</b></button>
+<span class="gv-a">${amp(e, it, S?.[p?.cs])}</span>
+${p ? `<ul class="gv-l">${p.lines.map(l => gLine(p, l)).join('')}${p.sk.map(gSk).join('')}</ul>${warn(e, it, p)}<ul class="gv-m">${gMiss(p)}</ul>` : ''}
+<button type="button" class="linkbtn gv-more" data-slot="${s}">Más detalle</button></li>`;
+};
+const steps = (X.eqSteps?.(cur, kind) || []).slice(0, 3).map(s => `<button type="button" class="linkbtn" data-gostep="${esc(s.id)}">${esc(s.title)}</button>`);
+const fill = G.pieces.filter(p => p.counted && p.miss.length).sort((a, b) => b.miss.length - a.miss.length || a.ok / a.of - b.ok / b.of).slice(0, 3 - steps.length)
+.map(p => `<button type="button" class="linkbtn" data-gv="${p.slot}">${esc(LB.get(p.slot))}: ${p.ok} de ${p.of}</button>`);
+const go = [...steps, ...fill].map((b, i) => `<li><i aria-hidden="true">${'①②③'[i]}</i>${b}</li>`).join('');
+const strip = X.SLOTS.flatMap(g => g[1]).filter(([s]) => s < 41 && by.has(s)).map(([s, lb]) => { const p = gp.get(s);
+return `<li><button type="button" class="gv-si${hasMiss(p) ? ' miss' : ''}${full(p) ? ' full' : ''}" data-gv="${s}" aria-label="${esc(lb)}: ${nmL(p)}">${X.img(by.get(s).icon, 40)}<small>${nm(p) || '–'}</small></button></li>`; }).join('');
+const why = String(C?.reasons?.top?.[kind] || `muestra chica (${T?.n || 0})`).replace(NOBRAND, '');
+const count = G.ok != null ? `<b>${G.ok} de ${G.of}</b> líneas como las de los top` : C ? `Sin datos de los top ${KN}` : 'Sin los top de esta semana';
+const g = C && kindGuess(cur.d, its, C.method?.kindSets).kind, pre = g && g !== kind && kind !== 'support' ? `<p class="cu-warn" role="note">Lo que tenés puesto parece ${KIND_ES[g]}: la ficha muestra solo el equipo puesto, así que la cuenta contra ${KN} puede salir baja.</p>` : '';
+el.innerHTML = `<section class="pj-sec gv${ONLY ? ' only' : ''}" aria-labelledby="eq-h"><div class="gv-sum">
+<div class="gv-hd"><h3 id="eq-h" class="pj-h">Equipo <small class="gv-c"${G.ok != null ? ' title="Una cuenta, no una meta: los top tampoco llevan todas"' : ''}>${count}</small></h3>${G.ok != null ? `<small class="gv-src">${KN} · ${T.n} top${wk ? ` · ${wk}` : ''} · estimado, cambia cada semana</small>` : ''}</div>
+<ol class="gv-strip" aria-label="Tus piezas: líneas como las de los top">${strip}</ol>
+<div class="gv-go">${go ? `<span>Lo que más rinde ahora:</span><ol>${go}</ol>` : ''}</div>${X.gvKr(ONLY)}</div>
+${G.thin ? `<p class="cu-warn gv-thin" role="note"><b>Pista: solo ${T.n} top ${KN}.</b> Cuentan solo las líneas que llevan casi todos.</p>` : ''}${G.none ? whyP(C ? `Sin datos de los top ${KN}: ${why}. Sin ✓ ni ＋; la barra de calidad sigue.` : 'No pude traer lo que usan los top. La barra de calidad sigue.') : ''}${pre}
+${X.SLOTS.map(([t, l]) => `<h4 class="pj-h4">${t}</h4><ul class="gv-g">${l.map(card).join('')}</ul>`).join('')}${X.petHtml?.() || ''}</section>`;
+el._gv = cur;
+el.onchange = e => { if (e.target.closest('.gv-only')) { ONLY = e.target.checked; $('.gv', el)?.classList.toggle('only', ONLY); } };
+el.onclick = e => {
+const j = e.target.closest('[data-gv]'), c0 = e.target.closest('.gv-p[data-slot]');
+if (j) { const c = $(`#gv-${j.dataset.gv}`, el); if (!c) return; if (!c.offsetParent) { ONLY = false; $('.gv', el).classList.remove('only'); $('.gv-only input', el).checked = false; }
+c.scrollIntoView({ block: 'center' }); c.focus({ preventScroll: true }); return; }
+if (c0 && narrow() && !e.target.closest('.gv-more, [data-est]')) { e.stopPropagation(); const o = c0.classList.toggle('open'); $('.gv-ph', c0)?.setAttribute('aria-expanded', String(o)); o ? OPEN.add(+c0.dataset.slot) : OPEN.delete(+c0.dataset.slot); }
+};
+if (ids && !PL.has(ids)) getLines(ids).then(r => {
+PL.set(ids, r.items || {});
+if (el._gv !== cur || !$('.gv', el)) return;
+for (const p of gearView(cur.d, its, cur.x.boards || {}, T, PL.get(ids), myCh).pieces) for (const l of p.lines) { const q = l.r && el.querySelector(`#gv-${p.slot} [data-line="${l.id}"] .qb-na`); if (q) q.outerHTML = qbar(l.r); }
+}, () => { const h = el._gv === cur && $('.gv .gv-hon span', el); if (h) h.textContent = 'qué tan alto salió: sin rango esta vez'; });
 }
 function recB(r) {
 if (!BUILD_OK.test(r.url || '')) return null;
@@ -396,13 +463,6 @@ announce(`${list.length} builds`);
 outEl.setAttribute('aria-busy', 'false');
 }
 more.addEventListener('toggle', () => { if (more.open) load(); });
-if (el._wk) el.removeEventListener('toggle', el._wk, true);
-el.addEventListener('toggle', el._wk = e => {
-const d = e.target;
-if (!d.classList?.contains('cu-weak') || !d.open || d.dataset.done || !C || !cur) return;
-d.dataset.done = '1';
-weakHtml(C, K, cur).then(h => { $('.cu-wk', d).innerHTML = h; }, () => { $('.cu-wk', d).innerHTML = '<p class="tip-err">No pude medir tus líneas. Cerralo y abrilo de nuevo en un rato.</p>'; delete d.dataset.done; });
-}, true);
 el.onchange = e => { if (e.target.id === 'bl-cls') { cls = e.target.value; loadCur(); } };
 el.onclick = e => {
 const k = e.target.closest('[data-ck]');
@@ -448,15 +508,6 @@ ${sk.length ? SKCAT.map(([c, t]) => { const l = sk.filter(s => s.cat === c).sort
 ${d.daevanion ? `<ul class="bd-ar">${Object.entries(d.daevanion.boards).map(([id, l]) => `<li><b>${DAE[(+id % 10) - 1] || `Tablero ${esc(id)}`}</b><small>${+l.length || 0} nodos</small></li>`).join('')}</ul>` : '<p class="pj-empty">Esta build no trae Daevanion.</p>'}`;
 }
 /* ---------- detalle de una pieza: calidad de cada línea y si la usan los top de tu build ---------- */
-export function rollOf(line, pool) {
-const r = (pool || []).find(p => p[0] === line.id);
-const v = parseFloat(String(line.value ?? '').replace(',', '.'));
-if (!r || !isFinite(v)) return null;
-const [, min, max] = r, dist = x => x < min ? min - x : x > max ? x - max : 0;
-const s = dist(v * 100) < dist(v) ? 100 : 1, x = v * s;
-const out = dist(x) > Math.max(6, 0.15 * (max - min));
-return { q: max > min ? Math.max(0, Math.min(1, (x - min) / (max - min))) : 1, min, max, s, out, pctv: /%/.test(String(line.value)) };
-}
 const rng = r => { const f = v => r.s === 100 ? num(r.pctv ? v / 100 : Math.round(v / 100)) : num(v); return `${f(r.min)}–${f(r.max)}${r.pctv ? ' %' : ''}`; };
 export async function itemBody(it, e, cur, kind) {
 const skills = new Map((cur.d.skills || []).map(s => [String(s.id), s])), parts = skillParts(cur.d, cur.x?.items || {}, cur.x?.boards || {}), use = id => useful(skills.get(String(id)), parts.get(String(id)));
@@ -477,7 +528,6 @@ ${r && !r.out ? `<span class="qb" role="img" aria-label="Salió al ${pct(r.q)} %
 const topSk = new Map((T?.skillLines || []).map(l => [String(l.id), l]));
 const topTag = t => t && t.share >= 0.25 ? ` <em class="tag gold" title="La llevan ${often(t.share)} los top ${KIND_ES[kind]} en esta pieza">top</em>` : '';
 const sk = (it.subSkills || []).map(s => li(`${s.name} +${s.level}`, use(s.id) ? 'la usás' : '<span class="bad">no la usás</span>', topTag(topSk.get(String(s.id))))).join('');
-const skWant = [...topSk.values()].filter(l => l.share >= SK_MIN && use(l.id) && !(it.subSkills || []).some(s => String(s.id) === String(l.id))).slice(0, 3);
 const GT = C?.top?.[kind]?.theostones?.list || [], gTop = new Map(GT.map(x => [x.f, x])), gMine = new Set((it.godStoneStat || []).map(g => godFam(g.icon)));
 const gEmpty = (it.godStoneSlotCount || 0) > (it.godStoneStat || []).length, gWant = it.godStoneSlotCount ? GT.filter(x => !gMine.has(x.f)).slice(0, 3) : [];
 const msTop = new Map((T?.stones || []).map(x => [x.id, x]));
@@ -491,16 +541,13 @@ const v = parseFloat(String(s.value ?? '').replace(/[^\d.,-]/g, '').replace(',',
 return `<em class="tag gold" title="${esc(tt)}">${t.grade ? `top: ${esc(grF(t.grade))}${t.v ? ` +${n1(t.v)}${unit(id)}` : ''}` : 'tipo top'}</em>${low ? `<em class="tag ms-low">la tuya: ${esc(grF(s.grade))}</em>` : ''}`;
 };
 const fixed = it.subStatRandom === false && (it.subStats || []).length, tIt = T?.items?.[0];
-const want = T && !fixed ? T.lines.filter(l => (l.tier === 'Best' || l.tier === 'Good') && !(it.subStats || []).some(s => String(s.id).toLowerCase() === l.id)).slice(0, 3) : [];
 return `<p class="tip-m">${[it.categoryName === 'Pulsera' ? 'Brazalete' : it.categoryName, it.level && `nivel ${it.level}`, it.maxEnchantLevel && `encantamiento +${it.enchantLevel ?? e.enchant ?? 0} de ${it.maxEnchantLevel}`, it.maxExceedEnchantLevel && `amplificación +${e.exceed || 0} de ${it.maxExceedEnchantLevel}${T?.exceed >= 0.5 ? ` (los top +${n1(T.exceed)})` : ''}`].filter(Boolean).map(esc).join(' · ')}</p>
 ${main ? `<h4>Stats</h4><ul>${main}</ul>` : ''}
 ${lines ? `<h4>Líneas <small>barra = qué tan alto salió</small></h4><ul class="tip-ln">${lines}</ul>` : ''}
 ${maxed.length ? `<p class="tip-want tip-max">${esc(maxed.length > 1 ? maxed.slice(0, -1).join(', ') + ' y ' + maxed.at(-1) : maxed[0])}: ya ${maxed.length > 1 ? 'salieron' : 'salió'} al tope de esta pieza. El promedio de los top es más alto porque llevan piezas de más nivel.</p>` : ''}
 ${fixed ? `<p class="tip-want">Líneas fijas: lo que cambia es la pieza.${tIt && ![tIt.id, ...(tIt.ids || [])].map(String).includes(String(it.id ?? e.id)) ? ` Los top ${KIND_ES[kind]} llevan <b>${esc(gname(tIt))}</b> (${often(tIt.share)}).` : ''}</p>` : ''}
-${want.length ? `<p class="tip-want">Los top ${KIND_ES[kind]} buscan acá: ${want.map(l => `<b>${esc(l.name)}</b> (${often(l.share)})`).join(', ')}.</p>` : ''}
 ${(it.surpassStats || []).length ? `<h4>Breakthrough <small>solo contra jugadores</small></h4><ul class="tip-bt">${it.surpassStats.map(s => li(stN(s), esc(fv(s.value)))).join('')}</ul>` : ''}
 ${sk ? `<h4>Líneas de skill</h4><ul>${sk}</ul>` : ''}
-${skWant.length ? `<p class="tip-want">Líneas de skill que llevan los top ${KIND_ES[kind]} acá, de skills que usás: ${skWant.map(l => `<b>${esc(gname({ name: l.name, nameEn: SK[l.id]?.[0] }))}</b> (${often(l.share)})`).join(', ')}.</p>` : ''}
 ${(it.magicStoneStat || []).length ? `<h4>Piedras de maná</h4><ul class="tip-ms">${it.magicStoneStat.map(s => li(stN(s), esc(s.value), msTag(s))).join('')}</ul>` : ''}
 ${msPv && msHyb ? `<p class="tip-want tip-hyb">Piedras PvP: solo suman contra jugadores; ${HYB_T}.</p>` : ''}
 ${it.magicStoneSlotCount && msTop.size ? `<p class="tip-want">Piedras que más ponen los top ${KIND_ES[kind]} acá, de cada 100 ranuras: ${[...msTop.values()].slice(0, 3).map(x => `<b>${esc(x.name)}</b> (${pct(x.share)})`).join(', ')}.</p>` : ''}

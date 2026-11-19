@@ -1,13 +1,13 @@
 import {
 $, esc, ico, on, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal, evPic,
 characters, taskList, taskDone, setTaskDone, taskProgress, PJ, TK, profile, serverName, registerKey, confOf, confTag, clockLeft, gname, gclass, HOUR,
-setTimers, bellButton, ROOT, MIN, OD, odyle,
+setTimers, bellButton, ROOT, MIN, OD, odyle, DATA, dm,
 } from './core.js';
 const odBell = ch => 'odyle:' + ch;
 function pubOdyle(now) {
-const t = taskList().find(x => x.meter), { list } = characters(), D = OD.get().c, many = list.length > 1, out = [];
-for (const c of t ? list : []) {
-const s = D[c.id], o = s && odyle(t.meter, s, now);
+const { list } = characters(), D = OD.get().c, many = list.length > 1, out = [];
+for (const c of list) {   // oculta para un personaje (hidePj): ese no avisa
+const t = taskList(c.id).find(x => x.meter), s = t && D[c.id], o = s && odyle(t.meter, s, now);
 if (!o?.full) continue;                          // sin anotar o ya llena: nada que avisar
 const pj = many ? ` · ${c.name}` : '';
 out.push({ id: odBell(c.id), label: t.name + pj, labelEn: (t.nameEn || t.name) + pj, start: o.full, end: o.full + 30 * MIN, bell: true,
@@ -31,7 +31,7 @@ document.body.classList.toggle('tk-editing', editing);
 if (focusId) document.getElementById(focusId)?.focus();
 }
 function paintGroup(per, ch, now) {
-const g = $('#g-' + per), items = taskList().filter(t => t.period === per), done = taskDone(ch, per, now);
+const g = $('#g-' + per), items = taskList(ch).filter(t => t.period === per), done = taskDone(ch, per, now);
 const req = items.filter(t => !t.optional), n = req.filter(t => (done[t.id] || 0) >= (t.count || 1)).length;
 const met = items.filter(t => t.meter), opt = items.filter(t => t.optional && !t.meter);
 const pct = req.length ? Math.round(n / req.length * 100) : 0, rs = nextReset(per, now);
@@ -55,7 +55,8 @@ if (el && o) { const cl = clockLeft(o.start); el.classList.toggle('pronto', o.st
 }
 }
 const lvOf = t => t.custom ? 'oficial' : t.unverified?.length ? 'sin' : confOf(t);
-const pie = () => `${taskList().some(t => lvOf(t) === 'sin') ? '<span><i class="cfl c-sin"></i>sin confirmar: tocá el punto</span>' : ''}<span>Cantidades y horarios: datos del juego.</span>`;
+const old = DATA.rev?.tareas?.client < DATA.rev?.tareas?.patch && DATA.rev.tareas;
+const pie = () => `${taskList().some(t => lvOf(t) === 'sin') ? '<span><i class="cfl c-sin"></i>sin confirmar: tocá el punto</span>' : ''}<span>Cantidades y horarios: datos del juego${old ? ` al ${dm(old.client)}, antes del parche del ${dm(old.patch)}` : ''}.</span>`;
 const nowrapEnd = (txt, tail) => { const s = String(txt || ''), i = s.lastIndexOf(' '); return tail ? `${esc(s.slice(0, i + 1))}<span class="nw">${esc(s.slice(i + 1))}${tail}</span>` : esc(s); };
 function row(t, per, done) {
 const v = done[t.id] || 0, max = t.count || 1, ok = v >= max, id = `t-${esc(t.id)}`;
@@ -123,12 +124,15 @@ toast(`Sumé <b>${esc(name)}</b> a las ${f.dataset.per === 'daily' ? 'diarias' :
 $(`#g-${f.dataset.per} .tk-add input`)?.focus();
 });
 function removeTask(id) {
-const t = TK.get(), item = taskList().find(x => x.id === id);
-const before = structuredClone(t);
-if (item.custom) t.custom = t.custom.filter(x => x.id !== id); else t.hidden = [...t.hidden, id];
-TK.set(t);
+const t = TK.get(), item = taskList().find(x => x.id === id), ch = active(), many = PJ.get().list.length > 1, nm = esc(gname(item));
+const before = structuredClone(t), undo = { label: 'Deshacer', run: () => { TK.set(before); paint(); } };
+const all = o => { if (item.custom) o.custom = o.custom.filter(x => x.id !== id); else o.hidden = [...o.hidden, id]; return o; };
+const allMsg = `${item.custom ? 'Borré' : 'Oculté'} <b>${nm}</b>${many ? ' en todos tus personajes' : ''}.`;
+TK.set(many ? { ...t, hidePj: { ...t.hidePj, [ch]: [...(t.hidePj[ch] || []), id] } } : all(t));
 paint();
-toast(`${item.custom ? 'Borré' : 'Oculté'} <b>${esc(gname(item))}</b>.`, { action: { label: 'Deshacer', run: () => { TK.set(before); paint(); } } });
+if (!many) { toast(allMsg, { action: undo }); return; }
+const who = characters().list.find(c => c.id === ch)?.name || '';
+toast(`Oculté <b>${nm}</b> para <b>${esc(who)}</b>.`, { ms: 8000, action: [undo, { label: 'En todos', run: () => { TK.set(all(structuredClone(before))); paint(); toast(allMsg, { action: undo }); } }] });
 }
 $('#pj-tabs').addEventListener('click', e => {
 const del = e.target.closest('[data-pjdel]');
@@ -184,6 +188,7 @@ if (p.activo === id) p.activo = p.list[0]?.id || null;
 PJ.set(p);
 const t = TK.get();
 delete t.done[id];
+delete t.hidePj[id];
 TK.set(t);
 const o = OD.get();
 if (o.c[id]) { delete o.c[id]; OD.set(o); }

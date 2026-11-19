@@ -156,7 +156,7 @@ TIP.style.top = (r.top - h - 8 < 8 ? r.bottom + 8 : r.top - h - 8) + 'px';
 }
 function hideTip() { if (tipFor) { tipFor = null; TIP.hidePopover(); } }
 let dpB = null, dpBox = null, zona = null;
-const dli = (it, id, ch, px) => `<li class="${qcls(it.grade)}${teSirve(id) ? ' is-want' : ''}" data-id="${id}">${icImg(it, px)}<span class="jf-dn"><b>${esc(gname(it))}</b><small>${esc(gradeTxt(it.grade))}</small></span><span class="jf-dc">${ch == null ? '' : pct(ch)}</span></li>`;
+const dli = (it, id, ch, px, one) => `<li class="${qcls(it.grade)}${teSirve(id) ? ' is-want' : ''}" data-id="${id}">${icImg(it, px)}<span class="jf-dn"><b>${esc(gname(it))}</b><small>${esc(gradeTxt(it.grade))}</small></span><span class="jf-dc">${ch == null ? '' : (one ? '≈ ' : '') + pct(ch)}</span></li>`;
 function dropsHtml(b) {
 const x = dropsOf(b), own = x.d.filter(d => !d[2]);
 const sec = (h, L, cls = '') => L.length ? `<section class="jf-ds${cls}"><h3>${h}</h3><ul class="jf-dl">${L.map(([id, ch]) => dli(IT[id], id, ch, 36)).join('')}</ul></section>` : '';
@@ -175,7 +175,9 @@ try {
 const z = await loadZona();
 if (dpB !== b) return;
 box.dataset.done = '1';
-box.innerHTML = `<ul class="jf-dl">${(z.tables[dropsOf(b).z] || []).map(([id, ch]) => dli(z.items[id], id, ch, 28)).join('')}</ul>`;
+const rows = z.tables[dropsOf(b).z] || [], ch = rows.filter(r => r[1] != null), one = ch.filter(r => !r[2]).length, few = one * 2 <= ch.length;
+box.innerHTML = (!one ? '' : `<p class="jf-zw">${few ? '≈ una sola fuente' : `Chances aproximadas: ${one === ch.length ? 'de' : 'casi todas de'} una sola fuente`}</p>`)
++ `<ul class="jf-dl">${rows.map(([id, c, two]) => dli(z.items[id], id, c, 28, few && !two)).join('')}</ul>`;
 } catch { box.innerHTML = '<p class="jf-zw">No se pudo cargar. Probá de nuevo con conexión.</p>'; }
 }
 function paintDrops() {
