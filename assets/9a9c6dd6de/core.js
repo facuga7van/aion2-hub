@@ -1124,8 +1124,8 @@ const list = p.list.length ? p.list : [{ id: 'main', name: 'Mi personaje' }];
 return { list, activo: list.some(c => c.id === p.activo) ? p.activo : list[0].id };
 }
 export function taskList(charId = characters().activo) {
-const t = TK.get(), hid = new Set([...t.hidden, ...(t.hidePj[charId] || [])]);
-return [...TASKS.items, ...t.custom.map(c => ({ ...c, custom: true }))].filter(x => !hid.has(x.id));
+const t = TK.get(), hid = new Set([...t.hidden, ...(t.hidePj[charId] || [])]), add = new Set(t.addPj?.[charId]);
+return [...TASKS.items, ...TASKS.extras.filter(x => add.has(x.id)).map(x => ({ ...x, extra: true })), ...t.custom.map(c => ({ ...c, custom: true }))].filter(x => !hid.has(x.id));
 }
 export function taskDone(charId, period, now = Date.now()) {
 const g = TK.get().done[charId]?.[period];

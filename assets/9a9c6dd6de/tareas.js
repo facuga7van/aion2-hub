@@ -38,7 +38,7 @@ const pct = req.length ? Math.round(n / req.length * 100) : 0, rs = nextReset(pe
 setHtml(g, `<div class="tk-h"><h2 id="h-${per}">${PER[per].t}</h2><span class="tk-n"><b>${n}</b>/${req.length}</span>
 <span class="tk-r">se limpian en <span class="cd" id="rs-${per}"></span> <small>${fmtClock(rs, { now })}</small></span></div>
 <div class="bar" role="progressbar" aria-label="${PER[per].t} hechas" aria-valuemin="0" aria-valuemax="${req.length}" aria-valuenow="${n}"><i style="--w:${pct}%"></i></div>
-<ul class="tk-list">${req.map(t => row(t, per, done)).join('')}${met.map(t => meterRow(t, ch)).join('')}${opt.length ? `<li class="tk-sep">Si te sobra tiempo</li>${opt.map(t => row(t, per, done)).join('')}` : ''}${items.length ? '' : '<li class="tk-empty">Sin tareas. Sumá una con el lápiz.</li>'}</ul>${hiddenList(per, ch)}
+<ul class="tk-list">${req.map(t => row(t, per, done)).join('')}${met.map(t => meterRow(t, ch)).join('')}${opt.length ? `<li class="tk-sep">Si te sobra tiempo</li>${opt.map(t => row(t, per, done)).join('')}` : ''}${items.length ? '' : '<li class="tk-empty">Sin tareas. Sumá una con el lápiz.</li>'}</ul>${hiddenList(per, ch)}${juegoList(per, items)}
 <form class="tk-add" data-per="${per}"><input type="text" name="n" maxlength="60" placeholder="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" aria-label="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" required><button class="btn">${ico('i-plus')}Agregar</button></form>`);
 bind($('#rs-' + per), n2 => [fmtLeft(rs - n2), n2 + leftNext(rs - n2)]);
 for (const t of met) {   // estimado y "se llena en": cambian solos con el reloj (bind), el HTML no
@@ -58,6 +58,16 @@ function hiddenList(per, ch) {
 const T = TK.get(), mine = T.hidePj[ch] || [], { list } = characters(), many = list.length > 1, who = list.find(c => c.id === ch)?.name || '';
 const H = [...TASKS.items, ...T.custom].filter(t => t.period === per && (T.hidden.includes(t.id) || mine.includes(t.id)));
 return H.length ? `<div class="tk-hid"><p class="tk-sep">Ocultas (${H.length})</p><ul>${H.map(t => `<li><span>${esc(gname(t))}${many ? ` <small>${T.hidden.includes(t.id) ? 'en todos' : 'solo en ' + esc(who)}</small>` : ''}</span><button type="button" class="btn ghost" data-show="${esc(t.id)}" aria-label="Mostrar ${esc(gname(t))}">Mostrar</button></li>`).join('')}</ul></div>` : '';
+}
+function juegoList(per, items) {
+const X = TASKS.extras.filter(t => t.period === per && !items.some(x => x.id === t.id));
+return X.length ? `<div class="tk-jg"><p class="tk-sep">Del juego</p><ul>${X.map(t => `<li data-jg="${esc(t.id)}"><span>${esc(gname(t))}<small title="Fuente: ${esc(t.source)}">${esc(gname(t, 'detail'))}</small></span><button type="button" class="btn ghost" data-addx="${esc(t.id)}" aria-label="Sumar ${esc(gname(t))}">Sumar</button></li>`).join('')}</ul></div>` : '';
+}
+function addExtra(id) {
+const t = TK.get(), ch = active();
+TK.set({ ...t, addPj: { ...t.addPj, [ch]: [...(t.addPj?.[ch] || []), id] } });
+paint();
+document.getElementById('t-' + id)?.focus();
 }
 function showTask(id) {
 const t = TK.get(), ch = active(), hp = { ...t.hidePj, [ch]: (t.hidePj[ch] || []).filter(x => x !== id) };
@@ -115,6 +125,8 @@ if (!c) return;
 set(c.closest('[data-per]').dataset.per, c.dataset.chk, c.checked ? 1 : 0);
 });
 $('#tk-cols').addEventListener('click', e => {
+const ax = e.target.closest('[data-addx]');
+if (ax) { addExtra(ax.dataset.addx); return; }
 const sh = e.target.closest('[data-show]');
 if (sh) { showTask(sh.dataset.show); return; }
 const b = e.target.closest('[data-inc],[data-dec],[data-del],[data-od]');
@@ -141,6 +153,15 @@ function removeTask(id) {
 const t = TK.get(), item = taskList().find(x => x.id === id), ch = active(), many = PJ.get().list.length > 1, nm = esc(gname(item));
 const before = structuredClone(t), undo = { label: 'Deshacer', run: () => { TK.set(before); paint(); } };
 const all = o => { if (item.custom) o.custom = o.custom.filter(x => x.id !== id); else o.hidden = [...o.hidden, id]; return o; };
+if (item.extra) {   // "Del juego": sale de addPj de este personaje (vuelve a "Del juego"), sin claves vacías
+const ap = { ...t.addPj, [ch]: t.addPj[ch].filter(x => x !== id) }, o = { ...t, addPj: ap };
+if (!ap[ch].length) delete ap[ch];
+if (!Object.keys(ap).length) delete o.addPj;
+TK.set(o);
+paint();
+toast(`Quité <b>${nm}</b>.`, { action: undo });
+return;
+}
 const allMsg = `${item.custom ? 'Borré' : 'Oculté'} <b>${nm}</b>${many ? ' en todos tus personajes' : ''}.`;
 TK.set(many ? { ...t, hidePj: { ...t.hidePj, [ch]: [...(t.hidePj[ch] || []), id] } } : all(t));
 paint();
@@ -171,7 +192,9 @@ added.push(n);
 if (!added.length) return added;
 if (wasEmpty) {                                   // lo marcado en "Mi personaje" pasa al primero que sumás
 const t = TK.get();
-if (t.done.main) { t.done = { ...t.done, [added[0].id]: t.done.main }; delete t.done.main; TK.set(t); }
+if (t.done.main) { t.done = { ...t.done, [added[0].id]: t.done.main }; delete t.done.main; }
+if (t.addPj?.main) { t.addPj = { ...t.addPj, [added[0].id]: t.addPj.main }; delete t.addPj.main; }
+if (t.done[added[0].id] || t.addPj?.[added[0].id]) TK.set(t);
 const o = OD.get();
 if (o.c.main) { o.c = { ...o.c, [added[0].id]: o.c.main }; delete o.c.main; OD.set(o); }
 }
@@ -203,6 +226,7 @@ PJ.set(p);
 const t = TK.get();
 delete t.done[id];
 delete t.hidePj[id];
+if (t.addPj) { delete t.addPj[id]; if (!Object.keys(t.addPj).length) delete t.addPj; }
 TK.set(t);
 const o = OD.get();
 if (o.c[id]) { delete o.c[id]; OD.set(o); }
