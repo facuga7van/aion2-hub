@@ -221,6 +221,10 @@ $('#exBars').innerHTML = D.cats.map(c => {
 const ids = PETS.filter(p => p.cat === c.key), o = ids.filter(p => owned.has(p.id)).length;
 return ids.length ? `<div style="color:var(--c-${c.key})" title="${esc(catLabel(c))}">${ico(cico(c.key))}<span class="bar"><i style="--w:${o / ids.length * 100}%"></i></span><span><b>${o}</b>/${ids.length}</span></div>` : '';
 }).join('');
+for (const c of $$('#genus .gcard')) {  // guía: "Tenés X de Y" por genus (Especial cuenta aunque esté oculta, como el selector)
+const ids = ALL.filter(p => p.genusKey === c.dataset.g).map(p => p.id), o = ids.filter(id => owned.has(id)).length;
+$('.gcount', c).textContent = owned.size ? `Tenés ${o} de ${ids.length} · ${ids.filter(isMax).length} al máximo` : `${ids.length} pets`;
+}
 colM?.syncExport();
 const co = $('#cOwn'); if (co) co.textContent = own;
 document.documentElement.toggleAttribute('data-pnew', !owned.size);  // primer paso (el HTML lo pone antes de pintar, sin saltos)
