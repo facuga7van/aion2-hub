@@ -1,5 +1,5 @@
 import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js';
-import { useful, skillParts, CSLOT, GOD, godFam, GR_F, GR_N, rollOf, SK_MIN, gearView, gvWant, kindGuess } from './personaje-calc.js';
+import { useful, skillParts, CSLOT, GOD, godFam, GR_F, GR_N, rollOf, SK_MIN, gearView, gvIdeal, kindGuess } from './personaje-calc.js';
 export { rollOf };
 await new Promise(r => { const l = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: new URL('./personaje-builds.css', import.meta.url).href, onload: r, onerror: r }), pj = document.querySelector('link[href$="personaje.css"]'); pj ? pj.after(l) : document.head.append(l); });
 let X;                                         // {api, MSG, img, gcls, GRADE, nf, curated, CLS_KEY, gl} que pasa personaje.js
@@ -302,96 +302,64 @@ ${difHtml}
 <details class="cu-more"><summary>Todas las líneas, pieza por pieza <small>también las que usan algunos, con el promedio de los top y sus piedras de maná</small></summary><p class="cu-leg">Número = promedio de los top que la llevan${dif.size ? ' · borde punteado = cambia entre Estándar y PvP' : ''} · tachada = línea de skill que no usás (vale 0)${k === 'pvp' ? '' : ' · rojo = PvP'}</p><ul class="cu-st">${rows}</ul></details>
 </div>`;
 }
-/* ---------- Equipo: tus piezas con tus líneas contra los top de tu build (gearView, en personaje-calc.js) ---------- */
-const PL = new Map();                          // rangos ya traídos (ids → items): repintar sin esperar
-let ONLY = false;                              // "Solo lo que falta": no se guarda
-const OPEN = new Set();                        // celu: tarjetas desplegadas (sobreviven al repintado de "Es mi elección")
-let LAST = null;                               // de qué personaje son ONLY y OPEN: otro personaje empieza de cero
-const narrow = () => matchMedia('(max-width:640px)').matches;
-const qbar = r => r ? `<span class="qb" role="img" aria-label="Salió al ${pct(r.q)} % del rango (${rng(r)})" title="Rango en Global: ${rng(r)}"><i style="--q:${r.q >= 0.95 ? 100 : pct(r.q)}%"></i></span>` : '<span class="qb-na" aria-hidden="true"></span>';   // rango desconocido: el lugar, sin barra (vacía diría "salió bajo")
-const fewTop = s => s >= 0.25 ? often(s) : s >= 0.1 ? 'algunos' : null;   // "A veces" (10–25 %): sin marca propia, "algunos" en el title
-const ofTop = f => f === 'casi todos' ? 'casi todos los top' : `${f} de los top`;   // "la mayoría de los top", nunca "la mayoría los top"
-const gLine = (p, l) => {
-const key = `ln:${p.cs}:${l.id}`, f = l.share != null && fewTop(l.share), c = p.counted;
-const mk = !c || l.st === 'few' ? '<i class="gv-mk" aria-hidden="true"></i>' : l.st === 'ok' ? `<i class="gv-mk ok" aria-hidden="true">${ico('i-check')}</i><span class="sr">La buscan los top: </span>` : l.st === 'mine' ? '<i class="gv-mk my" aria-hidden="true">★</i>' : '<i class="gv-mk" aria-hidden="true">•</i>';
-const tt = !c ? '' : l.st === 'ok' ? `La buscan ${ofTop(often(l.share))} en esta pieza (${pct(l.share)} %)` : l.st === 'mine' ? 'Tu elección: no te sugerimos cambiarla' : l.st === 'few' ? `La llevan ${l.k} de ${l.n} top: con tan pocos, no cuenta` : f ? `La llevan ${ofTop(f)} en esta pieza (${pct(l.share)} %)` : 'Los top no la buscan en esta pieza';
-const eb = (v, i, t) => X.estBtn(key, v, `<i aria-hidden="true">${i}</i><span class="t">${t}</span>`, '', t);
-const b = c && l.st !== 'ok' && l.st !== 'few' && X.estBtn ? (l.st === 'mine' ? eb('no', '↺', 'Sugerime lo de los top') : eb('si', '☆', 'Es mi elección')) : '';
-return `<li class="gv-ln ${c ? l.st : 'nc'}" data-line="${esc(l.id)}"${tt ? ` title="${esc(tt)}"` : ''}>${mk}<span class="gv-nm">${esc(stLabel(l.id))}${l.st === 'mine' ? ' ' + MY : ''}</span><b>${esc(fv(l.value))}</b>${qbar(l.r)}${b}</li>`;
-};
+/* ---------- Equipo: tus piezas, línea por línea: ✓ bien o ✗ no contra los top de tu build (gearView, en personaje-calc.js) ---------- */
+const OPEN = new Set();                        // "Ver ideales" abiertos (sobreviven al repintado de "Es mi elección")
+let LAST = null;                               // de qué personaje es OPEN: otro personaje empieza de cero
 const skNm = l => gname({ name: l.name, nameEn: SK[l.id]?.[0] });
-const gSk = l => `<li class="gv-ln gsk ${l.st}" data-sk="${esc(l.id)}">${l.st === 'dead' ? '<i class="gv-mk x" aria-hidden="true">✕</i>' : `<i class="gv-mk">${skIcon(l.id, 16)}</i>`}<span class="gv-nm">${esc(skNm(l))} +${+l.level || 0}</span>${l.st === 'dead' ? '<small>no la usás: vale 0</small>' : ''}</li>`;
-const gMiss = p => [...p.miss.map(l => `<li data-id="${esc(l.id)}" title="La buscan ${ofTop(often(l.share))} en esta pieza (${pct(l.share)} %)"><i aria-hidden="true">＋</i><span class="sr">Te falta: </span>${esc(l.name)}</li>`),
-...p.skMiss.map(l => `<li class="gsk" data-sk="${esc(l.id)}" title="+ nivel de ${esc(skNm(l))}: la llevan ${ofTop(often(l.share))} (${pct(l.share)} %)"><i aria-hidden="true">＋</i><span class="sr">Te falta: </span>${skIcon(l.id, 16)}${esc(skNm(l))}</li>`)].join('');
+const okMk = `<i class="gv-mk" aria-hidden="true">${ico('i-check')}</i><span class="sr">bien: </span>`;
+const gLine = (p, l, sk) => {
+const key = `ln:${p.cs}:${l.id}`, c = l.st === 'no' ? 'no' : l.st ? 'ok' : 'nc';
+const mk = c === 'ok' ? okMk : c === 'no' ? '<i class="gv-mk" aria-hidden="true">✗</i><span class="sr">no: </span>' : '';
+const act = l.st === 'mine' ? X.estBtn(key, 'no', 'tu elección', 'gv-my', 'Quitar tu elección') : l.st === 'no' ? X.estBtn(key, 'si', 'Es mi elección') : '';
+const at = ` ${sk ? 'data-sk' : 'data-line'}="${esc(l.id)}"`, body = `${mk}<span class="gv-nm">${sk ? `${esc(skNm(l))} +${+l.level || 0}${l.dead ? ' <small>no la usás</small>' : ''}` : esc(stLabel(l.id))}</span>${sk ? '' : `<b>${esc(fv(l.value))}</b>`}`;
+return c === 'no' ? xRow('li', 'gv-ln no', at, body, act) : `<li class="gv-ln ${c}"${at}>${body}${act}</li>`;
+};
+const xRow = (tag, cls, at, body, act) => `<${tag} class="${cls} gv-x"${at}><button type="button" class="gv-lb" aria-expanded="false">${body}</button>${act}</${tag}>`;
+addEventListener('click', e => { for (const x of document.querySelectorAll('.gv-x.open')) if (!x.contains(e.target)) { x.classList.remove('open'); x.querySelector('.gv-lb').setAttribute('aria-expanded', 'false'); } }, true);
+const gIdeal = (p, s) => `<button type="button" class="linkbtn gv-ib" aria-expanded="${OPEN.has(s)}" aria-controls="gv-i-${s}">Ver ideales</button>
+<div class="gv-i" id="gv-i-${s}"${OPEN.has(s) ? '' : ' hidden'}><small>Lo que llevan los top en esta pieza</small><ol>${p.ideal.slice(0, 5).map(l => {
+const h = (l.sk ? p.sk : p.lines).some(x => x.id === l.id);
+return `<li class="${h ? 'ok' : 'nc'}" data-id="${esc(l.id)}">${h ? okMk : '<i class="gv-mk" aria-hidden="true"></i>'}<span class="gv-nm">${esc(l.sk ? skNm(l) : ST[l.id]?.[0] || l.name)}</span><small>${often(l.share)}</small></li>`; }).join('')}</ol></div>`;
 export function gear(el, cur, kind) {
-if (LAST !== cur.ref.k) { OPEN.clear(); ONLY = false; LAST = cur.ref.k; }
+if (LAST !== cur.ref.k) { OPEN.clear(); LAST = cur.ref.k; }
 const C = X.curated(cur), T = C?.top?.[kind], S = T?.slots, its = cur.x.items || {}, eq = cur.d.equipment || [], by = new Map(eq.map(e => [e.slot, e]));
-const ids = [...new Set(Object.values(its).filter(it => it?.subStatRandom && it.subStats?.length).map(it => String(it.id)))].sort().join(',');
-const myCh = X.mine(cur, kind), G = gearView(cur.d, its, cur.x.boards || {}, T, PL.get(ids) || {}, myCh), gp = new Map(G.pieces.map(p => [p.slot, p]));
-const LB = new Map(X.SLOTS.flatMap(g => g[1])), hyb = pvpAll(cur) >= HYB, KN = KIND_ES[kind], wk = /^\d{4}-\d\d-\d\d/.test(C?.v || '') ? `semana del ${C.v.slice(8, 10)}/${C.v.slice(5, 7)}` : '';
-const nm = p => !p?.counted ? '' : p.of ? `${p.ok}/${p.of}` : p.lines.length ? '★' : '–', full = p => !!(p?.counted && p.of && p.ok === p.of), hasMiss = p => !!p?.miss.length;
-const nmL = p => !p?.counted ? 'sin cuenta' : p.of ? `${p.ok} de ${p.of}` : p.lines.length ? 'a tu gusto' : 'sin líneas';
+const myCh = X.mine(cur, kind), G = gearView(cur.d, its, cur.x.boards || {}, T, myCh), gp = new Map(G.pieces.map(p => [p.slot, p]));
+const hyb = pvpAll(cur) >= HYB, KN = KIND_ES[kind], wk = /^\d{4}-\d\d-\d\d/.test(C?.v || '') ? `semana del ${C.v.slice(8, 10)}/${C.v.slice(5, 7)}` : '';
 const fam = s => (its[s]?.godStoneStat || []).map(g => godFam(g.icon)).filter(Boolean), dupG = fam(1)[0] && fam(1)[0] === fam(2)[0];
 const warn = (e, it, p) => {
 const W = [], pv = kind === 'pvp' || myCh.has('ms') ? 0 : (it.magicStoneStat || []).filter(m => isPvp(m.id)).length, x = S?.[p.cs], tIt = x?.items?.[0];
 if ((it.magicStoneSlotCount || 0) > (it.magicStoneStat || []).length) W.push('<p class="gv-w bad">Ranura de piedra de maná vacía</p>');
 if ((it.godStoneSlotCount || 0) > (it.godStoneStat || []).length) W.push('<p class="gv-w bad">Ranura de piedra sagrada vacía</p>');
 if (e.slot === 2 && dupG) W.push('<p class="gv-w bad">La misma piedra sagrada que el arma: aplica una sola</p>');
-if (pv) W.push(`<p class="gv-w pvp${hyb ? ' hyb' : ''}" title="Solo suman contra jugadores${hyb ? `; ${HYB_T}` : ''}">${pv} piedra${pv > 1 ? 's' : ''} PvP${X.estBtn ? X.estBtn('ms', 'si', 'Es mi elección') : ''}</p>`);
+if (pv) W.push(xRow('p', `gv-w pvp${hyb ? ' hyb' : ''}`, ` title="Solo suman contra jugadores${hyb ? `; ${HYB_T}` : ''}"`, `${pv} piedra${pv > 1 ? 's' : ''} PvP`, X.estBtn('ms', 'si', 'Es mi elección')));
 if (p.fixed) W.push(`<p class="gv-w fx">Líneas fijas: lo que cambia es la pieza.${tIt && ![tIt.id, ...(tIt.ids || [])].map(String).includes(String(it.id ?? e.id)) ? ` Los top ${KN} llevan <b>${esc(gname(tIt))}</b> (${often(tIt.share)}).` : ''}</p>`);
 return W.join('');
 };
-const amp = (e, it, x) => !it?.maxExceedEnchantLevel ? '' : x?.exceed >= 0.5 ? ampHtml(x.exceed, [e], cur)
-: `<span class="eq-amp" aria-label="Amplificación +${e.exceed || 0} de ${it.maxExceedEnchantLevel}">${Array.from({ length: it.maxExceedEnchantLevel }, (_, i) => `<i${i < (e.exceed || 0) ? ' class="on"' : ''}></i>`).join('')}</span>`;
 const card = ([s, lb]) => {
 const e = by.get(s), it = its[s], p = gp.get(s);
-if (!e) { const w = s < 41 ? gvWant(S?.[CSLOT[s]], G.thin).slice(0, 3) : [];
-return `<li class="gv-p empty${w.length ? ' miss' : ''}"><span class="eq-i"></span><span class="eq-t"><small>${esc(lb)}</small><span class="eq-n">Vacío</span></span>${w.length ? `<ul class="gv-m" aria-label="Lo que llevan los top acá">${gMiss({ miss: w, skMiss: [] })}</ul>` : ''}</li>`; }
-const o = OPEN.has(s), lv = it?.level ? ` · nivel ${it.level}` : '';
-return `<li class="gv-p ${X.gcls(e.grade)}${hasMiss(p) ? ' miss' : ''}${o ? ' open' : ''}${p?.lines.length || p?.sk.length ? '' : ' bare'}" data-slot="${s}" id="gv-${s}" tabindex="-1">
-<button type="button" class="gv-ph"${narrow() ? ` aria-expanded="${o}"` : ' aria-haspopup="dialog"'}><span class="eq-i">${X.img(e.icon, 44)}${e.enchant ? `<b class="eq-en">+${e.enchant}</b>` : ''}</span>
-<span class="eq-t"><small>${esc(lb)}${lv}</small><span class="eq-n">${esc(gname(e))}</span></span><b class="gv-n${full(p) ? ' full' : ''}" aria-label="${nmL(p)}">${nm(p)}</b></button>
-<span class="gv-a">${amp(e, it, S?.[p?.cs])}</span>
-${p ? `<ul class="gv-l">${p.lines.map(l => gLine(p, l)).join('')}${p.sk.map(gSk).join('')}</ul>${warn(e, it, p)}<ul class="gv-m">${gMiss(p)}</ul>` : ''}
-<button type="button" class="linkbtn gv-more" data-slot="${s}">Más detalle</button></li>`;
+if (!e) { const w = { lines: [], sk: [], ideal: s < 41 ? gvIdeal(S?.[CSLOT[s]], G.thin) : [] };
+return `<li class="gv-p empty"><span class="eq-i"></span><span class="eq-t"><small>${esc(lb)}</small><span class="eq-n">Vacío</span></span>${w.ideal.length ? gIdeal(w, s) : ''}</li>`; }
+return `<li class="gv-p ${X.gcls(e.grade)}" data-slot="${s}" id="gv-${s}">
+<button type="button" class="gv-ph" aria-haspopup="dialog"><span class="eq-i">${X.img(e.icon, 44)}${e.enchant ? `<b class="eq-en">+${e.enchant}</b>` : ''}</span>
+<span class="eq-t"><small>${esc(lb)}${it?.level ? ` · nivel ${it.level}` : ''}</small><span class="eq-n">${esc(gname(e))}</span></span></button>
+${p ? `<ul class="gv-l">${p.lines.map(l => gLine(p, l)).join('')}${p.sk.map(l => gLine(p, l, true)).join('')}</ul>${warn(e, it, p)}${p.ideal.length ? gIdeal(p, s) : ''}` : ''}</li>`;
 };
-const steps = (X.eqSteps?.(cur, kind) || []).slice(0, 3).map(s => `<button type="button" class="linkbtn" data-gostep="${esc(s.id)}">${esc(s.title)}</button>`);
-const fill = G.pieces.filter(p => p.counted && p.miss.length).sort((a, b) => b.miss.length - a.miss.length || a.ok / a.of - b.ok / b.of).slice(0, 3 - steps.length)
-.map(p => `<button type="button" class="linkbtn" data-gv="${p.slot}">${esc(LB.get(p.slot))}: ${p.ok} de ${p.of}</button>`);
-const gos = [...steps, ...fill], go = gos.map((b, i) => `<li><i aria-hidden="true">${'①②③'[i]}</i>${b}</li>`).join('');
-const goM = gos.length > 1 ? `<button type="button" class="linkbtn gv-gm">${gos.length - 1} más</button>` : '';   // celu: el primero y "2 más"
-const pz = n => `${n}<span class="gv-lx"> pieza${n > 1 ? 's' : ''}</span>`;   // en el celu, solo el número
-const need = G.need.length ? `<p class="gv-need"><span>Te falta<span class="gv-lx"> sobre todo</span>:</span> ${G.need.slice(0, 3).map(x => `<button type="button" class="linkbtn" data-need="${esc(x.id)}" aria-pressed="false">${esc(x.name)} (${pz(x.n)})</button>`).join('<i aria-hidden="true"> · </i>')}</p>` : '';
-const strip = X.SLOTS.flatMap(g => g[1]).filter(([s]) => s < 41 && by.has(s) && its[s]?.subStatRandom && its[s].subStats?.length).map(([s, lb]) => { const p = gp.get(s);
-return `<li><button type="button" class="gv-si${hasMiss(p) ? ' miss' : ''}${full(p) ? ' full' : ''}" data-gv="${s}" aria-label="${esc(lb)}: ${nmL(p)}">${X.img(by.get(s).icon, 40)}<small>${nm(p) || '–'}</small></button></li>`; }).join('');
 const why = String(C?.reasons?.top?.[kind] || `muestra chica (${T?.n || 0})`).replace(NOBRAND, '');
-const count = G.ok != null ? `<b>${G.ok} de ${G.of}</b> líneas${X.gl('lineas')} como las de los top` : C ? `Sin datos de los top ${KN}` : 'Sin los top de esta semana';
-const g = C && kindGuess(cur.d, its, C.method?.kindSets).kind, pre = g && g !== kind && kind !== 'support' ? `<p class="cu-warn" role="note">Lo que tenés puesto parece ${KIND_ES[g]}: la ficha muestra solo el equipo puesto, así que la cuenta contra ${KN} puede salir baja.</p>` : '';
-el.innerHTML = `<section class="pj-sec gv${ONLY ? ' only' : ''}" aria-labelledby="eq-h"><div class="gv-sum">
-<div class="gv-hd"><h3 id="eq-h" class="pj-h">Equipo <small class="gv-c"${G.ok != null ? ' title="Una cuenta, no una meta: los top tampoco llevan todas"' : ''}>${count}</small></h3>${G.ok != null ? `<small class="gv-src">${KN} · ${T.n} top${wk ? ` · ${wk}` : ''} · estimado, cambia cada semana</small>` : ''}</div>
-${need}<ol class="gv-strip" aria-label="Tus piezas: líneas como las de los top">${strip}</ol>
-<div class="gv-go">${go ? `<span>Lo que más rinde<span class="gv-lx"> ahora</span>:</span><ol>${go}</ol>${goM}` : ''}</div>${X.gvKr(ONLY)}</div>
-${G.thin ? `<p class="cu-warn gv-thin" role="note"><b>Pista: solo ${T.n} top ${KN}.</b> Cuentan solo las líneas que llevan casi todos.</p>` : ''}${G.none ? whyP(C ? `Sin datos de los top ${KN}: ${why}. Sin ✓ ni ＋; la barra de calidad sigue.` : 'No pude traer lo que usan los top. La barra de calidad sigue.') : ''}${pre}
+const src = !C ? 'No pude traer lo que usan los top: tus líneas, sin comparar.' : G.none ? `Sin muestra para tu build (${why}): tus líneas, sin comparar.`
+: `Comparado con los top de tu build (muestra de ${T.n}${wk ? `, ${wk}` : ''})${G.thin ? '. Son pocos: cuenta solo lo que llevan casi todos' : ''}.`;
+const g = C && kindGuess(cur.d, its, C.method?.kindSets).kind, pre = g && g !== kind && kind !== 'support' ? `<p class="cu-warn" role="note">Lo que tenés puesto parece ${KIND_ES[g]}: la ficha muestra solo el equipo puesto, así que contra ${KN} puede salir con muchas ✗.</p>` : '';
+el.innerHTML = `<section class="pj-sec gv" aria-labelledby="eq-h"><div class="gv-sum"><h3 id="eq-h" class="pj-h">Equipo</h3><p class="gv-src">${esc(src)}</p></div>${pre}
 ${X.SLOTS.map(([t, l]) => `<h4 class="pj-h4">${t}</h4><ul class="gv-g">${l.map(card).join('')}</ul>`).join('')}${X.petHtml?.() || ''}</section>`;
-el._gv = cur;
-el.onchange = e => { if (e.target.closest('.gv-only')) { ONLY = e.target.checked; $('.gv', el)?.classList.toggle('only', ONLY); } };
 el.onclick = e => {
-const j = e.target.closest('[data-gv]'), c0 = e.target.closest('.gv-p[data-slot]'), nb = e.target.closest('[data-need]');
-if (e.target.closest('.gv-gm')) { e.target.closest('.gv-go').classList.add('all'); $('.gv-go li:nth-child(2) button', el)?.focus(); return; }
-if (nb) { const on = nb.getAttribute('aria-pressed') !== 'true', sl = new Set(on ? G.need.find(x => x.id === nb.dataset.need)?.slots : []);
-el.querySelectorAll('[data-need]').forEach(b => b.setAttribute('aria-pressed', String(b === nb && on)));
-$('.gv', el).classList.toggle('hl', on);
-el.querySelectorAll('.gv-p[data-slot], .gv-si[data-gv]').forEach(c => c.classList.toggle('hit', sl.has(+(c.dataset.slot || c.dataset.gv))));
-return; }
-if (j) { const c = $(`#gv-${j.dataset.gv}`, el); if (!c) return; if (!c.offsetParent) { ONLY = false; $('.gv', el).classList.remove('only'); $('.gv-only input', el).checked = false; }
-c.scrollIntoView({ block: 'center' }); c.focus({ preventScroll: true }); return; }
-if (c0 && narrow() && !e.target.closest('.gv-more, [data-est]')) { e.stopPropagation(); const o = c0.classList.toggle('open'); $('.gv-ph', c0)?.setAttribute('aria-expanded', String(o)); o ? OPEN.add(+c0.dataset.slot) : OPEN.delete(+c0.dataset.slot); }
+const lb = e.target.closest('.gv-lb');
+if (lb) { e.stopPropagation(); lb.setAttribute('aria-expanded', String(lb.parentElement.classList.toggle('open'))); return; }
+const b = e.target.closest('.gv-ib');
+if (b || e.target.closest('.gv-i')) e.stopPropagation();
+if (!b) return;
+const pn = $('#' + b.getAttribute('aria-controls'), el), o = pn.hidden, s = +pn.id.slice(5);
+pn.hidden = !o; b.setAttribute('aria-expanded', String(o));
+o ? OPEN.add(s) : OPEN.delete(s);
 };
-if (ids && !PL.has(ids)) getLines(ids).then(r => {
-PL.set(ids, r.items || {});
-if (el._gv !== cur || !$('.gv', el)) return;
-for (const p of gearView(cur.d, its, cur.x.boards || {}, T, PL.get(ids), myCh).pieces) for (const l of p.lines) { const q = l.r && el.querySelector(`#gv-${p.slot} [data-line="${l.id}"] .qb-na`); if (q) q.outerHTML = qbar(l.r); }
-}, () => { const h = el._gv === cur && $('.gv .gv-hon span', el); if (h) h.textContent = 'qué tan alto salió: sin rango esta vez'; });
 }
 function recB(r) {
 if (!BUILD_OK.test(r.url || '')) return null;

@@ -549,9 +549,9 @@ const C = curated(cur), noTop = !P.low && C?.top && !C.top[k]?.slots;
 const src = !P.low && C?.top && /^\d{4}-\d\d-\d\d/.test(C.v || '') ? `${noTop ? `Comparado con los ${C.top.all?.n || 0} top de toda la clase` : `Comparado con ${C.top[k]?.n || 0} top ${KIND_ES[k]}`} · semana del ${C.v.slice(8, 10)}/${C.v.slice(5, 7)}` : '';
 const note = !noTop ? '' : `Sin top ${KIND_ES[k]} esta semana: ${y ? 'te comparamos' : 'lo comparamos'} con los top de toda la clase${k === 'support' ? ', que pegan y no curan. Tomalo como orientación.' : '.'}`;
 const by = new Map((cur.d.equipment || []).map(e => [e.slot, e]));
-const G = C?.top?.[k]?.slots ? gearView(cur.d, cur.x.items, cur.x.boards, C.top[k], {}, styleOf(cur, k)) : null;
-const eqT = G ? `Equipo: <b>${G.ok} de ${G.of}</b> líneas como los top` : 'Equipo: tus piezas, línea por línea';
-const eqL = document.documentElement.classList.contains('mini') ? `<p class="st-eq">${eqT}${G?.need[0] ? ` · te falta ${esc(G.need[0].name)}` : ''}</p>` : `<button type="button" class="st-eq" data-tab="equipo">${eqT}<span class="st-eqv"> · ver</span></button>`;
+const G = C?.top?.[k]?.slots ? gearView(cur.d, cur.x.items, cur.x.boards, C.top[k], styleOf(cur, k)) : null;
+const eqT = G ? `Equipo: <b>${G.bien}</b> línea${G.bien === 1 ? '' : 's'} bien, <b>${G.no}</b> no` : 'Equipo: tus piezas, línea por línea';
+const eqL = document.documentElement.classList.contains('mini') ? `<p class="st-eq">${eqT}</p>` : `<button type="button" class="st-eq" data-tab="equipo">${eqT}<span class="st-eqv"> · ver</span></button>`;
 const hid = new Set(estStored(cur.ref).no.filter(x => x.startsWith('paso:')).map(x => x.slice(5))), off = P.steps.filter(s => hid.has(s.id));
 const pin = pinOf(cur, k, P.steps), on = pinFirst(P.steps.filter(s => !hid.has(s.id)), pin);
 const act = on.filter(s => s.id !== 'gear'), gear = on.find(s => s.id === 'gear'), nVis = gear ? ST_VIS - 1 : ST_VIS;
@@ -597,27 +597,14 @@ const eq = cur.d.equipment || [], by = new Map(eq.map(e => [e.slot, e])), known 
 const groups = SLOTS.map(([t, l]) => [t, l.map(([s, lb]) => [s, lb, by.get(s)])]);
 const extra = eq.filter(e => !known.has(e.slot)).map(e => [e.slot, e.slotName, e]);    // un slot nuevo de la ficha no se pierde
 if (extra.length) groups[2][1].push(...extra);
-const strip = SLOTS.flatMap(g => g[1]).filter(([s]) => s < 41 && by.has(s) && (!cur.x || it[s]?.subStatRandom && it[s].subStats?.length)).map(([s]) => `<li><span class="gv-si">${img(by.get(s).icon, 40)}<small>–</small></span></li>`).join('');
-return `<section class="pj-sec gvs" aria-labelledby="eq-h" aria-busy="true"><div class="gv-sum"><div class="gv-hd"><h3 id="eq-h" class="pj-h">Equipo <small class="gv-c">${cur.x ? 'comparando tus piezas con los top…' : 'leyendo tus piezas…'}</small></h3><small class="gv-src" aria-hidden="true"></small></div>
-<p class="gv-need" aria-hidden="true"></p><ol class="gv-strip" aria-hidden="true">${strip}</ol><div class="gv-go"></div>${gvKr(false)}</div>
+return `<section class="pj-sec gvs" aria-labelledby="eq-h" aria-busy="true"><div class="gv-sum"><h3 id="eq-h" class="pj-h">Equipo</h3><p class="gv-src">${cur.x ? 'Comparando tus piezas con los top…' : 'Leyendo tus piezas…'}</p></div>
 ${groups.map(([t, l]) => `<h4 class="pj-h4">${t}</h4><ul class="gv-g">${l.map(([s, lb, e]) => !e
 ? `<li class="gv-p empty"><span class="eq-i"></span><span class="eq-t"><small>${esc(lb)}</small><span class="eq-n">Vacío</span></span></li>`
 : `<li class="gv-p ${gcls(e.grade)}" data-slot="${s}"><button type="button" class="gv-ph" aria-haspopup="dialog"><span class="eq-i">${img(e.icon, 44)}${e.enchant ? `<b class="eq-en">+${e.enchant}</b>` : ''}</span>
-<span class="eq-t"><small>${esc(lb)}${it[e.slot]?.level ? ` · nivel ${it[e.slot].level}` : ''}</small><span class="eq-n">${esc(gname(e))}</span></span><b class="gv-n"></b></button></li>`).join('')}</ul>`).join('')}
+<span class="eq-t"><small>${esc(lb)}${it[e.slot]?.level ? ` · nivel ${it[e.slot].level}` : ''}</small><span class="eq-n">${esc(gname(e))}</span></span></button></li>`).join('')}</ul>`).join('')}
 ${petHtml()}</section>`;
 }
-const gvKr = only => `<div class="gv-kr"><details class="gv-how"${matchMedia('(max-width:640px)').matches ? '' : ' open'}><summary>Cómo leer</summary><ul class="gv-k" aria-label="Cómo leer cada línea">
-<li><i class="gv-mk ok">${ico('i-check')}</i>la buscan los top</li><li><i class="gv-mk">•</i>tuya, ellos no</li><li><i class="gv-ad">＋</i>te falta</li>
-<li class="gv-hon"><span class="qb"><i style="--q:70%"></i></span><span>qué tan alto salió (seguro, ±3 por redondeo)</span></li></ul></details>
-<label class="gv-only"><input type="checkbox"${only ? ' checked' : ''}> Solo lo que falta</label></div>`;
 const petHtml = () => `<div class="pj-pw">${cur.d.pet ? `<span>${img(cur.d.pet.icon, 36)}<small>Pet</small> ${esc(gname(cur.d.pet))} · Nv ${+cur.d.pet.level || 0}</span>` : ''}${cur.d.wings ? `<span>${img(cur.d.wings.icon, 36)}<small>Alas</small> ${esc(gname(cur.d.wings))}${cur.d.wings.enchant ? ` +${cur.d.wings.enchant}` : ''}</span>` : ''}</div>`;
-const EQ_ST = new Set(['amp-arma', 'amp-acc', 'amp-brac', 'amp-arm', 'enc', 'arc', 'gs', 'gs-up', 'ms', 'gear']);
-function eqSteps(c, k) {
-const P = plan(c.d, c.x.items, c.x.boards, k, topSkills(c, k), styleOf(c, k));
-if (P.low) return [];
-const hid = new Set(estStored(c.ref).no.filter(x => x.startsWith('paso:')).map(x => x.slice(5))), on = pinFirst(P.steps.filter(s => !hid.has(s.id)), pinOf(c, k, P.steps));
-return [...on.filter(s => s.id !== 'gear'), ...on.filter(s => s.id === 'gear')].filter(s => EQ_ST.has(s.id)).map(s => ({ id: s.id, title: s.title }));
-}
 /* ---------- skills: ícono, nombre (con el juego en inglés, el español chico abajo: la interfaz es en español) y barra por fuente ---------- */
 const skName = s => ({ name: s.name, nameEn: s.nameEn && s.nameEn !== s.name ? s.nameEn : SK[s.id]?.[0] || s.nameEn });
 const hint = (s, x) => s.category === 'Dp' ? (s.level < STIG_CAP ? skillHint(s, x) : '') : x && (x.base < BASE_CAP || x.dae < x.daeMax) ? skillHint(s, x) : '';
@@ -732,11 +719,6 @@ store.set(BLD, Object.fromEntries(Object.entries(m).slice(-60)));
 paintBuild(); paintPanel();
 $(`#pj-bld [data-kind=${k}]`)?.focus();
 announce(`Build ${KIND_ES[k]}`);
-} else if (t.closest('[data-gostep]')) {          // Equipo → "Lo que más rinde ahora": ese paso en Próximos pasos
-const id = t.closest('[data-gostep]').dataset.gostep;
-TAB = 'pasos'; paintPanel();
-const s = $(`#pj-x .st[data-step="${CSS.escape(id)}"]`);
-if (s) { s.closest('details')?.setAttribute('open', ''); s.tabIndex = -1; s.scrollIntoView({ block: 'center' }); s.focus({ preventScroll: true }); }
 } else if (t.closest('[data-tab]')) {
 const b = t.closest('[data-tab]');
 if (b.matches('.st-eq') && document.documentElement.classList.contains('mini')) return;   // en mini es solo el dato (no hay pestañas para volver)
@@ -797,7 +779,7 @@ toast(on ? `<b>${esc(ref.n)}</b> quedó en favoritos.` : `Saqué a <b>${esc(ref.
 }
 /* ---------- builds de los top (lazy: personaje-builds.js) ---------- */
 let modP = null, modM = null;                  // modM: el módulo ya cargado (Equipo repinta en el lugar, sin esperar)
-const mod = () => modP ||= import('./personaje-builds.js').then(m => { m.init({ api, MSG, img, gcls, GRADE, nf, curated: c => c && curated(c), CLS_KEY, gl, mine: styleOf, estBtn, SLOTS, eqSteps, petHtml, gvKr }); return modM = m; }, e => { modP = null; throw e; });
+const mod = () => modP ||= import('./personaje-builds.js').then(m => { m.init({ api, MSG, img, gcls, GRADE, nf, curated: c => c && curated(c), CLS_KEY, gl, mine: styleOf, estBtn, SLOTS, petHtml }); return modM = m; }, e => { modP = null; throw e; });
 let lgP = null;
 const lgMod = () => lgP ||= import('./personaje-logros.js').then(m => { m.init({ nf, IC }); return m; }, e => { lgP = null; throw e; });
 addEventListener('storage', e => { if (cur && TAB === 'logros' && String(e.key).startsWith('hub-logros-')) paintPanel(); });
