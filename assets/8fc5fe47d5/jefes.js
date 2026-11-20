@@ -187,7 +187,7 @@ $('.jf-zona', dpBox)?.addEventListener('toggle', e => paintZona(e.currentTarget)
 paintHead();
 }
 function paintHead() {
-const ul = $('#jf-dmr'), now = Date.now(), fe = document.activeElement, f = ul.contains(fe) ? (fe.matches('.bell') ? '.bell' : fe.matches('[data-deny]') ? '[data-deny]' : '[data-kill]') : null;
+const ul = $('#jf-dmr'), now = Date.now(), fe = document.activeElement, f = ul.contains(fe) ? (fe.matches('.bell') ? '.bell' : fe.matches('[data-deny]') ? '[data-deny]' : fe.matches('[data-chat]') ? '[data-chat]' : '[data-kill]') : null;
 ul.innerHTML = row(dpB, timer(dpB, now), now, { lv: true, say: true }).replace(/ id="b-\d+"/, '');
 bindRow(ul.firstElementChild);
 if (f) $(f, ul)?.focus();
@@ -204,6 +204,7 @@ dlg.addEventListener('click', e => {
 const bl = e.target.closest('.bell'), m = $('#hub-bellmenu');
 if (e.target.closest('[data-kill]')) kill(b);
 else if (e.target.closest('[data-deny]')) deny(b);
+else if (e.target.closest('[data-chat]')) copyChat(b);
 else if (bl && m) dlg.append(m);
 else if (bl) setTimeout(() => { const n = $('#hub-bellmenu'); if (n && dlg.isConnected) { dlg.append(n); bl.click(); } });
 }, true);
@@ -241,13 +242,13 @@ return `<li class="jf-r s-${s}${tm ? ' src-' + tm.src : ''}${s === 'stale' && ma
 ${b.top ? pic(b, 192, 96) : pic(b, 80, 40)}
 <span class="jf-n" title="${info}"><b>${esc(gname(b))}</b><small>${meta}</small></span>${b.top ? cardDrops(b) : rowDrops(b)}
 <span class="jf-w" title="${esc(tip)}"><span class="jf-s">${st}</span><span class="jf-t">${when}${src}</span></span>
-<span class="jf-a">${denyBtn}<button type="button" class="btn ghost jf-kill" data-kill="${fix ? 'fix' : 'new'}" title="${fix ? 'Corregir la hora de tu kill, anotar uno nuevo o quitar tu timer' : 'Lo mataste y no figura: anotá tu kill'}">${fix ? 'Corregir' : 'Lo maté'}</button></span><span class="jf-b"></span>${b.top ? `
+<span class="jf-a">${denyBtn}<button type="button" class="btn ghost jf-kill" data-kill="${fix ? 'fix' : 'new'}" title="${fix ? 'Corregir la hora de tu kill, anotar uno nuevo o quitar tu timer' : 'Lo mataste y no figura: anotá tu kill'}">${fix ? 'Corregir' : 'Lo maté'}</button>${b.top ? `<button type="button" class="iconbtn jf-chat" data-chat aria-label="Copiar para el chat: ${esc(gname(b))}" title="Copiar para el chat"><svg aria-hidden="true"><use href="#i-copy"/></svg></button>` : ''}</span><span class="jf-b"></span>${b.top ? `
 <span class="jf-cy"><i style="--p:${cyc(tm, b, now).toFixed(4)}"></i></span>` : `<button type="button" class="jf-mb" data-menu aria-haspopup="dialog" aria-label="Más: ver drops, fijar u ocultar ${esc(gname(b))}" title="Ver drops, fijar arriba u ocultar"><svg aria-hidden="true"><use href="#i-more"/></svg></button>`}</li>`;
 }
 function paint() {
 const now = Date.now(), f = viewFac(), q = norm($('#jf-q').value).trim(), hit = b => !q || b.hay.includes(q), K = KILLS.get().k;
 const fe = document.activeElement, fb = fe?.closest?.('[data-boss]')?.dataset.boss, fgt = fe?.matches?.('[data-gt]') ? '[data-gt]' : fe?.matches?.('[data-hid]') ? '[data-hid]' : null;
-const fsel = !fb ? null : fe.matches('[data-kill]') ? '[data-kill]' : fe.matches('.bell') ? '.bell' : fe.matches('[data-deny]') ? '[data-deny]' : fe.matches('[data-menu]') ? '[data-menu]'
+const fsel = !fb ? null : fe.matches('[data-kill]') ? '[data-kill]' : fe.matches('.bell') ? '.bell' : fe.matches('[data-deny]') ? '[data-deny]' : fe.matches('[data-menu]') ? '[data-menu]' : fe.matches('[data-chat]') ? '[data-chat]'
 : fe.matches('[data-drops]') ? '[data-drops]' : fe.matches('[data-it]') ? `[data-it="${fe.dataset.it}"]` : null;
 hideTip();
 const world = [], rest = [], was = !!mant;
@@ -419,6 +420,11 @@ const w = tm && { alive: `vivo hace ${rel(tm.start)}`, due: `debería estar desd
 spawns: `sale en ${rel(tm.start)}`, stale: 'sin confirmar (hubo mantenimiento)' }[s] || `sin hora (sale cada ${cycTxt(b.respawnMin)})`;
 return [`${gname(b)} (${FACCION[b.fac]})`, tpTxt(gname(b, 'teleport')), w + (ap && s !== 'stale' ? ' · reportado' : '')].filter(Boolean).join(' · ');
 }
+function copyChat(b) {
+const t = chatLine(b);
+(navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast(`Copiado para el chat: <b>${esc(t)}</b>`),
+() => toast(`No pude copiar. Copialo a mano: <code>${esc(t)}</code>`, { ms: 12000 }));
+}
 function openMm(b) {
 mmB = b;
 const fav = favs().has(b.id), oc = ocultos().has(b.id);
@@ -443,13 +449,7 @@ MM.addEventListener('click', e => {
 const b = mmB;
 if (!b) return;
 if (e.target.closest('[data-dv]')) { MM.hidePopover(); openDrops(b); return; }
-if (e.target.closest('[data-chat]')) {
-const t = chatLine(b);
-MM.hidePopover();
-(navigator.clipboard ? navigator.clipboard.writeText(t) : Promise.reject()).then(() => toast(`Copiado para el chat: <b>${esc(t)}</b>`),
-() => toast(`No pude copiar. Copialo a mano: <code>${esc(t)}</code>`, { ms: 12000 }));
-return;
-}
+if (e.target.closest('[data-chat]')) { MM.hidePopover(); copyChat(b); return; }
 if (e.target.closest('[data-fav]')) {
 const on = !favs().has(b.id);
 setFav(b, on);
@@ -532,6 +532,7 @@ if (!b) return;
 const it = e.target.closest('button[data-it]');
 if (e.target.closest('[data-kill]')) kill(b);
 else if (e.target.closest('[data-menu]')) openMm(b);
+else if (e.target.closest('[data-chat]')) copyChat(b);
 else if (e.target.closest('[data-deny]')) deny(b);
 else if (it && TOUCH.matches) openDrops(b);           // táctil: la tira entera abre "Ver drops" (íconos de 24 px no se tocan bien)
 else if (it) { if (tipFor === it && e.pointerType !== 'mouse') hideTip(); else showTip(it); }   // mouse o teclado: nombre, grado y chance

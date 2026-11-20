@@ -12,7 +12,7 @@ const done = { daily: taskDone(ch, 'daily', now), weekly: taskDone(ch, 'weekly',
 const L = taskList().filter(t => !t.optional), rd = nextReset('daily', now), occ = {};
 const okOf = t => (done[t.period][t.id] || 0) >= (t.count || 1), show = t => !okOf(t) || kept.has(`${ch}:${t.period}:${t.id}`);
 const daily = L.filter(t => t.period === 'daily'), listo = daily.every(okOf);
-const today = t => { if (!t.event) return t.count > 1 && (!t.extra || done.weekly[t.id] > 0); const o = currentOcc(t.event, now) || nextOcc(t.event, now); return o && o.start < rd && (occ[t.id] = o); };
+const today = t => { if (t.custom && !(done.weekly[t.id] > 0)) return false; if (!t.event) return t.count > 1 && (!t.extra || done.weekly[t.id] > 0); const o = currentOcc(t.event, now) || nextOcc(t.event, now); return o && o.start < rd && (occ[t.id] = o); };
 const also = L.filter(t => t.period === 'weekly' && today(t) && show(t));
 const row = t => {
 const per = t.period, v = done[per][t.id] || 0, max = t.count || 1, ok = v >= max, id = 'ah-t-' + t.id, nm = esc(gname(t));
@@ -33,8 +33,9 @@ box.innerHTML = `<div class="tk-p">${who}<span><b>${pr.daily.done}</b>/${pr.dail
 <div class="bar" role="img" aria-label="${pct}% de las diarias"><i style="--w:${pct}%"></i></div>${listo ? `<p class="tk-ok">Diarias listas ✓${other ? ` · <button type="button" class="linkbtn" data-pj="${esc(other.id)}">a ${esc(other.name)} le falta${other.d > 1 ? 'n' : ''} ${other.d}</button>` : ''}</p>` : ''}
 <div class="tk-cols">${rows ? `<ul class="tk-l">${rows}</ul>` : ''}${also.length || odRow ? `<ul class="tk-l"><li class="tk-sep">Hoy también</li>${also.map(row).join('')}${odRow}</ul>` : ''}</div>`;
 if (ods) bind(box.querySelector('#ah-od'), n => { const o = odyle(od.meter, ods, n); return o.full ? [`~${o.v}/${o.cap} · llena en ${fmtLeft(o.full - n)}`, Math.min(n + leftNext(o.full - n), o.next)] : [`llena (tope ${o.cap})`, 0]; });
+const due = C.some(c => c.u);
 bind(box.querySelector('.tk-rs'), n => {
-const left = rd - n, soon = (!listo || !!other) && left < 2 * HOUR;
+const left = rd - n, soon = due && left < 2 * HOUR;
 box.classList.toggle('tk-soon', soon);
 return [soon ? `Te quedan ${fmtLeft(left)} para el reset` : `reset en ${fmtLeft(left)}`, n + leftNext(left)];
 });

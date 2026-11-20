@@ -40,7 +40,7 @@ setHtml(g, `<div class="tk-h"><h2 id="h-${per}">${PER[per].t}</h2><span class="t
 <span class="tk-r">se limpian en <span class="cd" id="rs-${per}"></span> <small>${fmtClock(rs, { now })}</small></span></div>
 <div class="bar" role="progressbar" aria-label="${PER[per].t} hechas" aria-valuemin="0" aria-valuemax="${req.length}" aria-valuenow="${n}"><i style="--w:${pct}%"></i></div>
 <ul class="tk-list">${req.map(t => row(t, per, done)).join('')}${met.map(t => meterRow(t, ch)).join('')}${opt.length ? `<li class="tk-sep">Si te sobra tiempo</li>${opt.map(t => row(t, per, done)).join('')}` : ''}${items.length ? '' : '<li class="tk-empty">Sin tareas. Sumá una con el lápiz.</li>'}</ul>${hiddenList(per, ch)}${juegoList(per, items)}
-<form class="tk-add" data-per="${per}"><input type="text" name="n" maxlength="60" placeholder="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" aria-label="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" required><button class="btn">${ico('i-plus')}Agregar</button></form>`);
+<form class="tk-add" data-per="${per}"><input type="text" name="n" maxlength="60" placeholder="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" aria-label="Nueva tarea ${per === 'daily' ? 'diaria' : 'semanal'}" required><input type="number" name="v" min="1" max="99" step="1" inputmode="numeric" placeholder="veces" aria-label="Veces (opcional)"><button class="btn">${ico('i-plus')}Agregar</button></form>`);
 bind($('#rs-' + per), n2 => [fmtLeft(rs - n2), n2 + leftNext(rs - n2)]);
 for (const t of met) {   // estimado y "se llena en": cambian solos con el reloj (bind), el HTML no
 const s = OD.get().c[ch], v = $(`#od-v-${CSS.escape(t.id)}`), f = $(`#od-f-${CSS.escape(t.id)}`);
@@ -143,10 +143,10 @@ document.getElementById('t-' + id)?.focus();
 });
 $('#tk-cols').addEventListener('submit', e => {
 e.preventDefault();
-const f = e.target, name = f.n.value.trim();
+const f = e.target, name = f.n.value.trim(), v = +f.v.value;   // veces: 2 o más, contador; vacío o 1, casilla (sin count)
 if (!name) return;
 const t = TK.get();
-t.custom = [...t.custom, { id: 'u-' + uid(), name, period: f.dataset.per }];
+t.custom = [...t.custom, { id: 'u-' + uid(), name, period: f.dataset.per, ...(v > 1 && { count: v }) }];
 saveTK(t);
 paint();
 toast(`Sumé <b>${esc(name)}</b> a las ${f.dataset.per === 'daily' ? 'diarias' : 'semanales'}.`);

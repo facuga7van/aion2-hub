@@ -548,11 +548,11 @@ alarm(q.key, title, body, q.id, it.href, sayText(name, q.lead, it, note), q.lead
 }
 function fireDaily(q, now) {
 const rd = q.occ.start, wk = nextReset('weekly', now) === rd, C = countedChars(now).map(c => ({ ...c, w: wk ? c.w : 0 }));
-const d = C.reduce((s, c) => s + c.d, 0), w = C.reduce((s, c) => s + c.w, 0);
+const d = C.reduce((s, c) => s + c.u, 0), w = C.reduce((s, c) => s + c.w, 0);
 if (!d && !w) return;
-const what = [d && `${d} diaria${d > 1 ? 's' : ''}`, w && `${w} semanal${w > 1 ? 'es' : ''}`].filter(Boolean).join(' y ');
-const who = C.length > 1 ? C.filter(c => c.d + c.w).map(c => `${c.name} ${c.d + c.w}`).join(', ') + ' · ' : '';
-alarm(q.key, `Te faltan ${what}`, `${who}Reset ${w ? 'semanal ' : ''}${fmtClock(rd, { now })} · en 1 h`, 'diarias', ROOT + 'tareas/', `Te faltan ${what}, el reset es en una hora`, false, now);
+const what = `Se vence${d + w > 1 ? 'n' : ''} ` + [d && `${d} diaria${d > 1 ? 's' : ''}`, w && `${w} semanal${w > 1 ? 'es' : ''}`].filter(Boolean).join(' y ');
+const who = C.length > 1 ? C.filter(c => c.u + c.w).map(c => `${c.name} ${c.u + c.w}`).join(', ') + ' · ' : '';
+alarm(q.key, what, `${who}Reset ${w ? 'semanal ' : ''}${fmtClock(rd, { now })} · en 1 h`, 'diarias', ROOT + 'tareas/', `${what}, el reset es en una hora`, false, now);
 }
 function alarm(key, title, body, id, href, spoken, high, now) {
 toast(`${ico('i-bell-on')} <b>${esc(title)}</b> · ${esc(body)}`, { ms: 9000 });
@@ -825,7 +825,7 @@ return a;
 export const maintNow = (now = Date.now()) => schedule(now).mw.find(w => w.start <= now && now < w.maxEnd) || null;
 export const maintEnd = (w, now = Date.now()) => (w.announced ? '' : '~') + fmtClock(w.maxEnd, { now, day: false });
 const NARROW = matchMedia('(max-width: 420px)');
-const dailyLeft = now => countedChars(now).reduce((s, c) => s + c.d, 0);
+const dailyLeft = now => countedChars(now).reduce((s, c) => s + c.u, 0);
 function renderStrip() {
 const el = $('#hub-strip');
 if (!el) return;
@@ -870,7 +870,7 @@ seq.sort((x, y) => x[0] - y[0]).forEach(([, el]) => box.append(el));
 const rd = nextReset('daily', now), rs = document.createElement('a'), left = rd - now < 2 * HOUR ? dailyLeft(now) : 0;
 rs.className = 'st-i st-reset' + (left ? ' st-due' : '');
 rs.href = left ? ROOT + 'tareas/' : ROOT + '#resets';
-rs.innerHTML = left ? `<b><span class="st-lg">Te faltan </span>${left} diaria${left > 1 ? 's' : ''}</b><span class="cd"></span>` : `<b>Reset</b><small>${fmtClock(rd, { now })}</small><span class="cd"></span>`;
+rs.innerHTML = left ? `<b><span class="st-lg">Se vence${left > 1 ? 'n' : ''} </span>${left} diaria${left > 1 ? 's' : ''}</b><span class="cd"></span>` : `<b>Reset</b><small>${fmtClock(rd, { now })}</small><span class="cd"></span>`;
 bind($('.cd', rs), n => [(left ? (NARROW.matches ? 'reset ' : 'reset en ') : 'en ') + fmtLeft(rd - n), n + leftNext(rd - n)]);
 const right = document.createElement('span');
 right.className = 'st-r';
@@ -1147,14 +1147,15 @@ export function taskProgress(charId, now = Date.now()) {
 const out = {};
 for (const per of ['daily', 'weekly']) {
 const L = taskList(charId).filter(x => x.period === per && !x.optional), d = taskDone(charId, per, now);
-out[per] = { done: L.filter(x => (d[x.id] || 0) >= (x.count || 1)).length, total: L.length };
+const left = L.filter(x => (d[x.id] || 0) < (x.count || 1));   // lose: las que se pierden en el reset (lo que se guarda, `bank`, no)
+out[per] = { done: L.length - left.length, total: L.length, lose: left.filter(x => !x.bank).length };
 }
 return out;
 }
 export function countedChars(now = Date.now()) {
 const { list, activo } = characters(), D = TK.get().done, recent = id => ['daily', 'weekly'].some(p => D[id]?.[p]?.stamp > now - 7 * DAY);
 return list.filter(c => c.id === activo || recent(c.id)).sort((a, b) => (b.id === activo) - (a.id === activo))
-.map(c => { const p = taskProgress(c.id, now); return { ...c, d: p.daily.total - p.daily.done, w: p.weekly.total - p.weekly.done }; });
+.map(c => { const p = taskProgress(c.id, now); return { ...c, d: p.daily.total - p.daily.done, u: p.daily.lose, w: p.weekly.total - p.weekly.done }; });
 }
 export const OD = versioned('hub-odyle', 1, { c: {} });
 export function odyle(m, s, now) {

@@ -16,7 +16,7 @@ const tm = storedTimers(now).filter(t => t.up && t.start > now).sort((a, b) => a
 const first = tm && (!occ || tm.start < occ.start), done = !first && !!occ && occDone(occ);
 const tk = done && new Set(taskList().map(t => t.event));
 const nx = done && L.slice(L.indexOf(occ) + 1).find(o => tk.has(o.id) && !isLive(o, now) && !occDone(o));
-paintNow(now, first ? '' : occ?.id, nx);
+paintNow(now, first ? '' : occ?.id, nx, tk);
 box.classList.toggle('is-done', done);
 if (first) return heroTimer(tm, now, nb, box);
 if (!occ) { box.innerHTML = '<p class="hero-hint">No hay eventos visibles. Activalos en Ajustes.</p>'; return; }
@@ -54,9 +54,10 @@ return mine ? `${ico('i-bell-on')} <span>Te aviso ${leadsTxt(mine)}.${nb && !sam
 : nb ? `${ico('i-bell-on')} <span>Con campana: <b>${esc(nbName)}</b> <span class="cd" id="hero-nb"></span></span>` : '';
 }
 const bindNb = nb => { const hn = $('#hero-nb'); if (hn) bind(hn, nb.live ? () => 'ya empezó' : clockLeft(nb.occ.start)); };
-function paintNow(now, id, nx) {
+function paintNow(now, id, nx, tk) {
 const el = $('#hero-now'), mw = maintNow(now);
-const cur = !mw && upcoming(now, { count: 20, minor: false }).find(o => isLive(o, now) && o.id !== id);
+const lv = mw ? [] : upcoming(now, { count: 20, minor: false }).filter(o => isLive(o, now) && o.id !== id);
+const owed = tk && lv.find(o => tk.has(o.id) && !occDone(o)), cur = owed || (!(tk && nx) && lv[0]);
 el.hidden = !mw && !cur && !nx;
 el.innerHTML = mw ? `<i class="st-dot" aria-hidden="true"></i><span>Mantenimiento en curso · hasta <b>${maintEnd(mw, now)}</b></span>`
 : cur ? `<i class="st-dot" aria-hidden="true"></i><span>En curso: <b>${esc(gname(cur.ev, 'short') || gname(cur.ev))}</b> hasta ${fmtClock(cur.end, { now, day: false })}</span>`
