@@ -1,0 +1,95 @@
+# Bitácora Daeva (Aion 2)
+
+> Web gratis en español para Aion 2 Global (Steam): horarios en tu hora, timers de jefes de campo, checklist de diarias y semanales, fichas de personajes y pets. Sitio de fans, sin relación con NCSOFT.
+
+## Secciones
+
+- [Aion 2: horarios de hoy, Grieta, Kaira y resets · Bitácora Daeva](https://aion2.wampaland.com.ar/): Horarios de Aion 2 en tu hora: Grieta espaciotemporal, Kaira, Rey Espíritu Agro, asedio, reset diario y mantenimiento, con cuenta regresiva y avisos.
+- [Timers de jefes de campo de Aion 2 en vivo · Bitácora Daeva](https://aion2.wampaland.com.ar/jefes/): Timers de los 48 jefes de campo de Aion 2 en vivo para tu server: cuándo reaparece cada uno, jefes de mundo, qué suelta cada uno y aviso con campana.
+- [Diarias y semanales de Aion 2: checklist por personaje · Bitácora Daeva](https://aion2.wampaland.com.ar/tareas/): Checklist de diarias y semanales de Aion 2 por personaje: Festival de Shugo, Pesadilla, Grieta, Agro, expediciones, asedio y Nahma. Se limpia sola en cada reset.
+- [Buscar personaje de Aion 2: equipo, CP y builds · Bitácora Daeva](https://aion2.wampaland.com.ar/personaje/): Buscá cualquier personaje de Aion 2 Global: equipo con enchant y exceed, CP, iLvl, skills, estigmas, Daevanion y qué usan los mejores de tu clase.
+- [Pets de Aion 2: dónde sale cada una, mapa y colección · Bitácora Daeva](https://aion2.wampaland.com.ar/pets/): Las pets de Aion 2, Elyos y Asmodianos: de dónde sale cada una, mapa de farmeo con los spawns (también el de la Grieta) y tu colección.
+
+## Ahora
+
+Bitácora Daeva es una web gratis para Aion 2 Global (Steam) que muestra en tu hora qué pasa ahora y qué viene: Grieta espaciotemporal, Kaira, Rey Espíritu Agro, asedio de artefactos, Nahma, invasiones, resets y mantenimiento, con cuenta regresiva y avisos. Sirve para todas las regiones: Sudamérica, Norteamérica Este, Norteamérica Oeste, Europa y Asia.
+
+### ¿A qué hora es el reset diario de Aion 2?
+
+A las 07:00 UTC en todas las regiones de Aion 2 Global: 04:00 en Argentina. Con el reset se renuevan las diarias, las llaves del Festival de Shugo y los intentos de Pesadilla. La Bitácora lo muestra con cuenta regresiva en tu hora.
+
+### ¿Cuándo es el mantenimiento semanal y el reset semanal?
+
+El mantenimiento es los miércoles a las 06:30 UTC (03:30 en Argentina) y suele durar entre 3 y 4,5 horas. El reset semanal cae adentro: el mismo día a las 07:00 UTC.
+
+### ¿A qué hora abre la Grieta espaciotemporal?
+
+A las 02:00, 05:00, 08:00, 11:00, 14:00, 17:00, 20:00 y 23:00, hora del servidor de tu región. El portal queda abierto 10 min; adentro la Grieta dura 60 min en territorio de la facción enemiga.
+
+### ¿A qué hora sale Kaira, la Vigilante?
+
+A las 01:00, 04:00, 07:00, 10:00, 13:00, 16:00, 19:00 y 22:00, hora del servidor, y dura 30 minutos. Reshanta inferior, aparece en un punto al azar.
+
+### ¿A qué hora sale el Rey Espíritu Agro?
+
+A las 10:30 y 22:30, hora del servidor. Jefe de campo del Abismo.
+
+### ¿Cuándo es el asedio de artefactos?
+
+Los jueves y sábados a las 21:00. La facción ganadora accede al Corredor del Abismo. A las 21:30 salen los jefes de artefacto: Ejecutante Kaira, Ejecutante Argo y Ejecutante Tamasa, en Reshanta inferior. El Señor guardián Nahma sale los viernes y domingos a las 21:00.
+
+### ¿Hay que instalar algo o crear una cuenta?
+
+No. Es una web gratis, sin anuncios ni cookies: anda en el navegador del celular o la PC y se puede instalar como app. La cuenta es opcional y sirve para tener tus personajes y tareas en todos tus dispositivos.
+
+## Jefes
+
+Timers en vivo de los 48 jefes de campo de Aion 2 (24 Elyos y 24 Asmodianos, niveles 45, 48 y 51): cuándo reaparece cada uno en tu server, con datos de jugadores en vivo y reportes de la comunidad, qué suelta cada uno y aviso con campana.
+
+### ¿Cada cuánto reaparecen los jefes de campo en Aion 2?
+
+Depende del jefe: entre 30 minutos y 11 horas. Los jefes de mundo (Comandante de Lagta, Gartua de eternidad y Gartua inmortal) tienen ciclo oficial de 11 horas; el del resto lo midió la comunidad. En la lista de abajo está el de cada uno.
+
+### ¿Cómo sé cuándo sale un jefe en mi server?
+
+Elegí tu región y tu server: la lista se ordena por próxima salida con tiempos en vivo de jugadores. Si lo mataste, tocá «Lo maté» y tu reporte suma al timer de todos. Con la campana te avisa antes de que salga.
+
+## Tareas
+
+Checklist de tareas diarias y semanales de Aion 2 para cada uno de tus personajes. Se limpia sola en el reset (el diario a las 07:00 UTC, el semanal los miércoles) y desde Ahora ves lo que te falta hoy.
+
+### ¿Qué hay que hacer todos los días en Aion 2?
+
+Las diarias que lleva la Bitácora: Festival de Shugo: 3 llaves por día, se guardan hasta 12; Invasión dimensional: 1 llave por día, se guardan hasta 7; Pesadilla: 2 intentos por día, se guardan hasta 14; Energía de Odyle: 15 cada 3 h, tope 560 (840 con suscripción); Grieta espaciotemporal: portal de 10 min cada 3 h; Rey Espíritu Agro: 10:30 y 22:30, Abismo.
+
+### ¿Qué tareas semanales hay en Aion 2?
+
+Las semanales: Expediciones (conquista): 21 por semana: se cargan 3 por día y se guardan; Asedio de artefactos: jueves y sábado, 21:00; Jefes de artefacto: jueves y sábado, 21:30; Señor guardián Nahma: viernes y domingo, 21:00.
+
+### ¿Puedo llevar las tareas de varios personajes?
+
+Sí: sumás cada personaje y cada uno tiene su checklist. Con cuenta, se sincroniza entre el celular y la PC.
+
+## Personaje
+
+Buscá cualquier personaje de Aion 2 Global por nombre y región y mirá su ficha oficial: equipo con enchant y exceed, CP, iLvl, skills, estigmas, tableros Daevanion, títulos, pet y alas. Compará tu equipo con lo que usan los mejores de tu clase.
+
+### ¿Cómo veo el equipo de otro jugador en Aion 2?
+
+Escribí su nombre (de 2 a 16 letras o números) y elegí la región: aparece su ficha con el equipo, el enchant y el exceed de cada pieza, las piedras y los stats, tal como los publica PLAYNC.
+
+### ¿Qué builds usan los mejores de cada clase?
+
+Para cada clase (Gladiador, Templario, Arquero, Asesino, Hechicero, Espiritualista, Clérigo y Cantor) la Bitácora junta las builds de la comunidad más votadas de Global y te muestra qué piezas, líneas, skills y estigmas se repiten, al lado de las tuyas.
+
+## Pets
+
+Las 206 pets de Aion 2 con de dónde sale cada una: álbum por facción, mapa de farmeo con los spawns (también el de la Grieta), guía de genus y tu colección con lo que te falta.
+
+### ¿Cuántas pets hay en Aion 2?
+
+La Bitácora tiene 206, entre Elyos y Asmodianos. Muchas salen en el mundo abierto; otras solo de cofres, tienda o eventos, de jefes de campo o de mazmorras. En el álbum cada una dice de dónde sale.
+
+### ¿Dónde se farmean las pets en Aion 2?
+
+En el Mapa: elegí tu facción y la pet, y te marca dónde aparece. La Grieta tiene pets propias, con su mapa (Altgard para Elyos y Verteron para Asmodianos).
