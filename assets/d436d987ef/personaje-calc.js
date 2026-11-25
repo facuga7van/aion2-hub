@@ -50,6 +50,15 @@ const inBar = s => !!s?.acquired && (s.category === 'Passive' || !!s.equipped ||
 export const useful = (s, x) => inBar(s) && (s.category === 'Passive' ? s.level : x?.base ?? s.level) > 1;
 export const NORMAL_CAP = 14, BASE_CAP = 10, DAE_CAP = 4, STIG_CAP = 20;
 export const SPEC = { Active: [8, 12, 16], Dp: [5, 10, 15, 20] };
+export const SPEC_PICK = [8, 12, 20], SPEC_MIN = 10, SPEC_FREE = 0.5;
+export function specRecs(specs, kind, id, level) {
+const K = specs?.[kind]?.n >= SPEC_MIN ? specs[kind] : specs?.all, S = K?.skills?.[id], opts = specs?.opts?.[id];
+if (!S?.n || !opts?.length) return null;
+const list = opts.map(o => ({ ...o, k: S.picks[o.id] || 0 })).filter(o => o.k).sort((a, b) => b.k - a.k).slice(0, 3)
+.sort((a, b) => a.lvl - b.lvl || b.k - a.k)
+.map((o, i) => { const at = Math.max(o.lvl, SPEC_PICK[i]); return { ...o, of: S.n, at, on: level >= at, free: o.k / S.n < SPEC_FREE }; });
+return { n: K.n, list, on: list.filter(o => o.on).length };
+}
 export function skillParts(d, items, boards) {
 const byName = new Map((d.skills || []).map(s => [s.name, s])), out = new Map();
 const get = id => { let x = out.get(String(id)); if (!x) out.set(String(id), x = { dae: 0, daeMax: 0, daeMiss: [], gear: 0, arc: 0, src: [] }); return x; };

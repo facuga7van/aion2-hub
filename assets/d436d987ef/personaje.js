@@ -2,7 +2,7 @@ import {
 $, $$, esc, ico, norm, bind, fmtLeft, leftNext, store, profile, setProfile, serverList, serverName, SERVERS, SCHEDULE, FACCION, viewFaccion,
 PJ, TK, ROOT, toast, modal, announce, registerKey, lnaBlocked, LNA_MSG, setTitle, myChars, gname, galt, gclass, gameLang, on,
 } from './core.js';
-import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, estilo, estOf, estSet, estPin, pinFirst, estEmpty, stations, useful, topLevels, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, LEVEL_CAP, isArcana, gearView } from './personaje-calc.js';
+import { gateOf, ilvlOf, skillParts, skillHint, kindGuess, plan, estilo, estOf, estSet, estPin, pinFirst, estEmpty, stations, useful, topLevels, specRecs, NODE_COST, NORMAL_CAP, BASE_CAP, STIG_CAP, LEVEL_CAP, isArcana, gearView } from './personaje-calc.js';
 const DEF_API = 'https://mora-server.tail3b8ec1.ts.net:8443';
 const API = (() => {
 const v = String(new URLSearchParams(location.search).get('api') || store.get('hub-pj-api', '') || '').replace(/\/$/, '');
@@ -46,7 +46,7 @@ enc: ['Encantamiento', 'El «+» de cada pieza (+10, +15). Cada nivel suma nivel
 amp: ['Amplificación', 'Una mejora extra de cada pieza, de +1 a +5, con piedras de amplificación. Cada nivel suma 5 de nivel de objeto; en el arma y los accesorios también suma daño, en la armadura solo defensa.'],
 arc: ['Arcanas', 'Cinco cartas (Cáliz, Pergamino, Brújula, Campana y Espejo) que suben niveles de tus skills. Se encantan hasta +5 y cada nivel suma +1 a una de sus skills.'],
 dae: ['Daevanion', 'Tableros de nodos que abrís con cristales de Daevanion: salen de subir de nivel y de las mazmorras selladas. Cada nodo da stats o +1 a una skill. Los 4 primeros son los tableros base.'],
-spec: ['Especialización', 'Cuando una skill activa llega a 8, 12 y 16, se abre una mejora nueva que elegís en la ventana de skills. Es el salto más grande que da subir una skill.'],
+spec: ['Especialización', 'Cada skill activa tiene 5 mejoras para elegir en la ventana de skills: 3 se abren en el nivel 8, una en el 12 y otra en el 16. Elegís 1 en el nivel 8, 2 en el 12 y 3 en el 20. Es el salto más grande que da subir una skill.'],
 pts: ['Puntos de skill', 'Cada skill sube hasta 10 con puntos de skill. La ficha oficial no muestra cuántos te quedan sin usar.'],
 skills: ['Nivel de skill', 'Se arma con puntos (hasta 10), nodos de Daevanion (hasta +4) y líneas de skill del equipo y de las Arcanas. 14 es el tope normal; de ahí para arriba, solo con líneas.'],
 gs: ['Piedra sagrada', 'Va una en el arma y otra en la secundaria. Al atacar tiene chance de aplicar su efecto (sellado, parálisis, daño extra). Dos con el mismo efecto aplican uno solo.'],
@@ -610,31 +610,39 @@ const skName = s => ({ name: s.name, nameEn: s.nameEn && s.nameEn !== s.name ? s
 const hint = (s, x) => s.category === 'Dp' ? (s.level < STIG_CAP ? skillHint(s, x) : '') : x && (x.base < BASE_CAP || x.dae < x.daeMax) ? skillHint(s, x) : '';
 function skillsHtml() {
 const parts = skillParts(cur.d, cur.x.items, cur.x.boards), sk = cur.d.skills || [], k = kindOf(cur);
-const top = topSkills(cur, k), use = s => useful(s, parts.get(String(s.id)));
+const top = topSkills(cur, k), use = s => useful(s, parts.get(String(s.id))), SP = curated(cur)?.specs;
 const pts = !estStored(cur.ref).no.includes('paso:pts') && curated(cur)?.top?.[k]?.slots ? plan(cur.d, cur.x.items, cur.x.boards, k, top, styleOf(cur, k)).steps.find(s => s.id === 'pts')?.ids : null;
 const grp = { pts: new Set(pts || []), dae: new Set(sk.filter(s => s.category !== 'Dp' && use(s) && parts.get(String(s.id))?.dae < parts.get(String(s.id))?.daeMax).map(s => String(s.id))),
 sti: new Set(sk.filter(s => s.category === 'Dp' && s.equipped && s.level > 0 && s.level < STIG_CAP).map(s => String(s.id))) };
 const GL = { pts: 'con puntos', dae: 'con Daevanion', sti: 'estigma' }, gOf = s => Object.keys(grp).filter(g => grp[g].has(String(s.id))).join(' ');
 const can = Object.entries(grp).filter(([, l]) => l.size).map(([g, l]) => `<button type="button" class="linkbtn" data-skf="${g}" aria-pressed="false"><b>${l.size}</b> ${GL[g]}${g === 'sti' && l.size > 1 ? 's' : ''}</button>`).join('<i aria-hidden="true"> · </i>');
+let spN = 0;
+const spHtml = s => {
+const R = specRecs(SP, k, String(s.id), s.level);
+if (!R?.list.length) return '';
+spN ||= R.n;
+return `<details class="sk-sp"><summary>Mejoras · ${R.on ? `${R.on} de ${R.list.length} a tu nivel` : `desde Nv ${R.list[0].at}`}</summary><ul>${R.list.map(o =>
+`<li${o.on ? '' : ' class="no"'}><span>${o.on ? '' : 'a '}Nv ${o.at}</span> <span>${esc(gname(o))}</span> <span>${o.free ? 'a gusto · ' : ''}${o.k}/${o.of}</span></li>`).join('')}</ul></details>`;
+};
 const row = s => {
-const x = parts.get(String(s.id)) || { base: s.level, dae: 0, gear: 0, arc: 0 }, nm = skName(s);
+const sp = s.category === 'Active' && use(s) ? spHtml(s) : '', x = parts.get(String(s.id)) || { base: s.level, dae: 0, gear: 0, arc: 0 }, nm = skName(s);
 const stig = s.category === 'Dp', max = stig ? STIG_CAP : Math.max(25, s.level), w = v => (v / max * 100).toFixed(2) + '%';
 const seg = stig ? `<i class="s-st" style="--w:${w(s.level)}"></i>` : `<i class="s-ba" style="--w:${w(x.base)}"></i><i class="s-da" style="--w:${w(x.dae)}"></i><i class="s-eq" style="--w:${w(x.gear)}"></i><i class="s-ar" style="--w:${w(x.arc)}"></i>`;
 const desc = stig ? `Nivel ${s.level}` : `Nivel ${s.level}: base ${x.base}, Daevanion ${x.dae}, equipo ${x.gear}, Arcanas ${x.arc}`;
 const tl = top.get(String(s.id));
-return `<li class="sk${use(s) || stig ? '' : ' off'}" data-sk="${s.id}" data-g="${gOf(s)}">
+return `<li class="sk${use(s) || stig ? '' : ' off'}${sp && ' has-sp'}" data-sk="${s.id}" data-g="${gOf(s)}">
 ${img(s.icon, 40, 'sk-ic')}<span class="sk-n"><b>${esc(gname(nm))}</b>${gameLang() === 'en' && galt(nm) ? `<small lang="es">${esc(galt(nm))}</small>` : ''}</span>
 <span class="sk-bar" role="img" aria-label="${esc(desc)}" data-parts="${stig ? s.level : [x.base, x.dae, x.gear, x.arc].join(',')}">${seg}<b class="sk-cap" style="--x:${w(stig ? STIG_CAP : NORMAL_CAP)}" title="${stig ? 'Tope de las estigmas' : 'Tope normal: 10 con puntos + 4 de Daevanion'}"></b>${tl && !stig ? `<b class="sk-tl" style="--x:${w(Math.min(tl, max))}" title="Los mejores la tienen en ${Math.round(tl)}"></b>` : ''}</span>
 <b class="sk-lv">${s.level || '—'}</b>
-<small class="sk-h">${[hint(s, x), tl && `los top: ${Math.round(tl)}`, !use(s) && !stig && 'no la usás'].filter(Boolean).map(esc).join(' · ')}</small></li>`;
+<small class="sk-h">${[hint(s, x), tl && `los top: ${Math.round(tl)}`, !use(s) && !stig && 'no la usás'].filter(Boolean).map(esc).join(' · ')}</small>${sp}</li>`;
 };
 const act = sk.filter(s => s.category === 'Active'), pas = sk.filter(s => s.category === 'Passive'), sti = sk.filter(s => s.category === 'Dp' && s.level > 0);
-const off = act.filter(s => !use(s));
+const off = act.filter(s => !use(s)), actHtml = act.filter(use).map(row).join('');   // antes del «Cómo leer»: cuenta spN
 return `<section class="pj-sec sk-w" aria-labelledby="sk-h"><h3 id="sk-h" class="pj-h">Skills${gl('skills')} <small>de dónde sale el nivel de cada una y hasta dónde la suben los mejores</small></h3>
 <div class="sk-top"><p class="sk-can">${can ? `<span>Podés subir:</span> ${can}<button type="button" class="linkbtn sk-all" data-skx hidden>Ver todas</button>` : ''}</p><details class="sk-how"><summary>Cómo leer</summary>
 <ul class="sk-k"><li class="s-ba"><i></i>Base, con puntos (hasta ${BASE_CAP})</li><li class="s-da"><i></i>Daevanion (hasta 4)</li><li class="s-eq"><i></i>Equipo</li><li class="s-ar"><i></i>Arcanas</li><li class="s-cap"><i></i>Tope normal ${NORMAL_CAP}</li>${top.size ? '<li class="s-tl"><i></i>Los mejores</li>' : ''}</ul>
-<p class="pj-note">«Con puntos» sube hasta el nivel de los top, como Próximos pasos; la pista de cada fila dice hasta dónde se puede (base ${BASE_CAP}), por eso hay más filas con pista. Arriba de ${NORMAL_CAP} se sube con líneas de skill de Arcanas (hasta +4 por línea) y del equipo (+1 por línea). «Que no usás»: activas que no están en tu barra o que no subiste con puntos.</p></details></div>
-<div class="sk-gp"><h4 class="pj-h4">Activas</h4><ul class="sk-l">${act.filter(use).map(row).join('')}</ul></div>
+<p class="pj-note">«Con puntos» sube hasta el nivel de los top, como Próximos pasos; la pista de cada fila dice hasta dónde se puede (base ${BASE_CAP}), por eso hay más filas con pista. Arriba de ${NORMAL_CAP} se sube con líneas de skill de Arcanas (hasta +4 por línea) y del equipo (+1 por línea). «Que no usás»: activas que no están en tu barra o que no subiste con puntos.${spN ? ` Mejoras recomendadas = las que más eligen ${spN} builds de la comunidad, de tu tipo de build o de todas si hay pocas; la ficha oficial no dice cuáles elegiste.` : ''}</p></details></div>
+<div class="sk-gp"><h4 class="pj-h4">Activas</h4><ul class="sk-l">${actHtml}</ul></div>
 <div class="sk-gp"><h4 class="pj-h4">Pasivas</h4><ul class="sk-l">${pas.map(row).join('')}</ul></div>
 ${sti.length ? `<div class="sk-gp"><h4 class="pj-h4">Estigmas${gl('stig')} <small>solo con Fragmentos de Estigma, tope ${STIG_CAP}</small></h4><ul class="sk-l sk-sti">${sti.sort((a, b) => b.level - a.level).map(row).join('')}</ul></div>` : ''}
 ${off.length ? `<details class="sk-gp sk-off"><summary>${off.length} que no usás</summary><ul class="sk-l">${off.map(row).join('')}</ul></details>` : ''}</section>`;
