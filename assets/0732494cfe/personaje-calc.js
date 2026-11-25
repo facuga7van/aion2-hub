@@ -20,6 +20,8 @@ const GS = { Common: 1, Rare: 3, Epic: 5, Legend: 5, Mythic: 9, Unique: 10, Spec
 export const NODE_COST = { Common: 1, Rare: 2, Legend: 3, Unique: 4 };
 export const isArcana = slot => slot >= 41 && slot <= 45;
 export const LEVEL_CAP = 45;
+export const STIG_SLOTS = 5;
+export const stigSlots = lv => lv && lv < LEVEL_CAP ? STIG_SLOTS - 1 : STIG_SLOTS;
 export const godFam = icon => String(icon || '').match(/Godstone\w*_(\d{3})(?:\.png)?$/)?.[1] || null;
 export const GOD = {
 '001': ['Ceguera', 'Blind'], '003': ['Sellado', 'Seal'], '004': ['Atadura', 'Root'], '005': ['Aturdimiento', 'Stun'], '006': ['Parálisis', 'Paralyze'],
@@ -92,7 +94,7 @@ const own = T?.[k]?.skills?.length, src = own ? T[k] : T?.all;
 const m = new Map((src?.skills || []).map(s => [String(s.id), s.lvl]));
 m.amp = Object.fromEntries(Object.entries(CSLOT).map(([p, s]) => [p, src?.slots?.[s]?.exceed]).filter(x => x[1] != null));
 const st = own || k !== 'support' ? src?.stigmas || [] : [];
-m.stig = src?.stigmaAlt ? st : st.slice(0, 4); m.stigAlt = src?.stigmaAlt || st.slice(4);
+m.stig = src?.stigmaAlt ? st : st.slice(0, STIG_SLOTS); m.stigAlt = src?.stigmaAlt || st.slice(STIG_SLOTS);
 m.items = Object.fromEntries(Object.entries(CSLOT).map(([p, s]) => [p, src?.slots?.[s]?.items]).filter(x => x[1]?.length));
 m.il = src?.ilvlMedian || 0;
 m.cls = !own;   // sin muestra de este tipo: lo de arriba es de toda la clase (Healer: pegan, no curan)
@@ -160,7 +162,7 @@ export const pvpStones = items => Object.values(items || {}).flatMap(it => (it?.
 export const hybrid = (d, items) => { const g = kindGuess(d, items); return g.kind === 'pve' && (g.sig.length > 0 || pvpStones(items) >= 3); };
 const ARC_C = ['chalice', 'parchment', 'compass', 'bell', 'mirror'];
 export function estilo(d, items = {}, top = new Map()) {
-const out = new Set(), st = top.stig || [], tieK = st.length === 4 ? st[3].k : undefined;
+const out = new Set(), st = top.stig || [], tieK = st.length === STIG_SLOTS ? st.at(-1).k : undefined;
 const main = new Set([...st, ...(top.stigAlt || []).filter(x => tieK != null && x.k === tieK)].map(x => String(x.id)));
 if (main.size || top.size) for (const s of d.skills || []) if (s.category === 'Dp' && s.equipped && s.level >= 10 && !main.has(String(s.id))) out.add('stig:' + s.id);
 const G = top.gods || [];
@@ -201,7 +203,6 @@ const list = a => a.length > 1 ? a.slice(0, -1).join(', ') + ' y ' + a.at(-1) : 
 const PL = { aro: 'aros', anillo: 'anillos', brazalete: 'brazaletes', runa: 'runas' };
 const names = slots => { const c = {}; for (const s of slots) c[LBL[s]] = (c[LBL[s]] || 0) + 1; return list(Object.entries(c).map(([k, n]) => n > 1 ? PL[k] || k : k)); };
 const pvpId = id => /^pvp/i.test(String(id));
-const STIG_SLOTS = 4;   // espacios de estigma en Global
 const tails = n => { const t = []; for (let i = n.indexOf(' de '); i >= 0; i = n.indexOf(' de ', i + 1)) t.push(n.slice(i + 4)); return t; };
 export function bySet(L) {
 const cnt = {}, left = [...L], out = [];
@@ -307,11 +308,11 @@ if (ar && ar.open < ar.total && il >= 2600 && kind !== 'pvp') cand.push({ id: 'a
 cost: '100 fragmentos = 1 cristal de Ariel, hasta 30 por personaje', il: 0, dmg: 0.02, sure: 'estimado' });
 const sMain = new Map((top.stig || []).map(x => [String(x.id), x])), myOwn = s => mine.has('stig:' + s.id);
 const myStg = (d.skills || []).filter(s => s.category === 'Dp' && s.equipped && s.level > 0), myIds = new Set(myStg.map(s => String(s.id)));
-const main = top.stig || [], tieK = main[3]?.k, tie = main.length === 4 ? (top.stigAlt || []).filter(x => x.k === tieK) : [];
-const miss = main.find((x, i) => x.share >= 0.5 && !myIds.has(String(x.id)) && !(i === 3 && tie.some(t => myIds.has(String(t.id)))));
+const main = top.stig || [], last = main.length === STIG_SLOTS ? main.at(-1) : null, tie = last ? (top.stigAlt || []).filter(x => x.k === last.k) : [];
+const miss = main.find(x => x.share >= 0.5 && !myIds.has(String(x.id)) && !(x === last && tie.some(t => myIds.has(String(t.id)))));
 const altOf = new Map((top.stigAlt || []).map(x => [String(x.id), x])), sh = s => altOf.get(String(s?.id))?.share || 0;
 const others = myStg.filter(s => !sMain.has(String(s.id))).sort((a, b) => sh(a) - sh(b)), out = others.find(s => !myOwn(s)), kept = others.find(myOwn);
-const outA = out ? altOf.get(String(out.id)) : null, outS = outA?.share || 0, missS = (d.skills || []).find(s => String(s.id) === String(miss?.id)), free = myStg.length < STIG_SLOTS;
+const outA = out ? altOf.get(String(out.id)) : null, outS = outA?.share || 0, missS = (d.skills || []).find(s => String(s.id) === String(miss?.id)), free = myStg.length < stigSlots(lv);
 const of = miss?.of ? ` de ${miss.of} top` : ' % de los top', cnt = x => miss.of ? x?.k ?? 0 : Math.round((x?.share || 0) * 100), swap = !free && out;
 const keep = miss && missS && !free && !out && kept && !(sh(kept) >= miss.share - 0.25) ? `Tu elección: ${kept.name}. Los top usan ${missS.name} (${cnt(miss)}${miss.of ? ` de ${miss.of}` : ' %'})` : '';
 const stg = (d.skills || []).filter(s => s.category === 'Dp' && s.equipped && s.level > 0 && (sMain.has(String(s.id)) || myOwn(s))).map(s => {
@@ -321,7 +322,7 @@ return { s, tl, T, to: T || tl, own };
 if (stg.length) {
 const allT = stg.every(x => x.T), oneT = allT && new Set(stg.map(x => x.T)).size === 1, tls = new Set(stg.filter(x => !x.own).map(x => x.tl)), [s0] = stg;
 cand.push({ id: 'stig', icon: s0.s.icon, T: s0.T, title: stg.length > 1 ? `Subí ${stg.length} estigmas ${oneT ? `a ${s0.T}` : allT ? 'a su próxima especialización' : 'al nivel de los top'}` : s0.T ? `${s0.s.name} a ${s0.T}: nueva especialización` : `Subí ${s0.s.name} a ${s0.tl}`,
-gain: [`+${pl(stg.reduce((t, x) => t + x.to - x.s.level, 0), 'nivel', 'niveles')} de estigma`, ...(tls.size === 1 ? [`los top: ${[...tls][0]}`] : [])], skills: stg.slice(0, 4).map(x => ({ icon: x.s.icon, name: x.s.name, n: x.to - x.s.level, T: x.T })),
+gain: [`+${pl(stg.reduce((t, x) => t + x.to - x.s.level, 0), 'nivel', 'niveles')} de estigma`, ...(tls.size === 1 ? [`los top: ${[...tls][0]}`] : [])], skills: stg.slice(0, STIG_SLOTS).map(x => ({ icon: x.s.icon, name: x.s.name, n: x.to - x.s.level, T: x.T })),
 cost: 'Fragmentos de Estigma', il: 0, dmg: 0.5, sure: 'seguro', heal: 1, ...(keep ? { detail: keep, own: 'stig:' + kept.id } : {}) });
 }
 if (miss && missS && (free || (out && !(outS >= miss.share - 0.25)))) cand.push({ id: 'stig-swap', icon: missS.icon, ...(swap ? { ch: 'stig:' + out.id } : {}),

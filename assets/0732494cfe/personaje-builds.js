@@ -1,5 +1,5 @@
 import { $, esc, ico, modal, announce, gname, gboth, on } from './core.js';
-import { useful, skillParts, CSLOT, GOD, godFam, GR_F, GR_N, rollOf, SK_MIN, gearView, gvIdeal, kindGuess } from './personaje-calc.js';
+import { useful, skillParts, CSLOT, GOD, godFam, GR_F, GR_N, rollOf, SK_MIN, gearView, gvIdeal, kindGuess, STIG_SLOTS, stigSlots } from './personaje-calc.js';
 export { rollOf };
 await new Promise(r => { const l = Object.assign(document.createElement('link'), { rel: 'stylesheet', href: new URL('./personaje-builds.css', import.meta.url).href, onload: r, onerror: r }), pj = document.querySelector('link[href$="personaje.css"]'); pj ? pj.after(l) : document.head.append(l); });
 let X;                                         // {api, MSG, img, gcls, GRADE, nf, curated, CLS_KEY, gl} que pasa personaje.js
@@ -182,20 +182,20 @@ const rows = slots.map(s => {
 const x = T.slots[s], K = (x.skillLines || []).filter(l => l.share >= 0.1), M = x.stones || [];
 return `<li class="cu-row" data-slot="${s}"><b class="cu-sn">${esc(x.name)}</b>${TIERS.map(([t, lb]) => { const L = x.lines.filter(l => l.tier === t); return L.length ? `<div class="cu-t" data-t="${t}"><small>${lb}</small><ul class="cu-c">${L.map(l => chip(s, l)).join('')}</ul></div>` : ''; }).join('')}${K.length ? `<div class="cu-t" data-t="skill"><small>Línea de skill</small><ul class="cu-c">${K.map(l => skChip(s, l)).join('')}</ul></div>` : ''}${M.length ? `<div class="cu-t" data-t="ms"><small>Piedras de maná · de cada 100 ranuras</small><ul class="cu-c">${M.map(st => msChip(s, st)).join('')}</ul></div>` : ''}</li>`;
 }).join('');
-const stM = T.stigmaAlt ? T.stigmas : T.stigmas.slice(0, 4), altAll = T.stigmaAlt || T.stigmas.slice(4), stA0 = altAll.filter(s => s.share >= 0.1 || myIn(s));
+const stM = T.stigmaAlt ? T.stigmas : T.stigmas.slice(0, STIG_SLOTS), altAll = T.stigmaAlt || T.stigmas.slice(STIG_SLOTS), stA0 = altAll.filter(s => s.share >= 0.1 || myIn(s));
 const kOf = s => s.k ?? Math.round(s.share * 1000), sameId = (L, x) => L.some(s => String(s.id) === String(x.id));
-const tie = stM.length === 4 ? stA0.filter(s => kOf(s) === kOf(stM[3])) : [];
+const stLast = stM.length === STIG_SLOTS ? stM.at(-1) : null, tie = stLast ? stA0.filter(s => kOf(s) === kOf(stLast)) : [];
 const stX = cur ? (cur.d.skills || []).filter(x => x.category === 'Dp' && x.level > 0 && myIn(x) && !sameId([...stM, ...altAll], x)).map(x => ({ id: String(x.id), name: x.name })) : [];
 const stA = [...stA0.filter(s => !tie.includes(s)), ...stX];
-const tieG = tie.length ? [stM[3], ...tie] : [], tieHave = tieG.some(s => myStig.has(String(s.id)));
+const tieG = tie.length ? [stLast, ...tie] : [], tieHave = tieG.some(s => myStig.has(String(s.id)));
 const stVos = (s, alt) => { const m = myLv.get(String(s.id)) || 0, t = Math.round(s.lvl || 0); return cur && (m || !alt) ? `<span class="${m >= t ? 'ok' : m && m < t - 4 ? 'low' : ''}">vos ${m}</span>` : ''; };
 const myK = s => s.share == null ? '<span class="cu-myk">ningún top la lleva</span>' : s.k != null ? `<span class="cu-myk">${s.k} de ${s.of ?? T.n} top la lleva${s.k > 1 ? 'n' : ''}${s.lvl ? `, a ${Math.round(s.lvl)}` : ''}</span>` : '';
 const stT = (s, alt) => { const my = myIn(s); return tile({ id: s.id, pic: skIcon(s.id, 48), name: gname(sk(s)), lv: s.lvl ? Math.round(s.lvl) : 0, have: myStig.has(String(s.id)), dim: !my && (alt || s.share < 0.5), sub: stVos(s, alt) + (my ? MY + myK(s) : ''), s: s.share,
 title: `${gboth(sk(s))}: ${s.share != null ? `la usan ${often(s.share)}` : 'ningún top la usa'}${s.lvl ? `, nivel ${Math.round(s.lvl)}` : ''}${alt ? ' (alternativa)' : ''}${my ? '. Tu elección' : ''}${tieG.includes(s) ? `. Empatada: ${orL(tieG.map(x => gname(sk(x))))} las suben los mismos top` : ''}` }); };
-const stMiss = cur ? stM.filter(s => s.share >= 0.5 && !myStig.has(String(s.id)) && !(s === stM[3] && tieHave)) : [], stInst = cur ? stA.filter(s => s.share != null && myStig.has(String(s.id))) : [];
-const stList = L => L.map(s => `${orL((s === stM[3] && tieG.length ? tieG : [s]).map(x => `<b>${esc(gname(sk(x)))}</b>`))} (${often(s.share)})`).join(', ');
+const stMiss = cur ? stM.filter(s => s.share >= 0.5 && !myStig.has(String(s.id)) && !(s === stLast && tieHave)) : [], stInst = cur ? stA.filter(s => s.share != null && myStig.has(String(s.id))) : [];
+const stList = L => L.map(s => `${orL((s === stLast && tieG.length ? tieG : [s]).map(x => `<b>${esc(gname(sk(x)))}</b>`))} (${often(s.share)})`).join(', ');
 const altSh = x => altAll.find(s => String(s.id) === String(x.id))?.share || 0, myUp = cur ? (cur.d.skills || []).filter(x => x.category === 'Dp' && x.equipped && x.level > 0) : [];
-const ownS = myUp.filter(x => !sameId([...stM, ...tie], x)).sort((a, b) => altSh(a) - altSh(b)), ownMine = ownS.filter(myIn), freeSlot = myUp.length < 4;
+const ownS = myUp.filter(x => !sameId([...stM, ...tie], x)).sort((a, b) => altSh(a) - altSh(b)), ownMine = ownS.filter(myIn), freeSlot = myUp.length < stigSlots(cur?.d.profile?.level);
 const lvN = x => `<b>${esc(gname(sk(x)))}</b> (${x.level})`;
 const myArc = cur ? Object.fromEntries(ARC.map(([c], i) => [c, setOf((cur.d.equipment || []).find(e => e.slot === 41 + i)?.icon)])) : null;
 const cbSet = (x, i) => gname({ name: `${ARC[i][1]} de ${x === 'M' ? 'magia' : 'vitalidad'}`, nameEn: `${ARC_EN[ARC[i][0]][0]}: ${x === 'M' ? 'Magic' : 'Vigor'}` });
@@ -209,9 +209,10 @@ return L.length ? `<p class="cu-coh" role="note">Los ${c.n} top ${who} también 
 };
 const stMain = stM.map(s => stT(s)).join('') + tie.map(s => `<li class="cu-or" aria-hidden="true">o</li>${stT(s)}`).join('');
 const stigBody = `<div class="cu-stw"><ul class="cu-is cu-stig">${stMain}</ul>${stA.length ? `<div class="cu-alt"><small>Alternativas</small><ul class="cu-is cu-stig cu-sta">${stA.map(s => stT(s, 1)).join('')}</ul></div>` : ''}</div>
-${tie.length ? `<p class="cu-stn par" role="note">La cuarta está empatada: ${orL(tieG.map(x => `<b>${esc(gname(sk(x)))}</b>`))}, las suben los mismos top. Cualquiera vale.</p>` : ''}
+${tie.length ? `<p class="cu-stn par" role="note">La quinta está empatada: ${orL(tieG.map(x => `<b>${esc(gname(sk(x)))}</b>`))}, las suben los mismos top. Cualquiera vale.</p>` : ''}
 ${!stMiss.length ? '' : stInst[0]?.share >= stMiss[0].share - 0.25 ? `<p class="cu-stn par" role="note">Los top se reparten entre ${stList(stMiss)} y ${stList(stInst)}: vos llevás la segunda.</p>`
-: freeSlot || !ownS.length ? `<p class="cu-stn" role="note">Te falta ${stList(stMiss)}.</p>`
+: freeSlot ? `<p class="cu-stn" role="note">Te falta ${stList(stMiss)}.</p>`
+: !ownS.length ? `<p class="cu-stn par" role="note">Te falta ${stList(stMiss)}: va en el quinto espacio, que se abre cerca del nivel máximo.</p>`
 : ownMine.length ? `<p class="cu-stn par" role="note">Tu elección: ${ownMine.map(lvN).join(', ')}. Los top usan ${stList(stMiss)}.${estB('stig:' + ownMine[0].id)}</p>`
 : `<p class="cu-stn par" role="note">Te falta ${stList(stMiss)}. En su lugar tenés ${ownS.map(lvN).join(', ')}.${estB('stig:' + ownS[0].id)}</p>`}
 ${ownMine.map(x => coh(T.cohort?.stig?.[x.id], 'con ' + esc(gname(sk(x))))).join('')}`;
@@ -289,7 +290,7 @@ return `<h3 class="pj-h">Lo que usan los mejores ${esc(CLS_ES[cls] || '')} <smal
 ${thin ? `<p class="cu-warn" role="note"><b>Muestra chica:</b> son solo ${T.n} personajes. Tomalo como una pista, no como la regla.</p>` : ''}
 ${vs}
 <div class="cu-g">
-${card('cu-stc', `Estigmas${X.gl('stig')} <small>${cur ? 'tilde = ya la tenés subida' : 'las 4 de la build y, atenuadas, las alternativas'}</small>`, stigBody)}
+${card('cu-stc', `Estigmas${X.gl('stig')} <small>${cur ? 'tilde = ya la tenés subida' : 'las de la build y, atenuadas, las alternativas'}</small>`, stigBody)}
 ${arc ? card('cu-arcc', `Arcanas${X.gl('arc')} <small>${cur ? 'tilde = tu carta es del mismo set' : 'el set de cada carta'}</small>`, arcBody) : ''}
 ${gs ? card('cu-gsc', `Piedra sagrada${X.gl('gs')} <small>${cur?.x ? 'tilde = ya la tenés' : 'el efecto y el grado más común'}</small>`, gsBody) : ''}
 ${msTop.length ? card('cu-msc', `${gi('Icon_Usable_MagicStone_a_001', 24)}Piedras de maná <small>las que más ponen los top</small>`, msBody) : ''}

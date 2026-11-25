@@ -51,7 +51,7 @@ pts: ['Puntos de skill', 'Cada skill sube hasta 10 con puntos de skill. La ficha
 skills: ['Nivel de skill', 'Se arma con puntos (hasta 10), nodos de Daevanion (hasta +4) y líneas de skill del equipo y de las Arcanas. 14 es el tope normal; de ahí para arriba, solo con líneas.'],
 gs: ['Piedra sagrada', 'Va una en el arma y otra en la secundaria. Al atacar tiene chance de aplicar su efecto (sellado, parálisis, daño extra). Dos con el mismo efecto aplican uno solo.'],
 ms: ['Piedras de maná', 'Van en las ranuras de cada pieza y suman un stat (Ataque, Crítico…). Las PvP solo suman contra jugadores. Se cambian por otras sin perder la pieza.'],
-stig: ['Estigmas', 'Skills especiales que van en 4 espacios aparte. Suben solo con Fragmentos de Estigma, hasta 20.'],
+stig: ['Estigmas', 'Skills especiales que van en 5 espacios aparte (el quinto se abre cerca del nivel máximo). Suben solo con Fragmentos de Estigma, hasta 20.'],
 ariel: ['Ariel', 'El quinto tablero de Daevanion: da daño contra jefes. Sus nodos se abren con Fragmentos de Ariel de Expedición difícil (100 fragmentos = 1 cristal, hasta 30 por personaje).'],
 lineas: ['Líneas', 'Los stats extra de cada pieza, que salen al azar. Los mejores buscan ciertas líneas en cada pieza. En Equipo, tocá una pieza para ver qué tan alto te salió cada una.'],
 };
