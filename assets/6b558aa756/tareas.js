@@ -1,7 +1,7 @@
 import {
 $, esc, ico, on, emit, onStore, bind, fmtClock, fmtLeft, leftNext, nextReset, nextOcc, currentOcc, isLive, statusText, toast, modal, evPic,
 characters, taskList, taskDone, setTaskDone, taskProgress, PJ, TK, profile, serverName, registerKey, confOf, confTag, clockLeft, gname, gclass, HOUR,
-setTimers, bellButton, ROOT, MIN, OD, odyle, DATA, dm, TASKS,
+setTimers, bellButton, ROOT, MIN, OD, odyle, DATA, dm, TASKS, taskOn,
 } from './core.js';
 const odBell = ch => 'odyle:' + ch;
 function pubOdyle(now) {
@@ -61,7 +61,7 @@ const H = [...TASKS.items, ...T.custom].filter(t => t.period === per && (T.hidde
 return H.length ? `<div class="tk-hid"><p class="tk-sep">Ocultas (${H.length})</p><ul>${H.map(t => `<li><span>${esc(gname(t))}${many ? ` <small>${T.hidden.includes(t.id) ? 'en todos' : 'solo en ' + esc(who)}</small>` : ''}</span><button type="button" class="btn ghost" data-show="${esc(t.id)}" aria-label="Mostrar ${esc(gname(t))}">Mostrar</button></li>`).join('')}</ul></div>` : '';
 }
 function juegoList(per, items) {
-const X = TASKS.extras.filter(t => t.period === per && !items.some(x => x.id === t.id));
+const X = TASKS.extras.filter(t => t.period === per && taskOn(t) && !items.some(x => x.id === t.id));
 return X.length ? `<button type="button" class="linkbtn tk-jgmas" data-jgopen="${per}">+ ${X.length} del juego</button><div class="tk-jg"><p class="tk-sep">Del juego</p><ul>${X.map(t => `<li data-jg="${esc(t.id)}"><span>${esc(gname(t))}<small title="Fuente: ${esc(t.source)}">${esc(gname(t, 'detail'))}</small></span><button type="button" class="btn ghost" data-addx="${esc(t.id)}" aria-label="Sumar ${esc(gname(t))}">Sumar</button></li>`).join('')}</ul></div>` : '';
 }
 function addExtra(id) {
